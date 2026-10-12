@@ -1,0 +1,32 @@
+# Python and Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+/staticfiles/
+
+# Web tooling
+/node_modules/
+**/node_modules/
+dist/
+src/web/playwright-report/
+src/web/test-results/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+
+# Generated reports and local artifacts
+coverage/
+src/backend/coverage.xml
+src/backend/test-results.xml
