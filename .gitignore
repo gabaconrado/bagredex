@@ -30,3 +30,4 @@ src/web/test-results/
 coverage/
 src/backend/coverage.xml
 src/backend/test-results.xml
+.cache/

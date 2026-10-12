@@ -1,0 +1,15 @@
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+      target: application
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    environment:
+      BAGREDEX_DOMAIN: localhost
+      DJANGO_SETTINGS_MODULE: bagredex.settings.local
+    ports:
+      - "127.0.0.1:${BAGREDEX_PORT:-8000}:8000"
+    volumes:
+      - ../src/backend:/app/src/backend
+      - ../src/web:/app/src/web:ro

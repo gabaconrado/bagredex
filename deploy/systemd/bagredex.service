@@ -1,0 +1,15 @@
+[Unit]
+Description=Bagredex production Compose stack
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=%h/bagredex/current
+ExecStart=%h/bagredex/current/deploy/scripts/start-production.sh
+ExecStop=%h/bagredex/current/deploy/scripts/start-production.sh down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

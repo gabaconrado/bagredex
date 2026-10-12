@@ -5,9 +5,9 @@ calculation, and journey logging.
 
 ## Status
 
-Bagredex is at repository bootstrap. This commit establishes project decisions, agent workflows,
-and the future source layout; it intentionally contains no application or deployment
-implementation.
+Bagredex has a minimal deployable slice: a database-free Django application serves a responsive
+placeholder page and health endpoints. Rootless Podman packaging supports local execution and a
+human-operated Nginx, Let's Encrypt, and rollback-capable production lifecycle.
 
 ## Product direction
 
@@ -73,10 +73,10 @@ Exact colors and contrast pairs will be selected and tested when the first inter
 
 ## Repository layout
 
-- `src/backend`: future Django server source
-- `src/web`: future Django templates, Preact islands, CSS, and browser tests
+- `src/backend`: Django server source, settings, and tests
+- `src/web`: Django templates and CSS; future Preact islands and browser tests
 - `src/data`: future Pokémon import tooling, schemas, fixtures, and normalized artifacts
-- `deploy`: future Podman and deployment infrastructure
+- `deploy`: Podman packaging, Nginx and Certbot configuration, release scripts, and deployment tests
 - `docs/plans`: architect-authored implementation plans
 - `docs/tasks`: explicitly deferred follow-up work
 - `docs/reports`: completed cycle reports
@@ -95,12 +95,21 @@ sandbox elevation required for an approved local Git mutation, and must stop if 
 Public documentation may be consulted when relevant. Human-invoked data, publishing, and
 deployment workflows may be added later without expanding agent permissions.
 
-## Planned command entry point
+## Command entry point
 
-A future `bagredex.sh` will provide a single interface for setup, checks, tests, local services,
-database operations, packaging, and human-invoked deployment. Its behavior will adapt the proven
-command and rootless Podman model from the local Penni More project. No command implementation is
-included in the bootstrap commit.
+`bagredex.sh` is the top-level interface:
+
+```bash
+./bagredex.sh check
+./bagredex.sh run
+./bagredex.sh publish VERSION
+./bagredex.sh deploy VERSION [--dry-run]
+```
+
+`run` serves the local container at `http://127.0.0.1:8000` and stops it on `Ctrl+C`. `publish` and
+`deploy` are human-invoked operational commands; agents do not execute their registry, SSH,
+certificate, or remote-system operations. See the [deployment guide](deploy/README.md) for host
+preparation, configuration, TLS bootstrap, renewal, and rollback behavior.
 
 ## License
 

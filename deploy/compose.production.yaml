@@ -1,0 +1,55 @@
+services:
+  server:
+    image: docker.io/gabaconrado/bagredex:${BAGREDEX_IMAGE_VERSION:?BAGREDEX_IMAGE_VERSION is required}
+    command:
+      - gunicorn
+      - --bind=0.0.0.0:8000
+      - --workers=${GUNICORN_WORKERS:-1}
+      - --threads=${GUNICORN_THREADS:-4}
+      - --access-logfile=-
+      - --error-logfile=-
+      - bagredex.wsgi:application
+    env_file: ${BAGREDEX_ENV_FILE:-../shared/.env}
+    environment:
+      DJANGO_SETTINGS_MODULE: bagredex.settings.production
+      BAGREDEX_IMAGE_VERSION: ${BAGREDEX_IMAGE_VERSION:?BAGREDEX_IMAGE_VERSION is required}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    logging:
+      driver: journald
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  nginx:
+    image: docker.io/gabaconrado/bagredex-nginx:${BAGREDEX_IMAGE_VERSION:?BAGREDEX_IMAGE_VERSION is required}
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      BAGREDEX_DOMAIN: ${BAGREDEX_DOMAIN:?BAGREDEX_DOMAIN is required}
+    ports: ["80:8080", "443:8443"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    volumes:
+      - certificate-state:/etc/letsencrypt:ro
+      - certificate-challenges:/var/www/certbot:ro
+    networks: [application]
+    logging:
+      driver: journald
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  certbot:
+    image: docker.io/certbot/certbot:v4.2.0
+    profiles: [operations]
+    volumes:
+      - certificate-state:/etc/letsencrypt
+      - certificate-challenges:/var/www/certbot
+
+volumes:
+  certificate-state:
+    name: bagredex-certificates
+  certificate-challenges:
+    name: bagredex-certificate-challenges

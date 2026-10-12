@@ -1,0 +1,6 @@
+server {
+    listen 8080;
+    server_name ${BAGREDEX_DOMAIN};
+    location ^~ /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 404; }
+}

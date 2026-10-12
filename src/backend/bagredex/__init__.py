@@ -1,0 +1,1 @@
+"""Bagredex Django project."""
