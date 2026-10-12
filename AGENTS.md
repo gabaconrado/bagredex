@@ -24,9 +24,12 @@ packaging.
 - Agents run tools locally only. Never connect to a registry, cloud provider, VPS, live API, or
   other operational external service. Public documentation browsing is allowed when relevant.
 - Never download or install a missing host tool. Stop and report missing capabilities.
-- Stop and report permission or sandbox failures. The only elevation exception is an approved local
-  Git mutation performed by `deployment_agent`; retry that exact operation with direct sandbox
-  elevation and stop if it is denied. Never change environment variables, paths, registries,
+- Stop and report permission or sandbox failures except for these `deployment_agent` operations:
+  an approved local Git mutation, or an approved local Bagredex Podman validation command. Retry
+  only the exact blocked operation with direct sandbox elevation and stop if it is denied.
+  Escalated Podman work must target only Bagredex containers, images, networks, and volumes; must
+  use already-local images; and must never log in, pull, push, prune account-wide state, or contact
+  a registry or other operational service. Never change environment variables, paths, registries,
   command semantics, security controls, or tool configuration to bypass a restriction.
 - Treat syntax, formatting, lint, type, test, build, and validation failures as ordinary feedback.
   Diagnose them, fix owned files, and rerun the failed check.

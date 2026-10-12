@@ -33,13 +33,20 @@ Apply these standards to maintained shell scripts and shell fragments.
 - Never connect to a registry, VPS, cloud provider, or other operational service as an agent.
 - Repository commands may describe user-invoked remote workflows, but agents only exercise local,
   non-operational paths.
-- Stop and report permission failures in shell and Podman work. Do not request elevation or bypass
-  the sandbox; approved local Git mutation is governed separately by `git-standards`.
+- Stop and report permission failures in shell work. The deployment agent may retry an approved,
+  exact local Bagredex Podman validation command with direct sandbox elevation after the sandbox
+  blocks it. No other agent may request Podman elevation. Approved local Git mutation is governed
+  separately by `git-standards`.
 
 ## Podman and verification
 
 - Prefer rootless Podman behavior and pin meaningful image versions.
 - Keep persistent state in named, documented volumes with explicit health checks.
 - Never remove resources outside the exact approved scope.
+- Before an escalated Podman command, confirm every required image is already local and ensure the
+  operation cannot pull. Scope names and cleanup to Bagredex; never log in, pull, push, contact a
+  registry, use account-wide prune commands, or mutate unrelated container state.
+- Retry only the exact command blocked by the sandbox. Stop if approval is denied or the elevated
+  command fails for another permission or environment reason.
 - Run `bash -n` and `shellcheck` for changed Bash scripts.
 - Exercise safe dry-run or read-only paths when available and report checks not run.

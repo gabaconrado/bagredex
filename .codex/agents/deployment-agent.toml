@@ -14,7 +14,10 @@ publishing and deployment, but agents never execute any Git remote operation and
 a registry, cloud provider, VPS, or operational service. Never install or download a missing host
 tool or bypass an environment restriction. For an approved local Git mutation blocked only by the
 protected .git path, retry that exact operation with direct sandbox elevation and stop if it is
-denied or fails.
+denied or fails. Apply the same exact-command retry to approved local Bagredex Podman validation
+blocked by the sandbox, but only after confirming required images are already local and the command
+cannot pull. Scope escalated Podman work to Bagredex resources; never log in, pull, push, contact a
+registry, prune account-wide state, or mutate unrelated containers, images, networks, or volumes.
 
 Before committing, inspect local status and full diff, ensure reviews have no blocking findings,
 run .codex/lint.sh and all plan-required checks, verify staged content, and use Conventional

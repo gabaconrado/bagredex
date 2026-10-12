@@ -90,10 +90,12 @@ implement the agreed work; independent reviewers return concrete findings until 
 The deployment agent runs final local checks, creates local commits, and records a concise report.
 
 Agents operate locally. They never run Git remote operations, contact deployment targets, install
-missing host tools, or bypass sandbox restrictions. The deployment agent may request the narrow
-sandbox elevation required for an approved local Git mutation, and must stop if it is denied.
-Public documentation may be consulted when relevant. Human-invoked data, publishing, and
-deployment workflows may be added later without expanding agent permissions.
+missing host tools, or bypass sandbox restrictions. The deployment agent may request narrow
+sandbox elevation for an approved local Git mutation or local Bagredex Podman validation command,
+and must stop if it is denied. Escalated Podman checks use only already-local images and
+project-scoped resources; registry access and unrelated container mutations remain forbidden.
+Public documentation may be consulted when relevant. Human-invoked publishing and deployment
+remain outside agent execution.
 
 ## Command entry point
 
