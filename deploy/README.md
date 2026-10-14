@@ -1,9 +1,10 @@
 # Bagredex deployment
 
-Bagredex runs as a database-free Django application behind Nginx. Rootless Podman Compose owns the
-application, Nginx, and on-demand Certbot containers. Production releases are immutable directories
-with `current` and `previous` symlinks; a failed release automatically attempts to restart the
-previous one.
+Bagredex runs as a Django application backed by PostgreSQL and served behind Nginx. Rootless Podman
+Compose owns the application, private database network, Nginx, and on-demand Certbot containers.
+Production releases are immutable directories with `current` and `previous` symlinks; a failed
+release automatically attempts to restart the previous application release. PostgreSQL data lives
+outside release directories in the named `bagredex-database` volume.
 
 The scripts in this directory support human-operated publishing and deployment. Project agents may
 validate local behavior, but they do not log in to a registry, push images, open SSH connections,
@@ -17,12 +18,20 @@ Install the pinned Python and uv versions plus Podman with a Compose provider. T
 ./bagredex.sh run
 ```
 
-The command builds the application image, attaches to the stack, and publishes it only at
-`http://127.0.0.1:8000`. Press `Ctrl+C` to stop and remove the local container. Set `BAGREDEX_PORT`
-to choose another loopback port.
+The command builds the development image, starts PostgreSQL, applies migrations, attaches to the
+stack, and publishes the application only at `http://127.0.0.1:8000`. Press `Ctrl+C` to stop and
+remove the containers. The database volume remains. Set `BAGREDEX_PORT` to choose another loopback
+port.
 
-`./bagredex.sh check` runs backend, documentation, shell, and deployment tests. uv uses the ignored
-repository-local `.cache/uv` directory by default. It never installs missing host tools.
+Apply migrations without starting the web server when needed:
+
+```bash
+./bagredex.sh migrate
+```
+
+`./bagredex.sh check` runs backend, documentation, shell, and deployment tests. Backend tests run in
+the development container against PostgreSQL. uv uses the ignored repository-root `.cache/uv`
+directory configured in the backend project. The scripts never install missing host tools.
 
 ## Publish images
 
@@ -59,7 +68,8 @@ it to the production account. The account also needs:
 - rootless permission to bind ports 80 and 443;
 - DNS for the one configured `BAGREDEX_DOMAIN` resolving to `BAGREDEX_EXPECTED_IP`;
 - at least 1 GB RAM and 2 GB free space at the deployment directory;
-- registry access sufficient to pull both public versioned images.
+- local availability of, or registry pull access for, every public image referenced by Compose:
+  pinned PostgreSQL, pinned Certbot, and both versioned Bagredex application and Nginx images.
 
 Host provisioning, firewall changes, DNS, SSH hardening, package installation, registry
 authentication, and lingering configuration are intentionally manual host-administration tasks.
@@ -69,6 +79,13 @@ The scripts never invoke `sudo`.
 labels separated by a dot, no scheme, port, path, wildcard, trailing dot, uppercase character, or
 internationalized Unicode form. Its final label must begin with a letter. This exact value is used
 for Django host validation, Nginx routing, Certbot issuance, and certificate paths.
+
+The five `BAGREDEX_DATABASE_*` values configure both Django and PostgreSQL. Keep the database host
+as the private Compose service name `database` and the port as `5432`; neither is published on the
+host. Use a strong, unique database password and keep `shared/.env` readable only by the production
+account. PostgreSQL initialization values are used only when `bagredex-database` is empty. Editing
+them later does not rotate credentials in an existing database; credential rotation is a separate,
+operator-managed database change.
 
 ## Deploy and bootstrap TLS
 
@@ -89,16 +106,43 @@ DEPLOY_REMOTE_DIR=/home/bagredex/bagredex \
 
 The dry run opens SSH only for a read-only host preflight; it does not copy files or mutate remote
 state. A real deployment creates a timestamped release, transfers only deployment assets and
-release metadata, acquires a nonblocking deployment lock, pulls both images, checks Django, and
-switches `current`. The first release uses an HTTP-only Nginx bootstrap container to obtain the
-single-domain certificate, fixes certificate read permissions for unprivileged Nginx, then starts
-the HTTPS proxy. HTTP serves ACME challenges and redirects all other requests to HTTPS.
+release metadata, acquires a nonblocking deployment lock, pulls the pinned database and versioned
+application images, checks Django, starts PostgreSQL, waits for database health, and applies
+migrations from the new application image. Only then does it stop the old application and switch
+`current`. A migration failure therefore leaves the current release serving. The first release uses
+an HTTP-only Nginx bootstrap container to obtain the single-domain certificate, fixes certificate
+read permissions for unprivileged Nginx, then starts the HTTPS proxy. HTTP serves ACME challenges
+and redirects all other requests to HTTPS.
 
 The deployment succeeds only after internal readiness and public `/health/live` checks pass.
-`/health/ready` is deliberately unavailable through production Nginx. On failure after mutation,
-the new stack is stopped and `current` is restored to the prior release. With no prior release, the
-failed stack remains stopped and `current` is removed. After success, only `current` and `previous`
-release directories are retained.
+`/health/ready` is deliberately unavailable through production Nginx. On failure after the switch,
+the new application is stopped and `current` is restored to the prior release. With no prior
+release, the failed application remains stopped and `current` is removed. PostgreSQL and its named
+volume are not rolled back or deleted. This feature's migrations are additive; future releases must
+preserve schema compatibility across application rollback. After success, only `current` and
+`previous` release directories are retained.
+
+## Create and manage administrators
+
+After the first production deployment, create the first superuser interactively inside the running
+server container. From the production deployment directory, load the protected configuration so
+Compose can resolve it, then run Django's command:
+
+```bash
+set -a
+. shared/.env
+. current/release.env
+set +a
+podman compose -p bagredex \
+  -f current/deploy/compose.yaml \
+  -f current/deploy/compose.production.yaml \
+  exec server python manage.py createsuperuser
+```
+
+No credentials belong in Compose files, release metadata, shell history, fixtures, or repository
+documentation. Sign in at `/admin/` with that account and use the standard Users administration to
+create later accounts. Set `is_staff` only for administrators who need admin access; ordinary active
+users can sign in to Bagredex without it. There is no signup or email password-recovery workflow.
 
 ## User services and renewal
 
@@ -121,12 +165,17 @@ reloaded afterward. Inspect operations with `systemctl --user status` and `journ
 
 ## Layout and configuration
 
-- `compose.yaml` defines the application network and readiness probe.
-- `compose.local.yaml` builds and publishes only the development server.
+- `compose.yaml` defines PostgreSQL, its health check and named volume, the private application
+  network, and the server readiness probe.
+- `compose.local.yaml` supplies development-only database values and builds the development server.
 - `compose.production.yaml` selects versioned images and defines Nginx and Certbot.
 - `Containerfile` provides separate `application` and `nginx` targets.
 - `scripts/remote-release-worker.sh` owns the release transition and rollback.
 - `shared/.env` is stable secret configuration and never belongs in a release directory.
 - `release.env` records the release ID, image version, commit, and source branch.
 
-There is no database, migration, backup, or persistent application-data path in this slice.
+Normal Compose shutdown, failed deployment, and application rollback retain the explicitly named
+`bagredex-database` volume. Do not use `podman compose down --volumes` or manually remove the
+volume. Application rollback never reverses migrations. There is currently no automated backup or
+point-in-time recovery, so host or volume loss can permanently destroy accounts and sessions. Add a
+reviewed persistence-operations workflow before storing irreplaceable user content.

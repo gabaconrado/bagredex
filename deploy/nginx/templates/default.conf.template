@@ -12,6 +12,22 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/${BAGREDEX_DOMAIN}/privkey.pem;
     location /static/ { alias /srv/static/; }
     location = /health/ready { return 404; }
+    location = /login/ {
+        limit_req zone=authentication burst=5 nodelay;
+        limit_req_status 429;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://server:8000;
+    }
+    location = /admin/login/ {
+        limit_req zone=authentication burst=5 nodelay;
+        limit_req_status 429;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://server:8000;
+    }
     location / {
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;

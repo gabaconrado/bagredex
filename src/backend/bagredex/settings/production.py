@@ -82,6 +82,17 @@ if _STABLE_VERSION_PATTERN.fullmatch(_image_version) is None:
     )
 BAGREDEX_VERSION_LABEL = f"v{_image_version}"
 
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": required_environment("BAGREDEX_DATABASE_NAME"),
+        "USER": required_environment("BAGREDEX_DATABASE_USER"),
+        "PASSWORD": required_environment("BAGREDEX_DATABASE_PASSWORD"),
+        "HOST": required_environment("BAGREDEX_DATABASE_HOST"),
+        "PORT": required_environment("BAGREDEX_DATABASE_PORT"),
+    }
+}
+
 SECURE_SSL_REDIRECT = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True

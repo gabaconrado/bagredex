@@ -12,9 +12,15 @@ setup() {
     'BAGREDEX_DOMAIN=bagredex.example.invalid' \
     'BAGREDEX_EXPECTED_IP=192.0.2.1' \
     'LETSENCRYPT_EMAIL=admin@example.invalid' \
-    'DJANGO_SECRET_KEY=test-only-secret' >"${REMOTE_DIR}/shared/.env"
+    'DJANGO_SECRET_KEY=test-only-secret' \
+    'BAGREDEX_DATABASE_NAME=bagredex' \
+    'BAGREDEX_DATABASE_USER=bagredex' \
+    'BAGREDEX_DATABASE_PASSWORD=test-only-password' \
+    'BAGREDEX_DATABASE_HOST=database' \
+    'BAGREDEX_DATABASE_PORT=5432' >"${REMOTE_DIR}/shared/.env"
   printf '%s\n' '#!/usr/bin/env bash' \
     'printf "version=%s command=%s\\n" "${BAGREDEX_IMAGE_VERSION:-unset}" "$*" >>"${COMMAND_LOG}"' \
+    '[[ "${MOCK_FAIL_MIGRATE:-false}" == true && "$*" == *"manage.py migrate --noinput"* ]] && exit 9' \
     'exit 0' \
     >"${MOCK_BIN}/podman"
   printf '%s\n' '#!/usr/bin/env bash' \
@@ -45,8 +51,36 @@ make_release() {
   [ "${status}" -ne 0 ]
   [ ! -e "${REMOTE_DIR}/current" ]
   grep -Fq 'command=compose' "${COMMAND_LOG}"
-  grep -Fq ' down' "${COMMAND_LOG}"
+  grep -Fq ' stop nginx server' "${COMMAND_LOG}"
   [[ "${output}" == *"No previous release is available"* ]]
+}
+
+@test "database health and migrations precede the release switch" {
+  make_release old-release 0.9.0
+  make_release new-release 1.0.0
+  ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" CURL_STATUS=0 \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
+  [ "${status}" -eq 0 ]
+  database_line="$(grep -n ' up -d database' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  health_line="$(grep -n 'exec -T database pg_isready' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  migration_line="$(grep -n 'manage.py migrate --noinput' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  stop_line="$(grep -n ' stop nginx server' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  [ "${database_line}" -lt "${health_line}" ]
+  [ "${health_line}" -lt "${migration_line}" ]
+  [ "${migration_line}" -lt "${stop_line}" ]
+}
+
+@test "migration failure leaves the current release serving" {
+  make_release old-release 0.9.0
+  make_release new-release 1.0.0
+  ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" MOCK_FAIL_MIGRATE=true \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
+  [ "${status}" -eq 9 ]
+  [ "$(readlink -f "${REMOTE_DIR}/current")" = "${REMOTE_DIR}/releases/old-release" ]
+  ! grep -Fq ' stop nginx server' "${COMMAND_LOG}"
+  ! grep -Eq 'down[[:space:]]+(-v|--volumes)' "${COMMAND_LOG}"
 }
 
 @test "failed release restores previous release and image version" {

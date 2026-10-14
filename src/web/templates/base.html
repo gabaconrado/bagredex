@@ -9,6 +9,20 @@
     <link rel="stylesheet" href="{% static 'web/css/site.css' %}">
   </head>
   <body>
+    {% if request.user.is_authenticated %}
+      <header class="site-header">
+        <a class="site-header__brand" href="{% url 'home' %}">Bagredex</a>
+        <div class="site-header__account">
+          <span class="site-header__identity">
+            {% firstof request.user.get_short_name request.user.get_username %}
+          </span>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="button button--secondary" type="submit">Log out</button>
+          </form>
+        </div>
+      </header>
+    {% endif %}
     <main class="site-main">
       {% block content %}{% endblock %}
     </main>

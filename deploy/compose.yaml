@@ -1,5 +1,19 @@
 services:
+  database:
+    image: docker.io/library/postgres:17.6-alpine
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    networks: [application]
+
   server:
+    depends_on:
+      database:
+        condition: service_healthy
     environment:
       BAGREDEX_DOMAIN: ${BAGREDEX_DOMAIN:-localhost}
     healthcheck:
@@ -17,3 +31,8 @@ services:
 
 networks:
   application:
+    internal: true
+
+volumes:
+  database-data:
+    name: bagredex-database

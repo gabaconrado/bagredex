@@ -6,7 +6,6 @@ readonly script_dir
 readonly compose_project="bagredex-local"
 readonly base_compose="${script_dir}/deploy/compose.yaml"
 readonly local_compose="${script_dir}/deploy/compose.local.yaml"
-export UV_CACHE_DIR="${UV_CACHE_DIR:-${script_dir}/.cache/uv}"
 
 require_tools() {
   local tool
@@ -24,22 +23,25 @@ compose_local() {
 
 check_backend() {
   require_tools uv
-  uv run --project "${script_dir}/src/backend" ruff format --check "${script_dir}/src/backend"
-  uv run --project "${script_dir}/src/backend" ruff check "${script_dir}/src/backend"
-  uv run --project "${script_dir}/src/backend" mypy --config-file \
-    "${script_dir}/src/backend/pyproject.toml" "${script_dir}/src/backend"
-  uv run --project "${script_dir}/src/backend" python "${script_dir}/src/backend/manage.py" check
+  uv --directory "${script_dir}/src/backend" run ruff format --check .
+  uv --directory "${script_dir}/src/backend" run ruff check .
+  uv --directory "${script_dir}/src/backend" run mypy --config-file pyproject.toml .
+  uv --directory "${script_dir}/src/backend" run python manage.py check
   DJANGO_SETTINGS_MODULE=bagredex.settings.production \
     DJANGO_SECRET_KEY=deployment-check-only-secret-key-000000000000000000000000 \
     BAGREDEX_DOMAIN=bagredex.example.invalid BAGREDEX_IMAGE_VERSION=0.0.0 \
-    uv run --project "${script_dir}/src/backend" python "${script_dir}/src/backend/manage.py" \
-      check --deploy --fail-level WARNING
+    BAGREDEX_DATABASE_NAME=bagredex BAGREDEX_DATABASE_USER=bagredex \
+    BAGREDEX_DATABASE_PASSWORD=deployment-check-only BAGREDEX_DATABASE_HOST=database \
+    BAGREDEX_DATABASE_PORT=5432 \
+    uv --directory "${script_dir}/src/backend" run python manage.py check --deploy \
+      --fail-level WARNING
 }
 
 test_backend() {
-  require_tools uv
-  uv run --project "${script_dir}/src/backend" pytest -c \
-    "${script_dir}/src/backend/pyproject.toml"
+  require_tools podman
+  compose_local build server
+  compose_local up -d database
+  compose_local run --rm server pytest -c pyproject.toml
 }
 
 check_deploy() {
@@ -67,6 +69,13 @@ run_local() {
   cleanup 0
 }
 
+migrate_local() {
+  require_tools podman
+  compose_local build server
+  compose_local up -d database
+  compose_local run --rm server python manage.py migrate --noinput
+}
+
 usage() {
   printf '%s\n' \
     'Usage: ./bagredex.sh COMMAND [ARGUMENTS]' \
@@ -77,6 +86,7 @@ usage() {
     '  test                  Run backend tests' \
     '  check-deploy          Run documentation, shell, and deployment tests' \
     '  run                   Build and run the local stack in the foreground' \
+    '  migrate               Apply local database migrations' \
     '  publish VERSION       Validate, build, tag, and push production images' \
     '  deploy VERSION [--dry-run]  Deploy a published release'
 }
@@ -91,6 +101,7 @@ main() {
     test) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; test_backend ;;
     check-deploy) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_deploy ;;
     run) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; run_local ;;
+    migrate) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; migrate_local ;;
     publish) exec "${script_dir}/deploy/scripts/publish.sh" "$@" ;;
     deploy) exec "${script_dir}/deploy/scripts/deploy.sh" "$@" ;;
     help | --help | -h) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; usage ;;

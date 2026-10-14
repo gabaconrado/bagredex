@@ -17,6 +17,11 @@ PRODUCTION_ENVIRONMENT = {
     "DJANGO_SECRET_KEY": "settings-test-only-9Qv7Lw2Ks8Fh4Zx6Bn3Cp5Rt1Ym0",
     "BAGREDEX_DOMAIN": "vgc.example.test",
     "BAGREDEX_IMAGE_VERSION": "0.1.0",
+    "BAGREDEX_DATABASE_NAME": "bagredex",
+    "BAGREDEX_DATABASE_USER": "bagredex",
+    "BAGREDEX_DATABASE_PASSWORD": "settings-test-only-password",
+    "BAGREDEX_DATABASE_HOST": "database",
+    "BAGREDEX_DATABASE_PORT": "5432",
 }
 
 
@@ -216,42 +221,104 @@ def test_production_rejects_invalid_hsts_seconds(hsts_seconds: str) -> None:
     assert hsts_seconds not in process.stderr
 
 
-def test_project_has_no_database_configuration_or_backed_apps() -> None:
-    script = """
-import json
-import os
-os.environ["DJANGO_SETTINGS_MODULE"] = "bagredex.settings.local"
-from django.conf import settings
-has_explicit_default = "default" in settings.DATABASES
-from django.db import connections
-dummy_settings = connections["default"].settings_dict
-print(json.dumps({
-    "has_explicit_default": has_explicit_default,
-    "implicit_engine": dummy_settings["ENGINE"],
-    "implicit_name": dummy_settings["NAME"],
-}))
-"""
-    process = production_process(
-        script,
-        environment={},
-    )
-
-    assert process.returncode == 0, process.stderr
-    assert json.loads(process.stdout) == {
-        "has_explicit_default": False,
-        "implicit_engine": "django.db.backends.dummy",
-        "implicit_name": "",
-    }
-    assert settings.INSTALLED_APPS == ["django.contrib.staticfiles"]
-    assert not {
+def test_project_enables_authentication_and_postgresql() -> None:
+    assert settings.DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql"
+    assert {
         "django.contrib.admin",
         "django.contrib.auth",
         "django.contrib.contenttypes",
         "django.contrib.messages",
         "django.contrib.sessions",
-    }.intersection(settings.INSTALLED_APPS)
-    assert not any("SessionMiddleware" in middleware for middleware in settings.MIDDLEWARE)
+        "bagredex.accounts",
+    }.issubset(settings.INSTALLED_APPS)
+    assert settings.AUTH_USER_MODEL == "accounts.User"
+    assert settings.LOGIN_URL == "login"
+    assert settings.LOGIN_REDIRECT_URL == "home"
+    assert settings.LOGOUT_REDIRECT_URL == "login"
+    assert settings.SESSION_COOKIE_AGE == 1_209_600
+    assert settings.SESSION_EXPIRE_AT_BROWSER_CLOSE is False
     assert not list(BACKEND_ROOT.rglob("db.sqlite3"))
+
+
+def test_local_database_defaults_without_environment_overrides() -> None:
+    script = """
+import json
+from bagredex.settings import local
+database = local.DATABASES["default"]
+print(json.dumps({
+    "engine": database["ENGINE"],
+    "name": database["NAME"],
+    "user": database["USER"],
+    "password": database["PASSWORD"],
+    "host": database["HOST"],
+    "port": database["PORT"],
+}))
+"""
+    process = production_process(script, environment={})
+
+    assert process.returncode == 0, process.stderr
+    assert json.loads(process.stdout) == {
+        "engine": "django.db.backends.postgresql",
+        "name": "bagredex",
+        "user": "bagredex",
+        "password": "bagredex-development",
+        "host": "localhost",
+        "port": "5432",
+    }
+
+
+def test_authentication_middleware_order() -> None:
+    middleware = settings.MIDDLEWARE
+
+    assert middleware.index("django.contrib.sessions.middleware.SessionMiddleware") < (
+        middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware")
+    )
+    assert middleware.index("django.contrib.auth.middleware.AuthenticationMiddleware") < (
+        middleware.index("django.contrib.auth.middleware.LoginRequiredMiddleware")
+    )
+    assert middleware.index("django.contrib.auth.middleware.LoginRequiredMiddleware") < (
+        middleware.index("django.contrib.messages.middleware.MessageMiddleware")
+    )
+
+
+@pytest.mark.parametrize(
+    "missing_name",
+    [
+        "BAGREDEX_DATABASE_NAME",
+        "BAGREDEX_DATABASE_USER",
+        "BAGREDEX_DATABASE_PASSWORD",
+        "BAGREDEX_DATABASE_HOST",
+        "BAGREDEX_DATABASE_PORT",
+    ],
+)
+def test_production_requires_database_environment(missing_name: str) -> None:
+    environment = {
+        key: value for key, value in PRODUCTION_ENVIRONMENT.items() if key != missing_name
+    }
+
+    process = production_process("from bagredex.settings import production", environment)
+
+    assert process.returncode != 0
+    assert f"The {missing_name} environment variable is required." in process.stderr
+
+
+def test_production_database_uses_documented_environment() -> None:
+    script = """
+import json
+from bagredex.settings import production
+print(json.dumps(production.DATABASES["default"]))
+"""
+    process = production_process(script, PRODUCTION_ENVIRONMENT)
+
+    assert process.returncode == 0, process.stderr
+    assert json.loads(process.stdout) == {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "bagredex",
+        "USER": "bagredex",
+        "PASSWORD": "settings-test-only-password",
+        "HOST": "database",
+        "PORT": "5432",
+    }
 
 
 def test_web_asset_paths_follow_the_cross_scope_contract() -> None:

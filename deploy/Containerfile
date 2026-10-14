@@ -13,6 +13,12 @@ COPY src/web/ /app/src/web/
 RUN DJANGO_SETTINGS_MODULE=bagredex.settings.local \
     uv run --no-dev python manage.py collectstatic --noinput
 
+FROM python-dependencies AS development
+RUN uv sync --frozen
+COPY src/backend/ /app/src/backend/
+COPY src/web/ /app/src/web/
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
 FROM docker.io/library/python:3.14.7-slim-bookworm AS application
 ENV PATH=/app/.venv/bin:${PATH} \
     PYTHONDONTWRITEBYTECODE=1 \

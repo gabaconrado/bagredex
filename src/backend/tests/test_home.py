@@ -1,22 +1,35 @@
-"""Request tests for the public placeholder page."""
+"""Request tests for the authenticated application home page."""
 
 import pytest
 from django.test import Client
 
+from bagredex.accounts.models import User
 
-def test_home_renders_the_placeholder(client: Client) -> None:
+
+def test_anonymous_home_redirects_to_login_with_local_destination(client: Client) -> None:
+    response = client.get("/")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login/?next=/"
+
+
+@pytest.mark.django_db
+def test_authenticated_home_renders_for_user(client: Client) -> None:
+    user = User.objects.create_user(username="misty", password="test-password")
+    client.force_login(user)
+
     response = client.get("/")
 
     assert response.status_code == 200
     assert response.templates[0].name == "home.html"
-    assert b"<title>Bagredex</title>" in response.content
-    assert b"<h1" in response.content
-    assert b">Bagredex</h1>" in response.content
-    assert b"Coming soon" in response.content
 
 
+@pytest.mark.django_db
 @pytest.mark.parametrize("method", ["head", "post", "put", "patch", "delete", "options", "trace"])
-def test_home_rejects_non_get_methods(client: Client, method: str) -> None:
+def test_authenticated_home_rejects_non_get_methods(client: Client, method: str) -> None:
+    user = User.objects.create_user(username="brock", password="test-password")
+    client.force_login(user)
+
     response = getattr(client, method)("/")
 
     assert response.status_code == 405

@@ -1,0 +1,1 @@
+"""Bagredex user accounts."""

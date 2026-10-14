@@ -56,6 +56,19 @@ wait_for_server() {
   return 1
 }
 
+wait_for_database() {
+  local target="${1:?release directory required}" target_id="${2:?release id required}"
+  local attempt
+  for ((attempt = 1; attempt <= 60; attempt++)); do
+    if compose_release "${target}" "${target_id}" exec -T database \
+      pg_isready -U "${BAGREDEX_DATABASE_USER}" -d "${BAGREDEX_DATABASE_NAME}"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 capture_previous_target() {
   local candidate=""
   if [[ -L "${remote_dir}/current" ]]; then
@@ -89,7 +102,7 @@ recover_previous_release() {
   trap - EXIT
   set +e
   printf 'Deployment failed with status %s; attempting recovery.\n' "${original_status}" >&2
-  compose_release "${release_dir}" "${release_id}" down || recovery_failed=true
+  compose_release "${release_dir}" "${release_id}" stop nginx server || recovery_failed=true
   if [[ -n "${previous_target}" ]]; then
     previous_id="$(basename "${previous_target}")"
     if ! ln -sfn "${previous_target}" "${remote_dir}/current" \
@@ -139,15 +152,21 @@ set +a
 }
 
 capture_previous_target
+compose_release "${release_dir}" "${release_id}" pull database
 compose_release "${release_dir}" "${release_id}" pull server
 compose_release "${release_dir}" "${release_id}" pull nginx
 compose_release "${release_dir}" "${release_id}" run --rm --no-deps server \
   python manage.py check --deploy --fail-level WARNING
 ln -sfn "${shared_dir}" "${release_dir}/shared"
 
+compose_release "${release_dir}" "${release_id}" up -d database
+wait_for_database "${release_dir}" "${release_id}"
+compose_release "${release_dir}" "${release_id}" run --rm --no-deps server \
+  python manage.py migrate --noinput
+
 recovery_armed=true
 trap recover_previous_release EXIT
-compose_release "${release_dir}" "${release_id}" down
+compose_release "${release_dir}" "${release_id}" stop nginx server
 if [[ -n "${previous_target}" ]]; then ln -sfn "${previous_target}" "${remote_dir}/previous"; fi
 ln -sfn "${release_dir}" "${remote_dir}/current"
 compose_release "${release_dir}" "${release_id}" up -d server

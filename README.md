@@ -5,9 +5,10 @@ calculation, and journey logging.
 
 ## Status
 
-Bagredex has a minimal deployable slice: a database-free Django application serves a responsive
-placeholder page and health endpoints. Rootless Podman packaging supports local execution and a
-human-operated Nginx, Let's Encrypt, and rollback-capable production lifecycle.
+Bagredex has a persistent authenticated slice: Django serves username/password login, protected
+pages, standard administration, and health endpoints backed by PostgreSQL. Rootless Podman
+packaging supports local execution and a human-operated Nginx, Let's Encrypt, and rollback-capable
+production lifecycle.
 
 ## Product direction
 
@@ -104,14 +105,17 @@ remain outside agent execution.
 ```bash
 ./bagredex.sh check
 ./bagredex.sh run
+./bagredex.sh migrate
 ./bagredex.sh publish VERSION
 ./bagredex.sh deploy VERSION [--dry-run]
 ```
 
-`run` serves the local container at `http://127.0.0.1:8000` and stops it on `Ctrl+C`. `publish` and
-`deploy` are human-invoked operational commands; agents do not execute their registry, SSH,
-certificate, or remote-system operations. See the [deployment guide](deploy/README.md) for host
-preparation, configuration, TLS bootstrap, renewal, and rollback behavior.
+`run` starts PostgreSQL, applies migrations, serves the local container at
+`http://127.0.0.1:8000`, and stops the containers on `Ctrl+C` without deleting database data.
+`migrate` applies local migrations without starting the web server. `publish` and `deploy` are
+human-invoked operational commands; agents do not execute their registry, SSH, certificate, or
+remote-system operations. See the [deployment guide](deploy/README.md) for database persistence,
+host preparation, configuration, account bootstrap, TLS, renewal, and rollback behavior.
 
 ## License
 

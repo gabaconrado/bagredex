@@ -1,4 +1,14 @@
 services:
+  database:
+    environment:
+      POSTGRES_DB: ${BAGREDEX_DATABASE_NAME:?BAGREDEX_DATABASE_NAME is required}
+      POSTGRES_USER: ${BAGREDEX_DATABASE_USER:?BAGREDEX_DATABASE_USER is required}
+      POSTGRES_PASSWORD: ${BAGREDEX_DATABASE_PASSWORD:?BAGREDEX_DATABASE_PASSWORD is required}
+    restart: unless-stopped
+    logging:
+      driver: journald
+    security_opt: [no-new-privileges:true]
+
   server:
     image: docker.io/gabaconrado/bagredex:${BAGREDEX_IMAGE_VERSION:?BAGREDEX_IMAGE_VERSION is required}
     command:

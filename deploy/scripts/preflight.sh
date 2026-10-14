@@ -27,11 +27,24 @@ set -a
 source "${remote_dir}/shared/.env"
 set +a
 for variable in BAGREDEX_ENVIRONMENT BAGREDEX_DOMAIN BAGREDEX_EXPECTED_IP LETSENCRYPT_EMAIL \
-  DJANGO_SECRET_KEY; do
+  DJANGO_SECRET_KEY BAGREDEX_DATABASE_NAME BAGREDEX_DATABASE_USER BAGREDEX_DATABASE_PASSWORD \
+  BAGREDEX_DATABASE_HOST BAGREDEX_DATABASE_PORT; do
   [[ -n "${!variable:-}" ]] || {
     printf 'Required production variable is empty: %s\n' "${variable}" >&2; exit 2;
   }
 done
+[[ "${BAGREDEX_DATABASE_NAME}" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || {
+  printf 'BAGREDEX_DATABASE_NAME contains unsupported characters.\n' >&2; exit 2;
+}
+[[ "${BAGREDEX_DATABASE_USER}" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || {
+  printf 'BAGREDEX_DATABASE_USER contains unsupported characters.\n' >&2; exit 2;
+}
+[[ "${BAGREDEX_DATABASE_HOST}" == database ]] || {
+  printf 'BAGREDEX_DATABASE_HOST must be database.\n' >&2; exit 2;
+}
+[[ "${BAGREDEX_DATABASE_PORT}" == 5432 ]] || {
+  printf 'BAGREDEX_DATABASE_PORT must be 5432.\n' >&2; exit 2;
+}
 [[ "${BAGREDEX_ENVIRONMENT}" == production ]] || {
   printf 'BAGREDEX_ENVIRONMENT must be production.\n' >&2; exit 2;
 }
