@@ -15,6 +15,7 @@ RUN DJANGO_SETTINGS_MODULE=bagredex.settings.local \
 
 FROM python-dependencies AS development
 RUN uv sync --frozen
+ENV PATH=/app/.venv/bin:${PATH}
 COPY src/backend/ /app/src/backend/
 COPY src/web/ /app/src/web/
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

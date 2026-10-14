@@ -20,7 +20,8 @@ follows the approved
 - Added exact POST-only Nginx rate limiting for `/login/` and `/admin/login/` at 10 requests per
   minute per client IP with burst 5 and 429 responses.
 - Configured uv persistently to use repository-root `.cache/uv`, removed command-local cache
-  overrides, and added a development image/test path with locked dependencies.
+  overrides, and added a development image/test path with locked dependencies and the project
+  virtual environment on its runtime `PATH`.
 - Updated local commands, deployment tests, environment examples, preflight checks, and operator
   documentation for database configuration, persistence, rollback limits, and image availability.
 
@@ -38,6 +39,12 @@ gap: production prerequisites mentioned only the two Bagredex images. The deploy
 the guide to include pinned PostgreSQL and Certbot images. Final backend, Web GUI, deployment, and
 integration reviews found no actionable findings.
 
+After the original feature commit, a user-enabled online development build populated the remaining
+locked dependencies and exposed that the development image did not place `/app/.venv/bin` on
+`PATH`. The deployment owner scoped the PATH correction to the development stage and added a Bats
+regression assertion. Focused integration re-review confirmed that the production application
+stage was unchanged and found no actionable findings.
+
 ## Verification
 
 - Backend formatting, Ruff lint, strict mypy, local and production Django checks, migration checks,
@@ -46,27 +53,30 @@ integration reviews found no actionable findings.
   session persistence across a database restart passed in real container smoke tests.
 - The configured uv cache resolved to repository-root `.cache/uv` without `UV_CACHE_DIR` command
   overrides.
-- Repository documentation lint, Bash syntax, ShellCheck, all 29 Bats tests, and
+- Repository documentation lint, Bash syntax, ShellCheck, all 30 Bats tests, and
   `git diff --check` passed.
 - `nginx -t` passed. A live limiter smoke admitted six rapid POST requests, rejected the next ten
   with 429, and admitted a subsequent GET. Admitted requests returned the expected 502 because the
   isolated test intentionally provided no upstream server.
-- The exact development-image build with `--network=none` did not complete because locked
-  `sqlparse==0.6.0` was absent from the local build cache. No dependency was downloaded. Container
-  behavior was instead validated with the already-local base image and populated project virtual
-  environment on a private network, without external contact.
+- After the user-enabled online build populated all locked dependencies, exact
+  `./bagredex.sh check` rebuilt the development image from cached layers offline. The project
+  virtual environment resolved `pytest`; all 107 pytest and 30 Bats tests plus Ruff, mypy, Django,
+  documentation lint, Bash syntax, ShellCheck, and diff checks passed without network access, image
+  pulls, or dependency installation. Validation cleanup left no containers or networks and retained
+  the persistent local database volume.
 - Registry publication, SSH deployment, certificate issuance, systemd changes, production account
   creation, and production smoke testing remain human-run operations and were not executed.
 
 Residual risks are the missing automated PostgreSQL backup and point-in-time recovery workflow,
 forward-compatible rather than automatic schema rollback, shared-NAT coupling in per-IP rate
-limits, and the uncompleted exact offline development-image build.
+limits, and the deliberately human-run production operations.
 
 ## Deferred tasks
 
-None. No task files were created. The exact offline build gap and operational risks are recorded
-limitations, not known blocking defects or unfinished approved scope.
+None. No task files were created. The operational risks are recorded limitations, not known
+blocking defects or unfinished approved scope.
 
 ## Commits
 
-This report is included in the pending cycle commit.
+The original feature was committed as `5ebc7a0741f0343443a34f81739b984470575a90`. The development
+image validation correction and this report update are included in a pending fix commit.

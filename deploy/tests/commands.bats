@@ -79,6 +79,16 @@ teardown() {
     "${REPOSITORY_ROOT}/deploy/compose.local.yaml"
 }
 
+@test "development image exposes virtual environment commands on PATH" {
+  run awk '
+    /^FROM python-dependencies AS development$/ { in_development = 1; next }
+    /^FROM / && in_development { exit }
+    in_development && /PATH=\/app\/\.venv\/bin:\$\{PATH\}/ { found = 1 }
+    END { if (!found) exit 1 }
+  ' "${REPOSITORY_ROOT}/deploy/Containerfile"
+  [ "${status}" -eq 0 ]
+}
+
 @test "Nginx limits POST authentication attempts by direct client IP" {
   grep -Fq 'POST $binary_remote_addr;' "${REPOSITORY_ROOT}/deploy/nginx/nginx.conf"
   grep -Fq 'limit_req_zone $authentication_limit_key zone=authentication:10m rate=10r/m;' \
