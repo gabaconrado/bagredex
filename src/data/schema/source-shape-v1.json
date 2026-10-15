@@ -1,0 +1,24 @@
+{
+  "version": "showdown-champions-1",
+  "required_exports": {
+    "config/formats.ts": "Formats",
+    "data/abilities.ts": "Abilities",
+    "data/learnsets.ts": "Learnsets",
+    "data/moves.ts": "Moves",
+    "data/pokedex.ts": "Pokedex",
+    "data/text/abilities.ts": "AbilitiesText",
+    "data/text/moves.ts": "MovesText",
+    "data/mods/champions/abilities.ts": "Abilities",
+    "data/mods/champions/formats-data.ts": "FormatsData",
+    "data/mods/champions/learnsets.ts": "Learnsets",
+    "data/mods/champions/moves.ts": "Moves",
+    "data/mods/championsregmb/formats-data.ts": "FormatsData",
+    "data/mods/championsregmb/learnsets.ts": "Learnsets",
+    "data/mods/championsregmb/moves.ts": "Moves"
+  },
+  "formats": [
+    {"name": "[Gen 9 Champions] VGC 2026 Reg M-B", "mod": "championsregmb"},
+    {"name": "[Gen 9 Champions] VGC 2026 Reg M-C", "mod": "champions"}
+  ],
+  "mod_inheritance": {"championsregmb": "champions", "champions": "base"}
+}

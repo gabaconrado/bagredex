@@ -140,6 +140,8 @@ set -a
 source "${shared_dir}/.env"
 # shellcheck disable=SC1091
 source "${release_dir}/release.env"
+# shellcheck disable=SC1091
+source "${release_dir}/deploy/pokemon-data.env"
 set +a
 [[ "${BAGREDEX_ENVIRONMENT:-}" == production ]] || {
   printf 'Remote environment is not production.\n' >&2; exit 2;
@@ -150,6 +152,11 @@ set +a
 [[ "${BAGREDEX_IMAGE_VERSION:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
   printf 'Release %s has an invalid image version.\n' "${release_id}" >&2; exit 2;
 }
+[[ "${BAGREDEX_POKEMON_DATA_VERSION:-}" =~ ^showdown-[a-f0-9]{8}-s[0-9]+-i[0-9]+-[a-f0-9]{12}$ ]] || {
+  printf 'Release %s has an invalid Pokemon data version.\n' "${release_id}" >&2; exit 2;
+}
+pokemon_data_bundle="/app/src/data/releases/${BAGREDEX_POKEMON_DATA_VERSION}"
+readonly pokemon_data_bundle
 
 capture_previous_target
 compose_release "${release_dir}" "${release_id}" pull database
@@ -163,6 +170,10 @@ compose_release "${release_dir}" "${release_id}" up -d database
 wait_for_database "${release_dir}" "${release_id}"
 compose_release "${release_dir}" "${release_id}" run --rm --no-deps server \
   python manage.py migrate --noinput
+compose_release "${release_dir}" "${release_id}" run --rm --no-deps server \
+  python manage.py load_pokemon_data "${pokemon_data_bundle}"
+compose_release "${release_dir}" "${release_id}" run --rm --no-deps server \
+  python manage.py activate_pokemon_data "${BAGREDEX_POKEMON_DATA_VERSION}" --if-none
 
 recovery_armed=true
 trap recover_previous_release EXIT

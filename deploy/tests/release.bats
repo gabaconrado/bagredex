@@ -21,6 +21,8 @@ setup() {
   printf '%s\n' '#!/usr/bin/env bash' \
     'printf "version=%s command=%s\\n" "${BAGREDEX_IMAGE_VERSION:-unset}" "$*" >>"${COMMAND_LOG}"' \
     '[[ "${MOCK_FAIL_MIGRATE:-false}" == true && "$*" == *"manage.py migrate --noinput"* ]] && exit 9' \
+    '[[ "${MOCK_FAIL_LOAD:-false}" == true && "$*" == *"manage.py load_pokemon_data"* ]] && exit 10' \
+    '[[ "${MOCK_FAIL_ACTIVATE:-false}" == true && "$*" == *"manage.py activate_pokemon_data"* ]] && exit 11' \
     'exit 0' \
     >"${MOCK_BIN}/podman"
   printf '%s\n' '#!/usr/bin/env bash' \
@@ -40,6 +42,7 @@ make_release() {
   mkdir -p "${release_dir}/deploy"
   : >"${release_dir}/deploy/compose.yaml"
   : >"${release_dir}/deploy/compose.production.yaml"
+  cp "${REPOSITORY_ROOT}/deploy/pokemon-data.env" "${release_dir}/deploy/pokemon-data.env"
   printf 'BAGREDEX_RELEASE_ID=%s\nBAGREDEX_IMAGE_VERSION=%s\n' \
     "${release_id}" "${version}" >"${release_dir}/release.env"
 }
@@ -55,7 +58,7 @@ make_release() {
   [[ "${output}" == *"No previous release is available"* ]]
 }
 
-@test "database health and migrations precede the release switch" {
+@test "migrations load and first activation precede the release switch" {
   make_release old-release 0.9.0
   make_release new-release 1.0.0
   ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
@@ -65,10 +68,16 @@ make_release() {
   database_line="$(grep -n ' up -d database' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
   health_line="$(grep -n 'exec -T database pg_isready' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
   migration_line="$(grep -n 'manage.py migrate --noinput' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  load_line="$(grep -n 'manage.py load_pokemon_data' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
+  activation_line="$(grep -n 'manage.py activate_pokemon_data' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
   stop_line="$(grep -n ' stop nginx server' "${COMMAND_LOG}" | head -n1 | cut -d: -f1)"
   [ "${database_line}" -lt "${health_line}" ]
   [ "${health_line}" -lt "${migration_line}" ]
-  [ "${migration_line}" -lt "${stop_line}" ]
+  [ "${migration_line}" -lt "${load_line}" ]
+  [ "${load_line}" -lt "${activation_line}" ]
+  [ "${activation_line}" -lt "${stop_line}" ]
+  grep -Fq 'activate_pokemon_data showdown-3a766f2c-s1-i1-923ba416555c --if-none' \
+    "${COMMAND_LOG}"
 }
 
 @test "migration failure leaves the current release serving" {
@@ -81,6 +90,42 @@ make_release() {
   [ "$(readlink -f "${REMOTE_DIR}/current")" = "${REMOTE_DIR}/releases/old-release" ]
   ! grep -Fq ' stop nginx server' "${COMMAND_LOG}"
   ! grep -Eq 'down[[:space:]]+(-v|--volumes)' "${COMMAND_LOG}"
+}
+
+@test "data load failure leaves the current release serving" {
+  make_release old-release 0.9.0
+  make_release new-release 1.0.0
+  ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" MOCK_FAIL_LOAD=true \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
+  [ "${status}" -eq 10 ]
+  [ "$(readlink -f "${REMOTE_DIR}/current")" = "${REMOTE_DIR}/releases/old-release" ]
+  ! grep -Fq 'manage.py activate_pokemon_data' "${COMMAND_LOG}"
+  ! grep -Fq ' stop nginx server' "${COMMAND_LOG}"
+}
+
+@test "initial activation failure leaves the current release serving" {
+  make_release old-release 0.9.0
+  make_release new-release 1.0.0
+  ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" MOCK_FAIL_ACTIVATE=true \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
+  [ "${status}" -eq 11 ]
+  [ "$(readlink -f "${REMOTE_DIR}/current")" = "${REMOTE_DIR}/releases/old-release" ]
+  grep -Fq 'manage.py load_pokemon_data' "${COMMAND_LOG}"
+  ! grep -Fq ' stop nginx server' "${COMMAND_LOG}"
+}
+
+@test "repeated deployment uses idempotent load and only if-none activation" {
+  make_release old-release 0.9.0
+  make_release new-release 1.0.0
+  ln -s "${REMOTE_DIR}/releases/old-release" "${REMOTE_DIR}/current"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" CURL_STATUS=0 \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
+  [ "${status}" -eq 0 ]
+  [ "$(grep -Fc 'manage.py load_pokemon_data /app/src/data/releases/showdown-3a766f2c-s1-i1-923ba416555c' "${COMMAND_LOG}")" -eq 1 ]
+  [ "$(grep -Fc 'manage.py activate_pokemon_data showdown-3a766f2c-s1-i1-923ba416555c --if-none' "${COMMAND_LOG}")" -eq 1 ]
+  ! grep -E 'activate_pokemon_data .*--if-none' "${COMMAND_LOG}" | grep -Eq -- '--force|--replace'
 }
 
 @test "failed release restores previous release and image version" {

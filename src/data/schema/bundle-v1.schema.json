@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/pokemon-data-bundle-v1",
+  "title": "Bagredex Pokemon data bundle manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown",
+    "pokeapi_sprites",
+    "pokeapi_mapping",
+    "formats",
+    "mechanics_profile_id",
+    "sprite_provenance",
+    "overlays",
+    "validation_status",
+    "validation_sha256",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": {"type": "string", "pattern": "^showdown-[0-9a-f]{8}-s1-i1-[0-9a-f]{12}$"},
+    "bundle_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bundle_schema_version": {"const": "1"},
+    "importer_version": {"const": "1"},
+    "source_shape_version": {"const": "showdown-champions-1"},
+    "showdown": {
+      "type": "object", "additionalProperties": false,
+      "required": ["revision", "commit_date", "clean_tree"],
+      "properties": {
+        "revision": {"const": "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"},
+        "commit_date": {"const": "2026-10-13"}, "clean_tree": {"const": true}
+      }
+    },
+    "pokeapi_sprites": {"$ref": "#/$defs/sprite_source"},
+    "pokeapi_mapping": {"$ref": "#/$defs/mapping_source"},
+    "formats": {"type": "array", "minItems": 2, "maxItems": 2},
+    "mechanics_profile_id": {"const": "champions-level-50-v1"},
+    "sprite_provenance": {"$ref": "#/$defs/sprite_provenance"},
+    "overlays": {"type": "array", "items": {"$ref": "#/$defs/applied_overlay"}},
+    "validation_status": {"const": "valid"},
+    "validation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["forms", "types", "memberships", "profiles", "abilities", "ability_profiles", "moves", "move_profiles", "move_flags", "move_flag_relations", "learnsets", "mega_relations", "sprites", "sprite_mappings", "sprites_by_variant", "sprite_mapping_rules", "legal_forms_by_regulation", "learnsets_by_regulation", "learnsets_by_form_resolution", "learnsets_by_source_mod", "learnsets_by_source_kind", "move_flag_usage"],
+      "properties": {
+        "forms": {"const": 353}, "types": {"const": 18}, "memberships": {"const": 667},
+        "profiles": {"const": 706}, "abilities": {"const": 217}, "ability_profiles": {"const": 434},
+        "moves": {"const": 510}, "move_profiles": {"const": 1020}, "move_flags": {"const": 37},
+        "move_flag_relations": {"const": 3928}, "learnsets": {"const": 43891},
+        "mega_relations": {"const": 84}, "sprites": {"const": 706}, "sprite_mappings": {"const": 353},
+        "sprites_by_variant": {"const": {"normal": 353, "shiny": 353}},
+        "sprite_mapping_rules": {"const": {"exception": 46, "normalized-identifier": 660}},
+        "legal_forms_by_regulation": {"const": {"m-b": 316, "m-c": 351}},
+        "learnsets_by_regulation": {"const": {"m-b": 21946, "m-c": 21945}},
+        "learnsets_by_form_resolution": {"const": {"base-to-mega": 11270, "changed-form": 932, "direct": 31689}},
+        "learnsets_by_source_mod": {"const": {"base": 676, "champions": 43164, "championsregmb": 51}},
+        "learnsets_by_source_kind": {"const": {"direct": 21607, "inherited": 22233, "override": 51}},
+        "move_flag_usage": {"type": "object", "minProperties": 37, "maxProperties": 37,
+          "additionalProperties": {"type": "integer", "minimum": 1}}
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "bytes", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sprite_source": {
+      "type": "object", "additionalProperties": false, "required": ["revision", "clean_tree"],
+      "properties": {"revision": {"const": "ba403973fdf9d0ac59175813861e6a1f8ed5020c"}, "clean_tree": {"const": true}}
+    },
+    "mapping_source": {
+      "type": "object", "additionalProperties": false, "required": ["revision", "clean_tree"],
+      "properties": {"revision": {"const": "81d20919845b6a445969b9265aab5cec6b04cece"}, "clean_tree": {"const": true}}
+    },
+    "applied_overlay": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "record", "path", "sha256", "fixture_path", "fixture_sha256"],
+      "properties": {
+        "id": {"type": "string"}, "record": {"type": "string"}, "path": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "fixture_path": {"type": "string"},
+        "fixture_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "sprite_provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["revision", "clean_tree", "family", "mapping_rule_version", "mapping_revision", "mapping_sha256", "cwebp_version", "cwebp_args", "license", "mapping_exceptions"],
+      "properties": {
+        "revision": {"const": "ba403973fdf9d0ac59175813861e6a1f8ed5020c"}, "clean_tree": {"const": true},
+        "family": {"const": "sprites/pokemon/other/home"}, "mapping_rule_version": {"const": "pokeapi-csv-v1"},
+        "mapping_revision": {"const": "81d20919845b6a445969b9265aab5cec6b04cece"},
+        "mapping_sha256": {"const": "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"},
+        "cwebp_version": {"const": "1.3.2"}, "cwebp_args": {"type": "array", "items": {"type": "string"}},
+        "license": {"const": "license-not-supplied"}, "mapping_exceptions": {"type": "object"}
+      }
+    }
+  }
+}

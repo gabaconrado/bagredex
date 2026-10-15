@@ -1,0 +1,15 @@
+.git
+.cache
+.codex
+.agents
+references
+docs
+deploy/tests
+src/backend/.cache
+src/backend/.mypy_cache
+src/backend/.pytest_cache
+src/backend/.ruff_cache
+src/backend/.venv
+src/backend/**/__pycache__
+src/data/fixtures
+src/data/tests

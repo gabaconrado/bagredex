@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/pokemon-data-records-v1",
+  "title": "Bagredex Pokemon data record definitions v1",
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hp", "atk", "def", "spa", "spd", "spe"],
+      "properties": {
+        "hp": {"type": "integer", "minimum": 1},
+        "atk": {"type": "integer", "minimum": 1},
+        "def": {"type": "integer", "minimum": 1},
+        "spa": {"type": "integer", "minimum": 1},
+        "spd": {"type": "integer", "minimum": 1},
+        "spe": {"type": "integer", "minimum": 1}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "name": {"type": "string", "minLength": 1}}
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "national_dex_number", "base_form_id", "form_label", "is_mega", "sprite_id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1},
+        "national_dex_number": {"type": "integer", "minimum": 1},
+        "base_form_id": {"$ref": "#/$defs/id"},
+        "form_label": {"type": "string"},
+        "is_mega": {"type": "boolean"},
+        "sprite_id": {"type": "string", "pattern": "^[a-z0-9-]+$"}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regulation_id", "form_id", "stats", "bst", "types", "abilities"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]},
+        "form_id": {"$ref": "#/$defs/id"},
+        "stats": {"$ref": "#/$defs/stats"},
+        "bst": {"type": "integer", "minimum": 6},
+        "types": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "string"}},
+        "abilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slot", "ability_id"],
+            "properties": {"slot": {"type": "string"}, "ability_id": {"$ref": "#/$defs/id"}}
+          }
+        }
+      }
+    },
+    "regulation_membership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regulation_id", "form_id"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]},
+        "form_id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "learnset_relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regulation_id", "form_id", "move_id", "form_resolution", "source_form_id", "source_mod", "source_kind"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]},
+        "form_id": {"$ref": "#/$defs/id"},
+        "move_id": {"$ref": "#/$defs/id"},
+        "form_resolution": {"enum": ["direct", "pre-evolution", "changed-form", "base-to-mega"]},
+        "source_form_id": {"$ref": "#/$defs/id"},
+        "source_mod": {"enum": ["base", "champions", "championsregmb"]},
+        "source_kind": {"enum": ["direct", "inherited", "override"]}
+      }
+    },
+    "sprite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "form_id", "variant", "path", "source_path", "source_sha256", "pokeapi_pokemon_id",
+        "pokeapi_identifier", "mapping_rule", "source_width", "source_height",
+        "source_bit_depth", "source_color_type", "source_interlace", "cwebp_version",
+        "cwebp_args", "sha256", "width", "height", "has_alpha", "is_animated", "has_metadata"
+      ],
+      "properties": {
+        "form_id": {"$ref": "#/$defs/id"},
+        "variant": {"enum": ["normal", "shiny"]},
+        "path": {"type": "string", "pattern": "^sprites/(?:normal|shiny)/[a-z0-9-]+[.]webp$"},
+        "source_path": {"type": "string", "pattern": "^sprites/pokemon/other/home/(?:shiny/)?[0-9]+[.]png$"},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "pokeapi_pokemon_id": {"type": "integer", "minimum": 1},
+        "pokeapi_identifier": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "mapping_rule": {"enum": ["normalized-identifier", "exception"]},
+        "source_width": {"const": 512},
+        "source_height": {"const": 512},
+        "source_bit_depth": {"const": 8},
+        "source_color_type": {"const": 6},
+        "source_interlace": {"const": 0},
+        "cwebp_version": {"const": "1.3.2"},
+        "cwebp_args": {"type": "array", "items": {"type": "string"}},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"const": 384},
+        "height": {"const": 384},
+        "has_alpha": {"const": true},
+        "is_animated": {"const": false},
+        "has_metadata": {"const": false}
+      }
+    },
+    "sprite_mapping": {
+      "type": "object", "additionalProperties": false,
+      "required": ["form_id", "pokeapi_pokemon_id", "pokeapi_identifier", "mapping_rule"],
+      "properties": {
+        "form_id": {"$ref": "#/$defs/id"}, "pokeapi_pokemon_id": {"type": "integer", "minimum": 1},
+        "pokeapi_identifier": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+        "mapping_rule": {"enum": ["normalized-identifier", "exception"]}
+      }
+    },
+    "mega_relation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["base_form_id", "mega_form_id"],
+      "properties": {"base_form_id": {"$ref": "#/$defs/id"}, "mega_form_id": {"$ref": "#/$defs/id"}}
+    },
+    "move_flag_relation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["regulation_id", "move_id", "flag_id"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]}, "move_id": {"$ref": "#/$defs/id"},
+        "flag_id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "mechanics_profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "level", "sp_minimum", "sp_maximum", "hp_formula", "other_formula", "nature_percentages"],
+      "properties": {
+        "id": {"const": "champions-level-50-v1"}, "level": {"const": 50},
+        "sp_minimum": {"const": 0}, "sp_maximum": {"const": 32},
+        "hp_formula": {"type": "string"}, "other_formula": {"type": "string"},
+        "nature_percentages": {"type": "object", "additionalProperties": false,
+          "required": ["hindering", "neutral", "increasing"],
+          "properties": {"hindering": {"const": 90}, "neutral": {"const": 100}, "increasing": {"const": 110}}}
+      }
+    },
+    "regulation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "showdown_format_id", "mod", "ruleset", "mechanics_profile_id"],
+      "properties": {
+        "id": {"enum": ["m-b", "m-c"]}, "name": {"type": "string", "minLength": 1},
+        "showdown_format_id": {"$ref": "#/$defs/id"},
+        "mod": {"enum": ["champions", "championsregmb"]},
+        "ruleset": {"type": "array", "items": {"type": "string"}},
+        "mechanics_profile_id": {"const": "champions-level-50-v1"}
+      }
+    },
+    "move_flag": {
+      "type": "object", "additionalProperties": false, "required": ["id"],
+      "properties": {"id": {"$ref": "#/$defs/id"}}
+    },
+    "ability_profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["regulation_id", "id", "name", "short_description", "description"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]}, "id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1}, "short_description": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "move_profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["regulation_id", "id", "name", "type", "category", "base_power", "accuracy", "pp", "priority", "target", "short_description", "description"],
+      "properties": {
+        "regulation_id": {"enum": ["m-b", "m-c"]}, "id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1}, "type": {"type": "string", "minLength": 1},
+        "category": {"enum": ["Physical", "Special", "Status"]},
+        "base_power": {"type": "integer", "minimum": 0},
+        "accuracy": {"anyOf": [{"type": "integer"}, {"const": "always"}]},
+        "pp": {"type": "integer", "minimum": 1, "maximum": 20}, "priority": {"type": "integer"},
+        "target": {"type": "string"}, "short_description": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "file_roots": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "mechanics_profiles.json", "regulations.json", "forms.json", "types.json",
+        "abilities.json", "moves.json", "move_flags.json", "regulation_memberships.json",
+        "profiles.json", "ability_profiles.json", "move_profiles.json",
+        "move_flag_relations.json", "mega_relations.json", "learnsets.json",
+        "sprite_mappings.json", "sprites.json"
+      ],
+      "properties": {
+        "forms.json": {"type": "array", "items": {"$ref": "#/$defs/form"}},
+        "types.json": {"type": "array", "items": {"$ref": "#/$defs/identity"}},
+        "abilities.json": {"type": "array", "items": {"$ref": "#/$defs/identity"}},
+        "moves.json": {"type": "array", "items": {"$ref": "#/$defs/identity"}},
+        "regulation_memberships.json": {"type": "array", "items": {"$ref": "#/$defs/regulation_membership"}},
+        "profiles.json": {"type": "array", "items": {"$ref": "#/$defs/profile"}},
+        "move_flag_relations.json": {"type": "array", "items": {"$ref": "#/$defs/move_flag_relation"}},
+        "mega_relations.json": {"type": "array", "items": {"$ref": "#/$defs/mega_relation"}},
+        "learnsets.json": {"type": "array", "items": {"$ref": "#/$defs/learnset_relation"}},
+        "sprite_mappings.json": {"type": "array", "items": {"$ref": "#/$defs/sprite_mapping"}},
+        "sprites.json": {"type": "array", "items": {"$ref": "#/$defs/sprite"}},
+        "mechanics_profiles.json": {"type": "array", "items": {"$ref": "#/$defs/mechanics_profile"}},
+        "regulations.json": {"type": "array", "items": {"$ref": "#/$defs/regulation"}},
+        "move_flags.json": {"type": "array", "items": {"$ref": "#/$defs/move_flag"}},
+        "ability_profiles.json": {"type": "array", "items": {"$ref": "#/$defs/ability_profile"}},
+        "move_profiles.json": {"type": "array", "items": {"$ref": "#/$defs/move_profile"}}
+      }
+    }
+  },
+  "$ref": "#/$defs/file_roots"
+}

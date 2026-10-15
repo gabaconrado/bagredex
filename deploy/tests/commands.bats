@@ -89,6 +89,23 @@ teardown() {
   [ "${status}" -eq 0 ]
 }
 
+@test "application images package committed Pokemon bundles without source snapshots" {
+  local containerfile="${REPOSITORY_ROOT}/deploy/Containerfile"
+  grep -Fq 'COPY src/data/releases/ /app/src/data/releases/' "${containerfile}"
+  grep -Fq 'COPY src/data/importer/ /app/src/data/importer/' "${containerfile}"
+  grep -Fxq 'references' "${REPOSITORY_ROOT}/.containerignore"
+  ! grep -Fq 'COPY references' "${containerfile}"
+  [ "$(find "${REPOSITORY_ROOT}/src/data/releases/showdown-3a766f2c-s1-i1-923ba416555c/sprites" -type f -name '*.webp' | wc -l)" -eq 706 ]
+}
+
+@test "deployment pins one approved Pokemon data bundle" {
+  grep -Fxq \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-3a766f2c-s1-i1-923ba416555c' \
+    "${REPOSITORY_ROOT}/deploy/pokemon-data.env"
+  ! grep -Eq 'find .*src/data/releases|ls .*src/data/releases' \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh"
+}
+
 @test "Nginx limits POST authentication attempts by direct client IP" {
   grep -Fq 'POST $binary_remote_addr;' "${REPOSITORY_ROOT}/deploy/nginx/nginx.conf"
   grep -Fq 'limit_req_zone $authentication_limit_key zone=authentication:10m rate=10r/m;' \

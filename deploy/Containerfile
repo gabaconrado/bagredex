@@ -17,6 +17,10 @@ FROM python-dependencies AS development
 RUN uv sync --frozen
 ENV PATH=/app/.venv/bin:${PATH}
 COPY src/backend/ /app/src/backend/
+COPY src/data/importer/ /app/src/data/importer/
+COPY src/data/overrides/ /app/src/data/overrides/
+COPY src/data/releases/ /app/src/data/releases/
+COPY src/data/schema/ /app/src/data/schema/
 COPY src/web/ /app/src/web/
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
@@ -29,6 +33,10 @@ RUN groupadd --system --gid 10001 bagredex \
 WORKDIR /app/src/backend
 COPY --from=python-dependencies /app/.venv /app/.venv
 COPY src/backend/ ./
+COPY src/data/importer/ /app/src/data/importer/
+COPY src/data/overrides/ /app/src/data/overrides/
+COPY src/data/releases/ /app/src/data/releases/
+COPY src/data/schema/ /app/src/data/schema/
 COPY src/web/ /app/src/web/
 USER 10001:10001
 EXPOSE 8000

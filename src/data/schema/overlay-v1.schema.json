@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/pokemon-data-overlay-v1",
+  "title": "Bagredex Pokemon data override v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "showdown_revision", "record", "rationale", "authoring_date", "before", "after", "fixture"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "showdown_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "record": {"type": "string", "pattern": "^[a-z_]+[.]json:[^:]+(?::[^:]+)*$"},
+    "rationale": {"type": "string", "minLength": 1},
+    "authoring_date": {"type": "string", "format": "date"},
+    "before": {"type": "object"},
+    "after": {"type": "object"},
+    "fixture": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)[.][.](?:/|$)).+$"}
+  }
+}

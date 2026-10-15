@@ -6,6 +6,11 @@ Production releases are immutable directories with `current` and `previous` syml
 release automatically attempts to restart the previous application release. PostgreSQL data lives
 outside release directories in the named `bagredex-database` volume.
 
+The application image contains every committed normalized Pokémon data release and its selected
+normal and shiny WebP sprites. It does not contain `references` or the upstream Showdown and
+PokeAPI repositories. `deploy/pokemon-data.env` pins the one reviewed bundle that deployment may
+load; deployment never discovers a bundle by directory ordering.
+
 The scripts in this directory support human-operated publishing and deployment. Project agents may
 validate local behavior, but they do not log in to a registry, push images, open SSH connections,
 contact Let's Encrypt, or modify a production host.
@@ -108,8 +113,10 @@ The dry run opens SSH only for a read-only host preflight; it does not copy file
 state. A real deployment creates a timestamped release, transfers only deployment assets and
 release metadata, acquires a nonblocking deployment lock, pulls the pinned database and versioned
 application images, checks Django, starts PostgreSQL, waits for database health, and applies
-migrations from the new application image. Only then does it stop the old application and switch
-`current`. A migration failure therefore leaves the current release serving. The first release uses
+migrations from the new application image. It then validates and idempotently loads the bundle
+pinned in `deploy/pokemon-data.env`, followed by `activate_pokemon_data --if-none`. Only then does
+it stop the old application and switch `current`. A migration, load, or initial-activation failure
+therefore leaves the current release serving. The first release uses
 an HTTP-only Nginx bootstrap container to obtain the single-domain certificate, fixes certificate
 read permissions for unprivileged Nginx, then starts the HTTPS proxy. HTTP serves ACME challenges
 and redirects all other requests to HTTPS.
@@ -121,6 +128,52 @@ release, the failed application remains stopped and `current` is removed. Postgr
 volume are not rolled back or deleted. This feature's migrations are additive; future releases must
 preserve schema compatibility across application rollback. After success, only `current` and
 `previous` release directories are retained.
+
+`--if-none` is deliberately limited to first bootstrap. A deployment against a database that
+already has an active version leaves that pointer unchanged, even when the image pins a newer
+bundle. Loading the same reviewed bundle again is an idempotent no-op. Application rollback never
+deletes loaded versions, changes the active pointer, or removes committed prior bundles from the
+image.
+
+## Manage Pokémon data versions
+
+Builds require the three user-supplied local reference repositories and the exact tools documented
+in `src/data/README.md`; production does not contain those inputs. After reviewing and committing a
+new bundle, update `deploy/pokemon-data.env` in the same release.
+
+From a prepared source checkout, build the deterministic bundle with:
+
+```bash
+uv --directory src/backend run python manage.py build_pokemon_data \
+  --showdown references/pokemon-showdown \
+  --sprites references/sprites \
+  --pokeapi references/pokeapi
+```
+
+Deployment performs the strict load automatically. To validate and idempotently load a committed
+bundle manually in production, use the production Compose environment shown below and run:
+
+```bash
+podman compose -p bagredex \
+  -f current/deploy/compose.yaml \
+  -f current/deploy/compose.production.yaml \
+  exec server python manage.py load_pokemon_data /app/src/data/releases/BUNDLE_ID
+```
+
+To explicitly activate a loaded version, use the production Compose environment shown in the
+administrator example below and run:
+
+```bash
+podman compose -p bagredex \
+  -f current/deploy/compose.yaml \
+  -f current/deploy/compose.production.yaml \
+  exec server python manage.py activate_pokemon_data BUNDLE_ID
+```
+
+That command is also the rollback path: name any prior retained and validated bundle ID. It moves
+the singleton pointer atomically and retains both database versions and their activation audit.
+Deploying application code afterward does not auto-select another bundle. Never delete a retained
+bundle from source or its loaded database rows while an application rollback may still need it.
 
 ## Create and manage administrators
 

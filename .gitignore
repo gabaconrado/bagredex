@@ -31,3 +31,6 @@ coverage/
 src/backend/coverage.xml
 src/backend/test-results.xml
 .cache/
+
+# External references for the development process
+references/
