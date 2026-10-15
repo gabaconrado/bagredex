@@ -4,11 +4,7 @@
 
 {% block content %}
   <section class="login-card" aria-labelledby="login-title">
-    <div class="login-card__heading">
-      <p class="login-card__eyebrow">Pokémon VGC companion</p>
-      <h1 id="login-title">Log in to Bagredex</h1>
-      <p>Use the account created for you by an administrator.</p>
-    </div>
+    <h1 id="login-title" class="visually-hidden">Log in</h1>
 
     {% if form.non_field_errors %}
       <div class="form-alert" id="login-error" role="alert">
