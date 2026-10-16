@@ -85,6 +85,9 @@ function Search({
   onRemove,
   onSelect,
   inputRef,
+  query,
+  onQuery,
+  clearRevision,
 }: {
   index: PokedexIndex;
   filters: Filter[];
@@ -92,8 +95,10 @@ function Search({
   onRemove: (filter: Filter) => void;
   onSelect: (id: string) => void;
   inputRef: RefObject<HTMLInputElement>;
+  query: string;
+  onQuery: (query: string) => void;
+  clearRevision: number;
 }) {
-  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const choices = useMemo(() => suggestions(index, query), [index, query]);
@@ -101,7 +106,7 @@ function Search({
   const activate = (choice: Suggestion) => {
     if (choice.kind === "pokemon") onSelect(choice.id);
     else onFilter({ id: choice.id, name: choice.name, kind: choice.kind });
-    setQuery("");
+    onQuery("");
     setOpen(false);
     setActive(-1);
   };
@@ -118,6 +123,12 @@ function Search({
       .getElementById(`suggestion-${active}`)
       ?.scrollIntoView({ block: "nearest" });
   }, [active]);
+  useLayoutEffect(() => {
+    if (!clearRevision) return;
+    setOpen(false);
+    setActive(-1);
+    inputRef.current?.focus();
+  }, [clearRevision, inputRef]);
   const labels = {
     pokemon: "Pokémon",
     move: "Moves",
@@ -144,7 +155,7 @@ function Search({
             active >= 0 ? `suggestion-${active}` : undefined
           }
           onInput={(event) => {
-            setQuery(event.currentTarget.value);
+            onQuery(event.currentTarget.value);
             setOpen(true);
             setActive(-1);
           }}
@@ -242,9 +253,11 @@ function Search({
                     key={`${choice.kind}-${choice.id}`}
                   >
                     <span>{choice.name}</span>
-                    <kbd class="suggestion-enter-hint" aria-hidden="true">
-                      Enter
-                    </kbd>
+                    {choiceIndex === (active >= 0 ? active : 0) && (
+                      <kbd class="suggestion-enter-hint" aria-hidden="true">
+                        Enter
+                      </kbd>
+                    )}
                   </button>
                 );
               })}
@@ -930,6 +943,28 @@ function RefinedDetailPane({
 
 const textEntrySelector = "input, textarea, select, [contenteditable]";
 const slashExcludedSelector = `${textEntrySelector}, button, a[href]`;
+export const DETAIL_SCROLL_STEP = 48;
+export const detailArrowClaimable = (
+  event: Pick<
+    KeyboardEvent,
+    "key" | "shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "target"
+  >,
+  detailsState: "idle" | "loading" | "ready" | "error",
+  selected: string | null,
+  pane: Pick<HTMLElement, "scrollHeight" | "clientHeight"> | null,
+  overlayOpen = false,
+) =>
+  (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+  !event.shiftKey &&
+  !event.ctrlKey &&
+  !event.metaKey &&
+  !event.altKey &&
+  !shortcutTargetExcluded(event.target, "/") &&
+  !(event.target instanceof Element && event.target.closest("dialog")) &&
+  !overlayOpen &&
+  Boolean(selected) &&
+  detailsState === "ready" &&
+  Boolean(pane && pane.scrollHeight > pane.clientHeight);
 export const shortcutTargetExcluded = (
   target: EventTarget | null,
   shortcut: "/" | "?",
@@ -994,19 +1029,105 @@ function ShortcutDialog({
             ["/", "Focus search"],
             ["?", "Open this shortcut guide"],
             ["Tab / Shift+Tab", "Move through suggestions"],
-            ["↑ / ↓", "Move through suggestions"],
+            [
+              "↑ / ↓",
+              "Navigate suggestions in search; otherwise scroll selected details 48 pixels",
+            ],
             ["Alt+↓ / Alt+↑", "Move between suggestion categories"],
             ["Enter", "Choose the highlighted suggestion"],
             ["Escape", "Close suggestions or a dialog"],
+            ["Shift + C", "Confirm clearing search and filters"],
           ].map(([keys, label]) => (
             <div key={keys}>
               <dt>
-                <kbd>{keys}</kbd>
+                {keys === "Shift + C" ? (
+                  <>
+                    <kbd>Shift</kbd> + <kbd>C</kbd>
+                  </>
+                ) : (
+                  <kbd>{keys}</kbd>
+                )}
               </dt>
               <dd>{label}</dd>
             </div>
           ))}
         </dl>
+      </div>
+    </dialog>
+  );
+}
+
+function ClearSearchDialog({
+  invoker,
+  onCancel,
+  onConfirm,
+}: {
+  invoker: HTMLElement | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const cancel = () => {
+    dialog.current?.close();
+    onCancel();
+    queueMicrotask(() => invoker?.isConnected && invoker.focus());
+  };
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (typeof element.showModal === "function") element.showModal();
+    if (!element.open) element.setAttribute("open", "");
+    element.querySelector<HTMLElement>(".button--primary")?.focus();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      class="info-dialog clear-dialog"
+      aria-labelledby="clear-dialog-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        cancel();
+      }}
+      onClick={(event) => event.target === event.currentTarget && cancel()}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const buttons = [
+          ...event.currentTarget.querySelectorAll<HTMLButtonElement>("button"),
+        ];
+        if (!buttons.length) return;
+        event.preventDefault();
+        const current = buttons.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
+        const next = event.shiftKey
+          ? current <= 0
+            ? buttons.length - 1
+            : current - 1
+          : (current + 1) % buttons.length;
+        buttons[next]?.focus();
+      }}
+    >
+      <div class="info-dialog__surface">
+        <header>
+          <h2 id="clear-dialog-title">Clear search and filters?</h2>
+        </header>
+        <p>This clears the search query and every active filter.</p>
+        <div class="dialog-actions">
+          <button
+            type="button"
+            class="button button--primary"
+            onClick={onConfirm}
+          >
+            Clear search and filters
+          </button>
+          <button
+            type="button"
+            class="button button--secondary"
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </dialog>
   );
@@ -1019,6 +1140,8 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const [reloadUrl, setReloadUrl] = useState<string | null>(null);
   const [indexRetry, setIndexRetry] = useState(0);
   const [filters, setFilters] = useState<Filter[]>([]);
+  const [query, setQuery] = useState("");
+  const [clearRevision, setClearRevision] = useState(0);
   const [sort, setSort] = useState<Sort>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectionRevision, setSelectionRevision] = useState(0);
@@ -1035,12 +1158,40 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const [shortcutInvoker, setShortcutInvoker] = useState<HTMLElement | null>(
     null,
   );
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearInvoker, setClearInvoker] = useState<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const detailRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (loadState !== "ready") return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("dialog")) return;
+      if (
+        detailArrowClaimable(
+          event,
+          detailsState,
+          selected,
+          detailRef.current,
+          shortcutsOpen || clearOpen || Boolean(modal),
+        )
+      ) {
+        const pane = detailRef.current!;
+        event.preventDefault();
+        const maximum = pane.scrollHeight - pane.clientHeight;
+        pane.scrollTop = Math.min(
+          maximum,
+          Math.max(
+            0,
+            pane.scrollTop +
+              (event.key === "ArrowDown"
+                ? DETAIL_SCROLL_STEP
+                : -DETAIL_SCROLL_STEP),
+          ),
+        );
+        return;
+      }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (
         event.key === "/" &&
@@ -1055,7 +1206,8 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
       if (
         (event.key === "?" || (event.key === "/" && event.shiftKey)) &&
         !shortcutTargetExcluded(event.target, "?") &&
-        !shortcutsOpen
+        !shortcutsOpen &&
+        !clearOpen
       ) {
         event.preventDefault();
         const activeElement =
@@ -1070,11 +1222,40 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
         setModalInvoker(null);
         setShortcutInvoker(restoreTarget);
         setShortcutsOpen(true);
+        return;
+      }
+      if (
+        event.key === "C" &&
+        event.shiftKey &&
+        !shortcutTargetExcluded(event.target, "/") &&
+        !shortcutsOpen &&
+        !clearOpen &&
+        !modal &&
+        (query || filters.length)
+      ) {
+        event.preventDefault();
+        setClearInvoker(
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null,
+        );
+        setClearOpen(true);
+        return;
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [loadState, modalInvoker, shortcutsOpen]);
+  }, [
+    clearOpen,
+    detailsState,
+    filters.length,
+    loadState,
+    modal,
+    modalInvoker,
+    query,
+    selected,
+    shortcutsOpen,
+  ]);
 
   useLayoutEffect(() => {
     if (selectionRevision && detailRef.current) detailRef.current.scrollTop = 0;
@@ -1182,12 +1363,17 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
                 <option>{bootstrap.regulation.label}</option>
               </select>
             </label>
-            <p
-              class="result-count result-count--placeholder"
-              aria-hidden="true"
-            >
-              000 of 000 Pokémon
-            </p>
+            <div class="result-meta">
+              <p
+                class="result-count result-count--placeholder"
+                aria-hidden="true"
+              >
+                000 of 000 Pokémon
+              </p>
+              <p class="shortcut-reminder">
+                Press <kbd>?</kbd> for keyboard shortcuts
+              </p>
+            </div>
           </header>
           <div class="shell-search" />
           <div class="shell-table" />
@@ -1267,14 +1453,22 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
               ))}
             </select>
           </label>
-          <p class="result-count" aria-live="polite">
-            {visible.length} of {index.forms.length} Pokémon
-          </p>
+          <div class="result-meta">
+            <p class="result-count" aria-live="polite">
+              {visible.length} of {index.forms.length} Pokémon
+            </p>
+            <p class="shortcut-reminder">
+              Press <kbd>?</kbd> for keyboard shortcuts
+            </p>
+          </div>
         </header>
         <Search
           index={index}
           filters={filters}
           inputRef={searchRef}
+          query={query}
+          onQuery={setQuery}
+          clearRevision={clearRevision}
           onSelect={select}
           onFilter={(filter) =>
             setFilters((current) => addFilter(current, filter))
@@ -1345,6 +1539,22 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           onClose={() => {
             setShortcutsOpen(false);
             setShortcutInvoker(null);
+          }}
+        />
+      )}
+      {clearOpen && (
+        <ClearSearchDialog
+          invoker={clearInvoker}
+          onCancel={() => {
+            setClearOpen(false);
+            setClearInvoker(null);
+          }}
+          onConfirm={() => {
+            setQuery("");
+            setFilters([]);
+            setClearOpen(false);
+            setClearInvoker(null);
+            setClearRevision((value) => value + 1);
           }}
         />
       )}

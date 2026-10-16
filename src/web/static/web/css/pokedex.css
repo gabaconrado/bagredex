@@ -112,7 +112,28 @@ html:has([data-pokedex-root]) {
 }
 .result-count {
   width: 10rem;
+  margin: 0;
   text-align: right;
+}
+.result-meta {
+  display: grid;
+  width: 10rem;
+  justify-items: end;
+}
+.shortcut-reminder {
+  margin: 0.2rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: right;
+}
+.shortcut-reminder kbd {
+  padding: 0 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  background: var(--color-surface);
+  font: inherit;
+  font-weight: 800;
 }
 .search {
   position: relative;
@@ -848,6 +869,12 @@ html:has([data-pokedex-root]) {
 .shortcut-list dd {
   margin: 0;
 }
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
 .info-dialog::backdrop {
   background: rgb(15 23 42 / 60%);
 }
@@ -1025,9 +1052,11 @@ html:has([data-pokedex-root]) {
   .pokedex-title h1 {
     width: 8rem;
   }
-  .result-count {
+  .result-meta {
     grid-column: 1 / -1;
     width: 100%;
+  }
+  .result-count {
     margin: 0;
   }
   .table-scroll {

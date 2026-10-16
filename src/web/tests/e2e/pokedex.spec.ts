@@ -199,15 +199,23 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await page.getByLabel("Regulation").selectOption("m-b");
   await expect(page).toHaveURL(/regulation=m-b/);
   await expect(page.getByText(/of \d+ Pokémon/)).toBeVisible();
+  await expect(page.locator(".site-header__brand small")).toHaveText(
+    "development",
+  );
+  const reminder = page.locator(".shortcut-reminder");
+  await expect(reminder).toHaveText("Press ? for keyboard shortcuts");
+  await expect(reminder.locator("kbd")).toHaveCount(1);
+  await expect(reminder.locator("a, button, [tabindex]")).toHaveCount(0);
   const search = page.getByLabel(/Search Pokémon/);
   const eligibleShortcutTarget = page.getByRole("heading", {
     name: "Pokédex",
   });
   await eligibleShortcutTarget.evaluate((heading) => {
     heading.setAttribute("tabindex", "-1");
-    (heading as HTMLElement).focus();
   });
-  await page.keyboard.press("/");
+  await eligibleShortcutTarget.focus();
+  await expect(eligibleShortcutTarget).toBeFocused();
+  await page.keyboard.press("Slash");
   await expect(search).toBeFocused();
   expect(
     await page.evaluate(() => {
@@ -229,7 +237,7 @@ test("switches explicit regulations and supports keyboard selection", async ({
     name: "Pokédex keyboard shortcuts",
   });
   await expect(shortcutDialog).toBeVisible();
-  await expect(shortcutDialog.locator("kbd")).toHaveCount(7);
+  await expect(shortcutDialog.locator("kbd")).toHaveCount(9);
   await expect(shortcutDialog).toContainText("↑ / ↓");
   await expect(
     shortcutDialog.getByRole("button", { name: "Close shortcuts" }),
@@ -250,7 +258,8 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await expect(shortcutDialog).toHaveCount(0);
   await expect(shortcutInvoker).toBeFocused();
   await eligibleShortcutTarget.focus();
-  await page.keyboard.press("/");
+  await expect(eligibleShortcutTarget).toBeFocused();
+  await page.keyboard.press("Slash");
   await expect(search).toBeFocused();
   const assertVisibleLowerFocusEdge = async (
     lowerElement: Locator,
@@ -302,6 +311,12 @@ test("switches explicit regulations and supports keyboard selection", async ({
     contentType: "image/png",
   });
   await search.fill("a");
+  await expect(page.locator(".suggestion-enter-hint")).toHaveCount(1);
+  await expect(
+    page
+      .getByRole("option")
+      .filter({ has: page.locator(".suggestion-enter-hint") }),
+  ).toHaveCount(1);
   const hintGeometry = await page
     .locator(".search-input-wrap")
     .evaluate((wrap) => {
@@ -323,6 +338,7 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await expect(page.getByRole("listbox")).toBeVisible();
   await search.press("Tab");
   await expect(search).toBeFocused();
+  await expect(page.locator(".suggestion-enter-hint")).toHaveCount(1);
   const firstActive = await search.getAttribute("aria-activedescendant");
   expect(firstActive).toBeTruthy();
   await search.press("Shift+Tab");
@@ -394,6 +410,28 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await expect(
     page.getByRole("button", { name: "Remove Protect move filter" }),
   ).toBeVisible();
+  await eligibleShortcutTarget.focus();
+  await page.keyboard.press("Shift+C");
+  const clearDialog = page.getByRole("dialog", {
+    name: "Clear search and filters?",
+  });
+  await expect(clearDialog).toBeVisible();
+  await expect(
+    clearDialog.getByRole("button", { name: "Clear search and filters" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(clearDialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Remove Protect move filter" }),
+  ).toBeVisible();
+  await eligibleShortcutTarget.focus();
+  await page.keyboard.press("Shift+C");
+  await page.keyboard.press("Enter");
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Remove Protect move filter" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: /^Show shiny / }).click();
   await expect(page.getByRole("img", { name: /^Shiny / })).toBeVisible();
 });
@@ -963,17 +1001,6 @@ test("navigates Mega forms in both directions and replaces detail information", 
   await expect(
     moveDialog.locator(".info-flags button, .info-flags a"),
   ).toHaveCount(0);
-  await expect(
-    moveDialog.getByRole("button", { name: "Close details" }),
-  ).toBeFocused();
-  await page.keyboard.press("Shift+Slash");
-  const moveHelp = page.getByRole("dialog", {
-    name: "Pokédex keyboard shortcuts",
-  });
-  await expect(page.getByRole("dialog")).toHaveCount(1);
-  await moveHelp.getByRole("button", { name: "Close shortcuts" }).click();
-  await expect(firstMoveAction).toBeFocused();
-  await firstMoveAction.click();
   await moveDialog.getByRole("button", { name: "Close details" }).click();
   await testInfo.attach("corrected-icons-and-detail", {
     body: await page.screenshot(),
@@ -984,6 +1011,24 @@ test("navigates Mega forms in both directions and replaces detail information", 
     .first();
   await expect(mega).toBeVisible();
   const detailScroller = page.locator(".detail-pane");
+  await detailScroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const pageScrollBefore = await page.evaluate(() => scrollY);
+  const eligibleArrowTarget = page.getByRole("heading", { name: "Pokédex" });
+  await eligibleArrowTarget.evaluate((heading) => {
+    heading.setAttribute("tabindex", "-1");
+    (heading as HTMLElement).focus({ preventScroll: true });
+  });
+  await expect(eligibleArrowTarget).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(pageScrollBefore);
+  await page.keyboard.press("ArrowDown");
+  expect(await detailScroller.evaluate((element) => element.scrollTop)).toBe(
+    48,
+  );
+  expect(await page.evaluate(() => scrollY)).toBe(pageScrollBefore);
+  await page.keyboard.press("ArrowUp");
+  expect(await detailScroller.evaluate((element) => element.scrollTop)).toBe(0);
   await detailScroller.evaluate((element) => {
     element.scrollTop = 120;
   });
@@ -1088,31 +1133,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
   await expect(
     page.getByRole("heading", { name: "Blaze", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Close details" }),
-  ).toBeFocused();
-  await page.keyboard.press("Shift+Slash");
-  const abilityHelp = page.getByRole("dialog", {
-    name: "Pokédex keyboard shortcuts",
-  });
-  await expect(page.getByRole("dialog")).toHaveCount(1);
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Blaze", exact: true }),
-  ).toBeFocused();
-  await page.getByRole("button", { name: "Blaze", exact: true }).click();
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Blaze", exact: true }),
-  ).toBeFocused();
-  await page.getByRole("button", { name: "Blaze", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Close details" }),
-  ).toBeFocused();
-  await page.keyboard.press("Shift+Slash");
-  const helpBox = await abilityHelp.boundingBox();
-  await page.mouse.click(Math.max(1, (helpBox?.x ?? 20) - 8), helpBox?.y ?? 20);
+  await page.getByRole("button", { name: "Close details" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Blaze", exact: true }),
@@ -1194,6 +1215,8 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   const list = page.locator(".pokedex-list");
   const detail = page.locator(".detail-pane");
   const toolbar = page.locator(".pokedex-title");
+  const resultMeta = page.locator(".result-meta");
+  const shortcutReminder = page.locator(".shortcut-reminder");
   await expect(heading).toBeVisible();
   const shellBoxes = await boxes([
     root,
@@ -1203,6 +1226,8 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     toolbar,
     heading,
     picker,
+    resultMeta,
+    shortcutReminder,
   ]);
   await testInfo.attach("delayed-index-shell", {
     body: await page.screenshot(),
@@ -1211,8 +1236,28 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   await expect(page.getByText(/of \d+ Pokémon/)).toBeVisible();
   expectStableBoxes(
     shellBoxes,
-    await boxes([root, app, list, detail, toolbar, heading, picker]),
-    ["root", "app", "list", "detail", "toolbar", "heading", "picker"],
+    await boxes([
+      root,
+      app,
+      list,
+      detail,
+      toolbar,
+      heading,
+      picker,
+      resultMeta,
+      shortcutReminder,
+    ]),
+    [
+      "root",
+      "app",
+      "list",
+      "detail",
+      "toolbar",
+      "heading",
+      "picker",
+      "result metadata",
+      "shortcut reminder",
+    ],
     "server shell to loaded index",
   );
   if ((page.viewportSize()?.width ?? 1000) <= 640) {
@@ -1390,6 +1435,8 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     list,
     detail,
     toolbar,
+    resultMeta,
+    shortcutReminder,
     searchToolbar,
     scroll,
     table,
@@ -1400,6 +1447,8 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     "list",
     "detail",
     "toolbar",
+    "result metadata",
+    "shortcut reminder",
     "search toolbar",
     "table scrollport",
     "table",
@@ -1706,7 +1755,15 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     body: await page.screenshot(),
     contentType: "image/png",
   });
-  const emptyBoxes = await boxes([app, list, detail, toolbar, searchToolbar]);
+  const emptyBoxes = await boxes([
+    app,
+    list,
+    detail,
+    toolbar,
+    resultMeta,
+    shortcutReminder,
+    searchToolbar,
+  ]);
   const selectionShiftStart = await page.evaluate(() => performance.now());
   await firstRow.locator("[data-label=HP]").click({ position: { x: 2, y: 2 } });
   await expect(firstRow.getByRole("button")).toHaveAttribute(
@@ -1717,8 +1774,24 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   expect(await detail.evaluate((element) => element.scrollTop)).toBe(0);
   expectStableBoxes(
     emptyBoxes,
-    await boxes([app, list, detail, toolbar, searchToolbar]),
-    ["app", "list", "detail", "toolbar", "search toolbar"],
+    await boxes([
+      app,
+      list,
+      detail,
+      toolbar,
+      resultMeta,
+      shortcutReminder,
+      searchToolbar,
+    ]),
+    [
+      "app",
+      "list",
+      "detail",
+      "toolbar",
+      "result metadata",
+      "shortcut reminder",
+      "search toolbar",
+    ],
     "empty detail to loading detail",
   );
   await expectNoOuterShiftSince(page, selectionShiftStart);
@@ -1731,8 +1804,24 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   expect(await detail.evaluate((element) => element.scrollTop)).toBe(0);
   expectStableBoxes(
     emptyBoxes,
-    await boxes([app, list, detail, toolbar, searchToolbar]),
-    ["app", "list", "detail", "toolbar", "search toolbar"],
+    await boxes([
+      app,
+      list,
+      detail,
+      toolbar,
+      resultMeta,
+      shortcutReminder,
+      searchToolbar,
+    ]),
+    [
+      "app",
+      "list",
+      "detail",
+      "toolbar",
+      "result metadata",
+      "shortcut reminder",
+      "search toolbar",
+    ],
     "empty detail to ready detail",
   );
   await expectNoOuterShiftSince(page, selectionShiftStart);

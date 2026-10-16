@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   App,
+  detailArrowClaimable,
   formatMoveTarget,
   PokemonRow,
   shortcutTargetExcluded,
@@ -140,9 +141,64 @@ describe("Pokédex shortcut eligibility", () => {
     expect(shortcutTargetExcluded(button, "?")).toBe(false);
     expect(shortcutTargetExcluded(document.body, "/")).toBe(false);
   });
+  it("claims detail arrows only for an eligible ready overflowing pane", () => {
+    const plain = document.createElement("div");
+    const pane = { clientHeight: 200, scrollHeight: 500 };
+    const event = {
+      key: "ArrowDown",
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      target: plain,
+    };
+    expect(detailArrowClaimable(event, "ready", "charizard", pane)).toBe(true);
+    for (const state of ["idle", "loading", "error"] as const)
+      expect(detailArrowClaimable(event, state, "charizard", pane)).toBe(false);
+    expect(detailArrowClaimable(event, "ready", null, pane)).toBe(false);
+    expect(
+      detailArrowClaimable(event, "ready", "charizard", {
+        clientHeight: 200,
+        scrollHeight: 200,
+      }),
+    ).toBe(false);
+    expect(detailArrowClaimable(event, "ready", "charizard", pane, true)).toBe(
+      false,
+    );
+    for (const modifier of [
+      "shiftKey",
+      "ctrlKey",
+      "metaKey",
+      "altKey",
+    ] as const)
+      expect(
+        detailArrowClaimable(
+          { ...event, [modifier]: true },
+          "ready",
+          "charizard",
+          pane,
+        ),
+      ).toBe(false);
+    for (const markup of [
+      "<input>",
+      "<textarea></textarea>",
+      "<select></select>",
+      "<button></button>",
+      '<a href="/"></a>',
+      '<div contenteditable="true"><span></span></div>',
+      "<dialog><span></span></dialog>",
+    ]) {
+      const host = document.createElement("div");
+      host.innerHTML = markup;
+      const target = host.querySelector("span") ?? host.firstElementChild!;
+      expect(
+        detailArrowClaimable({ ...event, target }, "ready", "charizard", pane),
+      ).toBe(false);
+    }
+  });
 });
 describe("Pokédex app", () => {
-  it("restores help opened from an information dialog to its connected invoker", async () => {
+  it("leaves information dialogs in control of their keyboard events", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string) =>
@@ -152,6 +208,7 @@ describe("Pokédex app", () => {
     const user = userEvent.setup();
     render(<App bootstrap={bootstrap} />);
     await user.click(await screen.findByRole("button", { name: "Charizard" }));
+    await user.type(screen.getByLabelText(/Search Pokémon/), "char");
     const ability = await screen.findByRole("button", { name: "Blaze" });
     await user.click(ability);
     await screen.findByRole("dialog", { name: "Blaze" });
@@ -159,12 +216,16 @@ describe("Pokédex app", () => {
       screen.getByRole("button", { name: "Close details" }),
     );
     await user.keyboard("?");
-    const help = await screen.findByRole("dialog", {
-      name: "Pokédex keyboard shortcuts",
-    });
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    fireEvent(help, new Event("cancel", { cancelable: true }));
-    await waitFor(() => expect(document.activeElement).toBe(ability));
+    expect(screen.getByRole("dialog", { name: "Blaze" })).toBeTruthy();
+    expect(screen.queryByText("Pokédex keyboard shortcuts")).toBeNull();
+    await user.keyboard("{Shift>}C{/Shift}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Blaze" })).toBeTruthy();
+    expect(screen.queryByText("Clear search and filters?")).toBeNull();
+    expect(
+      (screen.getByLabelText(/Search Pokémon/) as HTMLInputElement).value,
+    ).toBe("char");
   });
   it("supports global search/help shortcuts and suggestion traversal", async () => {
     vi.stubGlobal(
@@ -189,8 +250,13 @@ describe("Pokédex app", () => {
     window.removeEventListener("keydown", observeSlash);
     const search = screen.getByLabelText(/Search Pokémon/);
     expect(document.activeElement).toBe(search);
-    expect(slashPrevented).toBe(true);
     await user.type(search, "a");
+    expect(document.querySelectorAll(".suggestion-enter-hint")).toHaveLength(1);
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe("suggestion-0");
     const modifiedKeys = [
       ...["Tab", "Enter"].flatMap((key) =>
         (["ctrlKey", "metaKey", "altKey"] as const).map(
@@ -217,6 +283,11 @@ describe("Pokédex app", () => {
     await user.tab();
     expect(document.activeElement).toBe(search);
     expect(search.getAttribute("aria-activedescendant")).toBeTruthy();
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe(search.getAttribute("aria-activedescendant"));
     await user.keyboard("{Shift>}{Tab}{/Shift}");
     expect(document.activeElement).toBe(search);
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
@@ -228,12 +299,47 @@ describe("Pokédex app", () => {
     expect(activeGroup()).toBe("Pokémon");
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     expect(activeGroup()).toBe("Moves");
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe(search.getAttribute("aria-activedescendant"));
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     expect(activeGroup()).toBe("Abilities");
     await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
     expect(activeGroup()).toBe("Pokémon");
     await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
     expect(activeGroup()).toBe("Abilities");
+    await user.keyboard("{ArrowDown}");
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe(search.getAttribute("aria-activedescendant"));
+    await user.keyboard("{ArrowUp}");
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe(search.getAttribute("aria-activedescendant"));
+    await user.clear(search);
+    await user.type(search, "char");
+    expect(search.getAttribute("aria-activedescendant")).toBeNull();
+    expect(
+      document
+        .querySelector(".suggestion-enter-hint")
+        ?.closest('[role="option"]')?.id,
+    ).toBe("suggestion-0");
+    await user.keyboard("{Enter}");
+    expect(document.querySelectorAll(".suggestion-enter-hint")).toHaveLength(0);
+    await user.type(search, "fire");
+    await user.click(screen.getByRole("option", { name: "Fire" }));
+    expect(document.querySelectorAll(".suggestion-enter-hint")).toHaveLength(0);
+    await user.click(
+      screen.getByRole("button", { name: "Remove Fire type filter" }),
+    );
+    expect(document.querySelectorAll(".suggestion-enter-hint")).toHaveLength(0);
+    await user.type(search, "a");
     await user.keyboard("{Escape}");
     expect(document.activeElement).not.toBe(search);
     expect((search as HTMLInputElement).value).toBe("a");
@@ -249,21 +355,24 @@ describe("Pokédex app", () => {
     window.addEventListener("keydown", observeHelp);
     await user.keyboard("?");
     window.removeEventListener("keydown", observeHelp);
-    expect(helpPrevented).toBe(true);
     const dialog = await screen.findByRole("dialog", {
       name: "Pokédex keyboard shortcuts",
     });
-    expect(dialog.querySelectorAll("kbd")).toHaveLength(7);
+    expect(dialog.querySelectorAll("kbd")).toHaveLength(9);
     expect(dialog.textContent).toContain("↑ / ↓");
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Close shortcuts" }),
     );
+    await user.keyboard("{Shift>}C{/Shift}");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.queryByText("Clear search and filters?")).toBeNull();
     fireEvent(dialog, new Event("cancel", { cancelable: true }));
     expect(screen.queryByRole("dialog")).toBeNull();
     search.focus();
     await user.clear(search);
     await user.type(search, "definitely-no-result");
     expect(screen.getByText("No matches")).toBeTruthy();
+    expect(document.querySelectorAll(".suggestion-enter-hint")).toHaveLength(0);
     const emptyTab = new KeyboardEvent("keydown", {
       key: "Tab",
       bubbles: true,
@@ -285,6 +394,238 @@ describe("Pokédex app", () => {
     });
     window.dispatchEvent(afterUnmount);
     expect(afterUnmount.defaultPrevented).toBe(false);
+  });
+  it("scrolls an eligible detail pane and atomically confirms clearing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await user.click(await screen.findByRole("button", { name: "Charizard" }));
+    await screen.findByRole("heading", { name: "Stats" });
+    const shiny = screen.getByRole("button", { name: "Show shiny Charizard" });
+    await user.click(shiny);
+    expect(shiny.getAttribute("aria-pressed")).toBe("true");
+    const hpSort = screen.getByRole("button", { name: "Sort by HP" });
+    await user.click(hpSort);
+    expect(hpSort.getAttribute("aria-label")).toBe("Sort by HP, descending");
+    const pane = document.querySelector<HTMLElement>(".detail-pane")!;
+    Object.defineProperties(pane, {
+      clientHeight: { configurable: true, value: 200 },
+      scrollHeight: { configurable: true, value: 500 },
+    });
+    const heading = screen.getByRole("heading", { name: "Pokédex" });
+    heading.tabIndex = -1;
+    await user.click(heading);
+    heading.focus();
+    const down = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(pane.scrollTop).toBe(48);
+    const up = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, up);
+    expect(up.defaultPrevented).toBe(true);
+    expect(pane.scrollTop).toBe(0);
+    pane.scrollTop = 300;
+    const boundary = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, boundary);
+    expect(boundary.defaultPrevented).toBe(true);
+    expect(pane.scrollTop).toBe(300);
+    const modifiedArrow = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, modifiedArrow);
+    expect(modifiedArrow.defaultPrevented).toBe(false);
+    expect(pane.scrollTop).toBe(300);
+    Object.defineProperty(pane, "scrollHeight", {
+      configurable: true,
+      value: 200,
+    });
+    const nonoverflow = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, nonoverflow);
+    expect(nonoverflow.defaultPrevented).toBe(false);
+    const search = screen.getByLabelText(/Search Pokémon/);
+    await user.type(search, "fire");
+    await user.click(screen.getByRole("option", { name: "Fire" }));
+    await user.type(search, "char");
+    await user.keyboard("{ArrowDown}");
+    expect(search.getAttribute("aria-activedescendant")).toBeTruthy();
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    await user.click(heading);
+    heading.focus();
+    for (const options of [
+      { key: "c" },
+      { key: "C", shiftKey: true, ctrlKey: true },
+      { key: "C", shiftKey: true, metaKey: true },
+      { key: "C", shiftKey: true, altKey: true },
+    ]) {
+      const ignored = new KeyboardEvent("keydown", {
+        ...options,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(heading, ignored);
+      expect(ignored.defaultPrevented).toBe(false);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    }
+    fireEvent(
+      heading,
+      new KeyboardEvent("keydown", {
+        key: "C",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Clear search and filters?",
+    });
+    expect((search as HTMLInputElement).value).toBe("char");
+    expect(
+      screen.getByRole("button", { name: "Remove Fire type filter" }),
+    ).toBeTruthy();
+    expect((search as HTMLInputElement).value).toBe("char");
+    expect(search.getAttribute("aria-activedescendant")).toBeTruthy();
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    await user.click(
+      screen.getByRole("button", { name: "Clear search and filters" }),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(search));
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Remove Fire type filter" }),
+    ).toBeNull();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(search.getAttribute("aria-activedescendant")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Show normal Charizard" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Sort by HP, descending" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Charizard" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(pane.scrollTop).toBe(300);
+    expect(dialog.isConnected).toBe(false);
+    heading.focus();
+    const emptyClear = new KeyboardEvent("keydown", {
+      key: "C",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(heading, emptyClear);
+    expect(emptyClear.defaultPrevented).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.type(search, "char");
+    heading.focus();
+    fireEvent(
+      heading,
+      new KeyboardEvent("keydown", {
+        key: "C",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect((search as HTMLInputElement).value).toBe("char");
+    expect(document.activeElement).toBe(heading);
+    await user.clear(search);
+    await user.type(search, "fire");
+    await user.click(screen.getByRole("option", { name: "Fire" }));
+    heading.focus();
+    fireEvent(
+      heading,
+      new KeyboardEvent("keydown", {
+        key: "C",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    const filtersOnlyDialog = await screen.findByRole("dialog", {
+      name: "Clear search and filters?",
+    });
+    fireEvent.click(filtersOnlyDialog);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Remove Fire type filter" }),
+    ).toBeTruthy();
+    expect((search as HTMLInputElement).value).toBe("");
+  });
+  it("confirms query-only and filter-only clearing independently", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    const search = screen.getByLabelText(/Search Pokémon/);
+    const heading = screen.getByRole("heading", { name: "Pokédex" });
+    heading.tabIndex = -1;
+
+    await user.type(search, "char");
+    heading.focus();
+    await user.keyboard("{Shift>}C{/Shift}");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Clear search and filters",
+      }),
+    );
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(search);
+
+    await user.type(search, "fire");
+    await user.click(screen.getByRole("option", { name: "Fire" }));
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Remove Fire type filter" }),
+    ).toBeTruthy();
+    heading.focus();
+    await user.keyboard("{Shift>}C{/Shift}");
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Clear search and filters",
+      }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Remove Fire type filter" }),
+    ).toBeNull();
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(document.activeElement).toBe(search);
   });
   it("dispatches exactly one row selection for cells, Enter, and Space", async () => {
     const onSelect = vi.fn();

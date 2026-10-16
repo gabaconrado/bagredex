@@ -12,7 +12,7 @@
   <body>
     {% if request.user.is_authenticated %}
       <header class="site-header">
-        <a class="site-header__brand" href="{% url 'home' %}">Bagredex</a>
+        <a class="site-header__brand" href="{% url 'home' %}"><span>Bagredex</span><small>{{ bagredex_version_label }}</small></a>
         {% block header_controls %}{% endblock %}
         <div class="site-header__account">
           <span class="site-header__identity">{% firstof request.user.get_short_name request.user.get_username %}</span>

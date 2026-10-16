@@ -313,6 +313,7 @@ def test_home_bootstrap_and_regulation_validation(
     response = authenticated_client.get("/?regulation=m-b")
     assert response.status_code == 200
     bootstrap = response.context["pokedex_bootstrap"]
+    assert "bagredex_version_label" not in bootstrap
     assert bootstrap["schema_version"] == "pokedex-bootstrap-v2"
     assert bootstrap["active_version"] == VERSION_ID
     assert bootstrap["regulation"] == {

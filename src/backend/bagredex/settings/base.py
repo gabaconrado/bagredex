@@ -11,7 +11,7 @@ WEB_ROOT = REPOSITORY_ROOT / "src" / "web"
 SECRET_KEY = "insecure-local-development-key"
 DEBUG = False
 ALLOWED_HOSTS: list[str] = []
-BAGREDEX_VERSION_LABEL = "dev"
+BAGREDEX_VERSION_LABEL = "development"
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -48,6 +48,7 @@ TEMPLATES: list[dict[str, Any]] = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "bagredex.context_processors.bagredex_metadata",
             ],
         },
     }

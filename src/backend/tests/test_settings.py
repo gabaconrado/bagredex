@@ -101,6 +101,18 @@ print(json.dumps({
     }
 
 
+def test_development_and_production_version_labels_are_exact() -> None:
+    assert base.BAGREDEX_VERSION_LABEL == "development"
+    assert settings.BAGREDEX_VERSION_LABEL == "development"
+    process = production_process(
+        "from bagredex.settings import production; print(production.BAGREDEX_VERSION_LABEL)",
+        {**PRODUCTION_ENVIRONMENT, "BAGREDEX_IMAGE_VERSION": "12.34.56"},
+    )
+
+    assert process.returncode == 0, process.stderr
+    assert process.stdout == "v12.34.56\n"
+
+
 def test_production_accepts_a_lowercase_fqdn() -> None:
     script = """
 import json
