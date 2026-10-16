@@ -36,5 +36,23 @@ export default defineConfig({
         reducedMotion: "reduce",
       },
     },
+    {
+      name: "firefox-desktop-light",
+      use: {
+        ...devices["Desktop Firefox"],
+        colorScheme: "light",
+        reducedMotion: "no-preference",
+      },
+    },
+    {
+      name: "firefox-tablet-dark-reduced",
+      use: {
+        browserName: "firefox",
+        viewport: { width: 820, height: 1180 },
+        hasTouch: true,
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+      },
+    },
   ],
 });

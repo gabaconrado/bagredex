@@ -2,18 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   parseApiError,
   parseBootstrap,
+  parseDetails,
   parseDetail,
   parseIndex,
 } from "./contracts";
 
 const named = { id: "x", name: "X" };
 const bootstrap = {
-  schema_version: "pokedex-bootstrap-v1",
+  schema_version: "pokedex-bootstrap-v2",
   active_version: "v1",
-  regulation: named,
-  regulations: [{ ...named, url: "/?regulation=x" }],
+  regulation: { ...named, label: "Regulation X" },
+  regulations: [{ ...named, label: "Regulation X", url: "/?regulation=x" }],
   index_url: "/index?version=v1",
-  detail_url_template: "/pokemon/__FORM__?version=v1",
+  details_url: "/details?version=v1",
+  sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",
 };
 const index = {
   schema_version: "pokedex-index-v1",
@@ -82,8 +84,8 @@ describe("transport validation", () => {
     ],
     ["index URL", (x: any) => (x.index_url = 4)],
     [
-      "detail URL",
-      (x: any) => (x.detail_url_template = "/pokemon/no-placeholder"),
+      "sprite URL",
+      (x: any) => (x.sprite_url_template = "/sprites/no-placeholders"),
     ],
   ])("rejects malformed bootstrap %s", (_label, mutate) => {
     const value: any = copy(bootstrap);
@@ -167,5 +169,36 @@ describe("transport validation", () => {
     expect(parseApiError({ code: "bad", message: 1 }).code).toBe(
       "request-failed",
     );
+  });
+
+  it("validates and indexes bulk details", () => {
+    const bulk = {
+      schema_version: "pokedex-details-v1",
+      data_version: "v1",
+      regulation_id: "x",
+      forms: [
+        {
+          ...named,
+          is_list_legal: true,
+          is_mega: false,
+          form_label: "",
+          base_id: "x",
+          mega_ids: [],
+          types: [named],
+          stats: detail.form.stats,
+          ability_slots: [{ id: "x", slot: "0" }],
+          move_ids: ["x"],
+        },
+      ],
+      abilities: [
+        { ...named, short_description: "Short", description: "Long" },
+      ],
+      moves: detail.form.moves,
+    };
+    expect(parseDetails(bulk, "v1", "x").maps.forms.get("x")?.name).toBe("X");
+    const dangling: any = copy(bulk);
+    dangling.forms[0].move_ids = ["missing"];
+    expect(() => parseDetails(dangling, "v1", "x")).toThrow(/dangling move/);
+    expect(() => parseDetails(bulk, "v2", "x")).toThrow(/data changed/);
   });
 });

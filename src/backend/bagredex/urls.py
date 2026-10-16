@@ -14,6 +14,11 @@ urlpatterns = [
         name="pokedex-index",
     ),
     path(
+        "pokedex/data/<str:regulation>/details/",
+        views.pokedex_details,
+        name="pokedex-details",
+    ),
+    path(
         "pokedex/data/<str:regulation>/pokemon/<str:form>/details/",
         views.pokedex_form_detail,
         name="pokedex-form-detail",

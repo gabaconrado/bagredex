@@ -67,18 +67,47 @@ export type FormDetail = {
   };
 };
 export type Bootstrap = {
-  schema_version: "pokedex-bootstrap-v1";
+  schema_version: "pokedex-bootstrap-v2";
   active_version: string;
-  regulation: NamedValue;
-  regulations: (NamedValue & { url: string })[];
+  regulation: NamedValue & { label: string };
+  regulations: (NamedValue & { label: string; url: string })[];
   index_url: string;
-  detail_url_template: string;
+  details_url: string;
+  sprite_url_template: string;
 };
 export type ApiError = {
   code: string;
   message: string;
   active_version?: string;
   url?: string;
+};
+export type BulkForm = NamedValue & {
+  is_list_legal: boolean;
+  is_mega: boolean;
+  form_label: string;
+  base_id: string;
+  mega_ids: string[];
+  types: NamedValue[];
+  stats: StatDetail[];
+  ability_slots: { id: string; slot: string }[];
+  move_ids: string[];
+};
+export type BulkAbility = NamedValue & {
+  short_description: string;
+  description: string;
+};
+export type BulkDetails = {
+  schema_version: "pokedex-details-v1";
+  data_version: string;
+  regulation_id: string;
+  forms: BulkForm[];
+  abilities: BulkAbility[];
+  moves: MoveDetail[];
+};
+export type DetailsMaps = {
+  forms: ReadonlyMap<string, BulkForm>;
+  abilities: ReadonlyMap<string, BulkAbility>;
+  moves: ReadonlyMap<string, MoveDetail>;
 };
 
 const object = (value: unknown): Record<string, unknown> | null =>
@@ -94,26 +123,34 @@ const localUrl = (value: unknown): value is string =>
 export function parseBootstrap(value: unknown): Bootstrap {
   const record = object(value);
   if (
-    record?.schema_version !== "pokedex-bootstrap-v1" ||
+    record?.schema_version !== "pokedex-bootstrap-v2" ||
     !string(record.active_version) ||
     !localUrl(record.index_url) ||
-    !localUrl(record.detail_url_template) ||
+    !localUrl(record.details_url) ||
+    !localUrl(record.sprite_url_template) ||
     !Array.isArray(record.regulations) ||
     record.regulations.length === 0
   ) {
     throw new Error("The Pokédex page configuration is invalid.");
   }
   assertNamed(record.regulation);
+  if (!string(object(record.regulation)?.label))
+    throw new Error(
+      "The Pokédex page configuration contains an invalid regulation label.",
+    );
   for (const value of record.regulations) {
     assertNamed(value);
-    if (!localUrl(object(value)?.url))
+    if (!string(object(value)?.label) || !localUrl(object(value)?.url))
       throw new Error(
         "The Pokédex page configuration contains an invalid regulation URL.",
       );
   }
-  if (!record.detail_url_template.includes("__FORM__"))
+  if (
+    !record.sprite_url_template.includes("__FORM__") ||
+    !record.sprite_url_template.includes("__VARIANT__")
+  )
     throw new Error(
-      "The Pokédex page configuration contains an invalid detail URL.",
+      "The Pokédex page configuration contains an invalid sprite URL.",
     );
   return value as Bootstrap;
 }
@@ -253,6 +290,122 @@ export function parseDetail(value: unknown): FormDetail {
     assertStringArray(move.flags, "move flags");
   });
   return value as FormDetail;
+}
+
+const uniqueMap = <T extends { id: string }>(values: T[], label: string) => {
+  const result = new Map<string, T>();
+  for (const value of values) {
+    if (result.has(value.id))
+      throw new Error(`The Pokédex details contain a duplicate ${label}.`);
+    result.set(value.id, value);
+  }
+  return result;
+};
+
+export function parseDetails(
+  value: unknown,
+  expectedVersion: string,
+  expectedRegulation: string,
+): { details: BulkDetails; maps: DetailsMaps } {
+  const record = object(value);
+  if (
+    record?.schema_version !== "pokedex-details-v1" ||
+    !string(record.data_version) ||
+    !string(record.regulation_id) ||
+    !Array.isArray(record.forms) ||
+    !Array.isArray(record.abilities) ||
+    !Array.isArray(record.moves)
+  )
+    throw new Error("The Pokédex details use an unsupported format.");
+  if (
+    record.data_version !== expectedVersion ||
+    record.regulation_id !== expectedRegulation
+  )
+    throw new Error("The Pokémon data changed. Reload the Pokédex.");
+
+  for (const value of record.abilities) {
+    assertNamed(value);
+    const ability = object(value)!;
+    if (
+      typeof ability.short_description !== "string" ||
+      typeof ability.description !== "string"
+    )
+      throw new Error("The Pokédex details contain an invalid ability.");
+  }
+  for (const value of record.moves) validateMove(value);
+  for (const value of record.forms) {
+    assertNamed(value);
+    const form = object(value)!;
+    if (
+      typeof form.is_list_legal !== "boolean" ||
+      typeof form.is_mega !== "boolean" ||
+      typeof form.form_label !== "string" ||
+      !string(form.base_id) ||
+      !Array.isArray(form.types) ||
+      form.types.length === 0 ||
+      !Array.isArray(form.stats) ||
+      !Array.isArray(form.ability_slots)
+    )
+      throw new Error("The Pokédex details contain an invalid form.");
+    form.types.forEach(assertNamed);
+    assertStringArray(form.mega_ids, "Mega identifiers");
+    assertStringArray(form.move_ids, "move identifiers");
+    form.stats.forEach(validateStat);
+    for (const slotValue of form.ability_slots) {
+      const slot = object(slotValue);
+      if (!slot || !string(slot.id) || !string(slot.slot))
+        throw new Error("The Pokédex details contain an invalid ability slot.");
+    }
+  }
+
+  const details = value as BulkDetails;
+  const forms = uniqueMap(details.forms, "form identifier");
+  const abilities = uniqueMap(details.abilities, "ability identifier");
+  const moves = uniqueMap(details.moves, "move identifier");
+  for (const form of details.forms) {
+    if (!forms.has(form.base_id))
+      throw new Error("The Pokédex details contain a dangling base form.");
+    for (const id of form.mega_ids)
+      if (!forms.has(id))
+        throw new Error("The Pokédex details contain a dangling Mega form.");
+    for (const { id } of form.ability_slots)
+      if (!abilities.has(id))
+        throw new Error("The Pokédex details contain a dangling ability.");
+    for (const id of form.move_ids)
+      if (!moves.has(id))
+        throw new Error("The Pokédex details contain a dangling move.");
+  }
+  return { details, maps: { forms, abilities, moves } };
+}
+
+function validateStat(value: unknown): void {
+  const stat = object(value);
+  assertNamed(value);
+  if (!stat) throw new Error("The Pokédex details contain an invalid stat.");
+  for (const key of ["base", "real", "minimum", "maximum"])
+    assertNumber(stat[key], `detail ${key}`);
+}
+
+function validateMove(value: unknown): void {
+  const move = object(value);
+  assertNamed(value);
+  if (
+    !move ||
+    !object(move.type) ||
+    !["Physical", "Special", "Status"].includes(String(move.category)) ||
+    typeof move.always_hits !== "boolean" ||
+    !string(move.target) ||
+    typeof move.short_description !== "string" ||
+    typeof move.description !== "string"
+  )
+    throw new Error("The Pokédex details contain an invalid move.");
+  assertNamed(move.type);
+  for (const key of ["base_power", "pp", "priority"])
+    assertNumber(move[key], `move ${key}`);
+  if (move.accuracy !== null) assertNumber(move.accuracy, "move accuracy");
+  if ((move.accuracy === null) !== (move.always_hits === true))
+    throw new Error("The Pokédex details contain inconsistent move accuracy.");
+  assertStringArray(move.flags, "move flags");
 }
 
 export function parseApiError(value: unknown): ApiError {

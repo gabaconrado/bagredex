@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+import json
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
@@ -14,8 +16,9 @@ from django.http import StreamingHttpResponse
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
 
+from bagredex import views
 from bagredex.accounts.models import User
-from bagredex.pokedex import PokedexUnavailable, Snapshot, form_detail
+from bagredex.pokedex import PokedexUnavailable, Snapshot, form_detail, regulation_details
 from bagredex.pokemon_data.models import (
     Ability,
     AbilityProfile,
@@ -290,6 +293,7 @@ def authenticated_client(client: Client) -> Client:
     "url",
     (
         "/pokedex/data/m-c/index/?version=x",
+        "/pokedex/data/m-c/details/?version=x",
         "/pokedex/data/m-c/pokemon/charizard/details/?version=x",
         "/pokedex/sprites/x/charizard/normal.webp",
     ),
@@ -309,11 +313,23 @@ def test_home_bootstrap_and_regulation_validation(
     response = authenticated_client.get("/?regulation=m-b")
     assert response.status_code == 200
     bootstrap = response.context["pokedex_bootstrap"]
-    assert bootstrap["schema_version"] == "pokedex-bootstrap-v1"
+    assert bootstrap["schema_version"] == "pokedex-bootstrap-v2"
     assert bootstrap["active_version"] == VERSION_ID
-    assert bootstrap["regulation"] == {"id": "m-b", "name": "Regulation M-B"}
+    assert bootstrap["regulation"] == {
+        "id": "m-b",
+        "name": "Regulation M-B",
+        "label": "Regulation M-B",
+    }
+    assert [item["label"] for item in bootstrap["regulations"]] == [
+        "Regulation M-C",
+        "Regulation M-B",
+    ]
     assert bootstrap["index_url"].endswith(f"/pokedex/data/m-b/index/?version={VERSION_ID}")
     assert "__FORM__" in bootstrap["detail_url_template"]
+    assert bootstrap["details_url"].endswith(f"/pokedex/data/m-b/details/?version={VERSION_ID}")
+    assert bootstrap["sprite_url_template"].endswith(
+        f"/pokedex/sprites/{VERSION_ID}/__FORM__/__VARIANT__.webp"
+    )
     assert authenticated_client.get("/?regulation=m-c&regulation=m-b").status_code == 400
     assert authenticated_client.get("/?regulation=anything").status_code == 400
 
@@ -327,6 +343,9 @@ def test_home_and_index_report_missing_active_data(
     assert response.status_code == 503
     assert response.context["pokedex_unavailable"]
     response = authenticated_client.get("/pokedex/data/m-c/index/?version=missing")
+    assert response.status_code == 503
+    assert response.json()["code"] == "data-unavailable"
+    response = authenticated_client.get("/pokedex/data/m-c/details/?version=missing")
     assert response.status_code == 503
     assert response.json()["code"] == "data-unavailable"
 
@@ -416,6 +435,97 @@ def test_detail_contract_toggle_only_stats_moves_and_query_bound(
 
 
 @pytest.mark.django_db
+def test_bulk_details_contract_is_normalized_complete_and_bounded(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    url = f"/pokedex/data/m-c/details/?version={VERSION_ID}"
+    with CaptureQueriesContext(connection) as queries:
+        response = authenticated_client.get(url)
+    assert response.status_code == 200
+    assert len(queries) <= 12
+    assert response.headers["Cache-Control"] == "private, no-cache"
+    payload = response.json()
+    assert payload["schema_version"] == "pokedex-details-v1"
+    assert payload["data_version"] == VERSION_ID
+    assert payload["regulation_id"] == "m-c"
+    assert [form["id"] for form in payload["forms"]] == [
+        "charizard",
+        "charizardmegax",
+        "charizardmegay",
+    ]
+    base, mega_x, mega_y = payload["forms"]
+    assert base["name"] == "Charizard"
+    assert base["types"] == [{"id": "fire", "name": "Fire"}]
+    assert base["is_list_legal"] is False
+    assert mega_x["is_list_legal"] is True
+    assert mega_y["is_list_legal"] is False
+    assert base["form_label"] == ""
+    assert mega_x["form_label"] == "Mega-X"
+    assert base["base_id"] == "charizard"
+    assert base["mega_ids"] == ["charizardmegax", "charizardmegay"]
+    assert mega_x["mega_ids"] == base["mega_ids"]
+    assert base["stats"][0] == {
+        "id": "hp",
+        "name": "HP",
+        "base": 78,
+        "real": 153,
+        "minimum": 153,
+        "maximum": 185,
+    }
+    assert base["ability_slots"] == [
+        {"id": "blaze", "slot": "0"},
+        {"id": "solarpower", "slot": "H"},
+    ]
+    assert base["move_ids"] == [
+        "acrobatics",
+        "airslash",
+        *(f"testmove{number}" for number in range(30)),
+    ]
+    assert [ability["id"] for ability in payload["abilities"]] == ["blaze", "solarpower"]
+    assert len({ability["id"] for ability in payload["abilities"]}) == 2
+    assert len(payload["moves"]) == 32
+    assert len({move["id"] for move in payload["moves"]}) == 32
+    assert payload["moves"][0]["id"] == "acrobatics"
+    assert payload["moves"][0]["flags"] == ["contact", "protect"]
+    assert payload["moves"][1]["accuracy"] is None
+    assert payload["moves"][1]["always_hits"] is True
+    referenced_abilities = {
+        slot["id"] for form in payload["forms"] for slot in form["ability_slots"]
+    }
+    referenced_moves = {move_id for form in payload["forms"] for move_id in form["move_ids"]}
+    assert referenced_abilities == {ability["id"] for ability in payload["abilities"]}
+    assert referenced_moves == {move["id"] for move in payload["moves"]}
+    raw = json.dumps(payload, separators=(",", ":")).encode()
+    assert len(raw) > len(gzip.compress(raw))
+
+
+@pytest.mark.django_db
+def test_bulk_details_etag_errors_methods_and_other_regulation(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    url = f"/pokedex/data/m-c/details/?version={VERSION_ID}"
+    response = authenticated_client.get(url)
+    cached = authenticated_client.get(url, HTTP_IF_NONE_MATCH=response.headers["ETag"])
+    assert cached.status_code == 304
+    assert cached.content == b""
+    assert authenticated_client.post(url).status_code == 405
+    assert authenticated_client.get("/pokedex/data/nope/details/?version=old").status_code == 400
+    assert authenticated_client.get("/pokedex/data/m-c/details/").status_code == 400
+    assert (
+        authenticated_client.get(
+            f"/pokedex/data/m-c/details/?version={VERSION_ID}&version={VERSION_ID}"
+        ).status_code
+        == 400
+    )
+    stale = authenticated_client.get("/pokedex/data/m-c/details/?version=old")
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "data-version-changed"
+    other = authenticated_client.get(f"/pokedex/data/m-b/details/?version={VERSION_ID}")
+    assert other.status_code == 200
+    assert other.json()["regulation_id"] == "m-b"
+
+
+@pytest.mark.django_db
 def test_detail_query_bound_is_independent_of_large_learnset(
     authenticated_client: Client, pokedex_data: dict[str, Any]
 ) -> None:
@@ -485,6 +595,26 @@ def test_incompatible_mechanics_fail_closed(
     regulation.mechanics_profile.sp_maximum = 31
     with pytest.raises(PokedexUnavailable, match="unsupported stat mechanics"):
         form_detail(Snapshot(version=version, regulation=regulation), "charizard")
+    with pytest.raises(PokedexUnavailable, match="unsupported stat mechanics"):
+        regulation_details(Snapshot(version=version, regulation=regulation))
+
+
+@pytest.mark.django_db
+def test_bulk_details_maps_unsupported_mechanics_to_503(
+    authenticated_client: Client,
+    pokedex_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def incompatible(_snapshot: Snapshot) -> dict[str, Any]:
+        raise PokedexUnavailable("The active regulation has unsupported stat mechanics.")
+
+    monkeypatch.setattr(views, "regulation_details", incompatible)
+    response = authenticated_client.get(f"/pokedex/data/m-c/details/?version={VERSION_ID}")
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": "data-unavailable",
+        "message": "The active regulation has unsupported stat mechanics.",
+    }
 
 
 @pytest.mark.django_db

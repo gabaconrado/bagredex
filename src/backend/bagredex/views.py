@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET
 
 from .pokedex import (
     DETAIL_SCHEMA,
+    DETAILS_SCHEMA,
     INDEX_SCHEMA,
     REGULATION_IDS,
     PokedexUnavailable,
@@ -21,6 +22,7 @@ from .pokedex import (
     active_version,
     bootstrap,
     form_detail,
+    regulation_details,
     regulation_index,
     response_etag,
     snapshot_for,
@@ -126,6 +128,24 @@ def pokedex_index(request: HttpRequest, regulation: str) -> HttpResponse:
     if cached is not None:
         return cached
     return _json_response(request, regulation_index(snapshot), etag)
+
+
+@require_GET
+def pokedex_details(request: HttpRequest, regulation: str) -> HttpResponse:
+    """Return normalized effective details for one active regulation."""
+    snapshot, error = _current_snapshot_response(request, regulation)
+    if error is not None:
+        return error
+    assert snapshot is not None
+    etag = response_etag(snapshot.version.pk, regulation, DETAILS_SCHEMA)
+    cached = _not_modified(request, etag)
+    if cached is not None:
+        return cached
+    try:
+        payload = regulation_details(snapshot)
+    except PokedexUnavailable as error:
+        return _error("data-unavailable", str(error), 503)
+    return _json_response(request, payload, etag)
 
 
 @require_GET

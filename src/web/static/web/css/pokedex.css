@@ -43,7 +43,11 @@
   box-shadow: 0 0.75rem 2rem var(--color-shadow);
 }
 .pokedex-list {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 38rem;
+  height: min(calc(100vh - 3rem), 48rem);
   padding: clamp(1rem, 2vw, 1.5rem);
 }
 .pokedex-title,
@@ -52,6 +56,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+.pokedex-title {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto minmax(8.5rem, auto);
+  align-items: end;
+}
+.result-count--placeholder {
+  visibility: hidden;
 }
 .eyebrow {
   margin: 0 0 0.25rem;
@@ -65,6 +77,23 @@
   margin: 0;
   font-size: clamp(2rem, 4vw, 3.25rem);
   line-height: 1;
+}
+.regulation-picker {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.regulation-picker select {
+  min-height: 2.75rem;
+  padding: 0.45rem 2rem 0.45rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
 }
 .result-count,
 .section-note {
@@ -163,11 +192,24 @@
   font-weight: 700;
 }
 .table-scroll {
+  flex: 1;
   max-height: calc(100vh - 17rem);
-  min-height: 24rem;
+  min-height: 0;
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
+  scrollbar-gutter: stable both-edges;
+}
+.pokemon-table__sprite {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  text-align: center !important;
+}
+.pokemon-table__sprite img {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  object-fit: contain;
 }
 .pokemon-table {
   width: 100%;
@@ -190,7 +232,8 @@
 }
 .pokemon-table th:first-child,
 .pokemon-table th:nth-child(2),
-.pokemon-table td:nth-child(2) {
+.pokemon-table th:nth-child(3),
+.pokemon-table td:nth-child(3) {
   text-align: left;
 }
 .pokemon-table tbody tr:hover,
@@ -207,6 +250,7 @@
   font: inherit;
   font-weight: 750;
   text-align: left;
+  cursor: pointer;
 }
 .sort {
   min-height: 2.75rem;
@@ -297,10 +341,10 @@
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: clamp(1rem, 2vw, 1.5rem);
+  min-height: 38rem;
 }
 .detail-pane--empty {
   display: grid;
-  min-height: 22rem;
   place-content: center;
   text-align: center;
   color: var(--color-text-muted);
@@ -331,6 +375,35 @@
   margin: 0 auto;
   object-fit: contain;
   image-rendering: auto;
+}
+.form-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.icon-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+}
+.icon-toggle.is-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 .stat-grid {
   border: 1px solid var(--color-border);
@@ -384,6 +457,145 @@
 .chip-list button:hover {
   border-color: var(--color-accent);
 }
+.chip-list button,
+.filter-token,
+.clear-filters,
+.suggestions button,
+.move-row,
+.move-row__action {
+  cursor: pointer;
+}
+.move-table {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+}
+.move-table__header,
+.move-row {
+  display: grid;
+  grid-template-columns:
+    minmax(8rem, 2fr) minmax(5rem, 1fr) minmax(7rem, 1fr)
+    3rem;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+.move-table__header {
+  background: var(--color-canvas);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+.move-row {
+  position: relative;
+  min-height: 2.75rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+.move-row:has(.move-row__action:hover),
+.move-row:has(.move-row__action:focus-visible) {
+  background: var(--color-accent-soft);
+}
+.move-name {
+  position: static;
+}
+.move-row__action {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+}
+.move-row__action:focus-visible {
+  outline: 0.18rem solid var(--color-accent);
+  outline-offset: -0.2rem;
+}
+.move-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.info-dialog {
+  width: min(calc(100% - 2rem), 36rem);
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-large);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+.info-dialog::backdrop {
+  background: rgb(15 23 42 / 60%);
+}
+.info-dialog__surface {
+  padding: 1.25rem;
+}
+.info-dialog__surface header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.dialog-close {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.5rem;
+}
+.detail-skeleton {
+  min-height: 38rem;
+}
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  margin: 0 auto 1rem;
+  border: 0.2rem solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.skeleton,
+.shell-search,
+.shell-table {
+  border-radius: var(--radius-medium);
+  background: var(--color-canvas);
+}
+.skeleton--title {
+  width: 45%;
+  height: 2.5rem;
+}
+.skeleton--sprite {
+  width: 16rem;
+  height: 16rem;
+  margin: 1rem auto;
+}
+.skeleton--rows {
+  height: 14rem;
+}
+.shell-search {
+  height: 4.5rem;
+  margin-top: 1.25rem;
+}
+.shell-table {
+  flex: 1;
+  min-height: 0;
+  margin-top: 1rem;
+}
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
 .info-pane {
   margin-top: 1.5rem;
   padding: 1rem;
@@ -414,6 +626,9 @@
 .state-card--error {
   border-color: var(--color-error);
   background: var(--color-error-surface);
+}
+.state-panel {
+  min-height: 38rem;
 }
 .empty-list {
   padding: 4rem 1rem;
@@ -448,6 +663,9 @@
   }
 }
 @media (max-width: 40rem) {
+  .pokedex-list {
+    height: auto;
+  }
   .pokedex-title {
     align-items: flex-end;
   }
@@ -461,8 +679,8 @@
   .pokemon-table thead {
     position: static;
   }
-  .pokemon-table th:nth-child(2),
-  .pokemon-table td:nth-child(2) {
+  .pokemon-table thead th:nth-child(3),
+  .pokemon-table tbody td:nth-child(3) {
     display: none;
   }
   .pokemon-table th,

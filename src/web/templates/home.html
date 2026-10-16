@@ -7,16 +7,6 @@
   {% if pokedex_bootstrap %}{% vite_styles 'src/pokedex.tsx' %}{% endif %}
 {% endblock %}
 
-{% block header_controls %}
-  {% if pokedex_bootstrap %}
-    <nav class="regulation-nav" aria-label="Regulation">
-      {% for regulation in pokedex_bootstrap.regulations %}
-        <a href="{{ regulation.url }}" {% if regulation.id == pokedex_bootstrap.regulation.id %}aria-current="page"{% endif %}>{{ regulation.id|upper }}</a>
-      {% endfor %}
-    </nav>
-  {% endif %}
-{% endblock %}
-
 {% block content %}
   {% if pokedex_unavailable %}
     <section class="state-card state-card--error" aria-labelledby="unavailable-title">
@@ -27,7 +17,7 @@
     </section>
   {% else %}
     {{ pokedex_bootstrap|json_script:"pokedex-bootstrap" }}
-    <div data-pokedex-root><section class="state-card" aria-live="polite"><h1>Pokédex</h1><p>Loading {{ pokedex_bootstrap.regulation.name }}…</p></section></div>
+    <div data-pokedex-root><div class="pokedex-app pokedex-app--shell" aria-live="polite"><section class="pokedex-list"><header class="pokedex-title"><div><h1>Pokédex</h1></div><label class="regulation-picker">Regulation<select disabled><option>{{ pokedex_bootstrap.regulation.label }}</option></select></label><p class="result-count result-count--placeholder" aria-hidden="true">000 of 000 Pokémon</p></header><div class="shell-search"></div><div class="shell-table"></div><span class="visually-hidden">Loading {{ pokedex_bootstrap.regulation.label }}…</span></section><aside class="detail-pane detail-pane--empty"><h2>Choose a Pokémon</h2><p>Select a row or search result to see its full details.</p></aside></div></div>
     <noscript><p class="state-card state-card--error">JavaScript is required for interactive Pokédex search and details.</p></noscript>
   {% endif %}
 {% endblock %}

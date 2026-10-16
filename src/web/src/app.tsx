@@ -8,12 +8,15 @@ import {
 } from "preact/hooks";
 import type {
   Bootstrap,
-  FormDetail,
+  BulkAbility,
+  BulkForm,
+  DetailsMaps,
   FormSummary,
   MoveDetail,
   PokedexIndex,
 } from "./contracts";
-import { parseApiError, parseDetail, parseIndex } from "./contracts";
+import { parseApiError, parseDetails, parseIndex } from "./contracts";
+import { CategoryIcon, MegaIcon, ShinyIcon } from "./icons";
 import {
   addFilter,
   cycleSort,
@@ -28,10 +31,7 @@ import {
 } from "./model";
 
 type LoadState = "loading" | "ready" | "error" | "stale";
-type Info =
-  | { kind: "ability"; value: FormDetail["form"]["abilities"][number] }
-  | { kind: "move"; value: MoveDetail }
-  | null;
+type ModalInfo = { kind: "ability" | "move"; id: string } | null;
 
 async function json(response: Response): Promise<unknown> {
   const payload: unknown = await response.json().catch(() => null);
@@ -48,6 +48,14 @@ const staleDataError = (url: string) =>
     response: { code: "data-version-changed", url },
   });
 const currentPageUrl = () => `${location.pathname}${location.search}` || "/";
+const spriteUrl = (
+  template: string,
+  form: string,
+  variant: "normal" | "shiny",
+) =>
+  template
+    .replace("__FORM__", encodeURIComponent(form))
+    .replace("__VARIANT__", variant);
 
 const typeClass = (id: string) =>
   `type-badge type-badge--${id.replace(/[^a-z]/g, "")}`;
@@ -210,13 +218,24 @@ const PokemonRow = memo(function PokemonRow({
   form,
   selected,
   onSelect,
+  spriteTemplate,
 }: {
   form: FormSummary;
   selected: boolean;
   onSelect: (id: string) => void;
+  spriteTemplate: string;
 }) {
   return (
     <tr class={selected ? "is-selected" : ""}>
+      <td class="pokemon-table__sprite">
+        <img
+          src={spriteUrl(spriteTemplate, form.id, "normal")}
+          width="48"
+          height="48"
+          loading="lazy"
+          alt=""
+        />
+      </td>
       <th scope="row">
         <button
           type="button"
@@ -244,12 +263,14 @@ function PokemonTable({
   sort,
   onSort,
   onSelect,
+  spriteTemplate,
 }: {
   forms: FormSummary[];
   selected: string | null;
   sort: Sort;
   onSort: (key: SortKey) => void;
   onSelect: (id: string) => void;
+  spriteTemplate: string;
 }) {
   return (
     <div class="table-scroll">
@@ -257,6 +278,9 @@ function PokemonTable({
         <caption class="visually-hidden">Pokémon in this regulation</caption>
         <thead>
           <tr>
+            <th class="pokemon-table__sprite" scope="col">
+              <span class="visually-hidden">Sprite</span>
+            </th>
             <th scope="col">Pokémon</th>
             <th scope="col">Types</th>
             {rowKeys.map((key) => (
@@ -290,6 +314,7 @@ function PokemonTable({
               form={form}
               selected={selected === form.id}
               onSelect={onSelect}
+              spriteTemplate={spriteTemplate}
             />
           ))}
         </tbody>
@@ -329,49 +354,183 @@ function MoveInfo({ move }: { move: MoveDetail }) {
   );
 }
 
-function DetailPane({
-  detail,
-  loading,
+function InformationDialog({
+  info,
+  maps,
+  invoker,
+  onClose,
+}: {
+  info: Exclude<ModalInfo, null>;
+  maps: DetailsMaps;
+  invoker: HTMLElement | null;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const value =
+    info.kind === "move"
+      ? maps.moves.get(info.id)
+      : maps.abilities.get(info.id);
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (typeof element.showModal === "function") element.showModal();
+    if (!element.open) element.setAttribute("open", "");
+    element.querySelector<HTMLElement>(".dialog-close")?.focus();
+  }, []);
+  if (!value) return null;
+  const close = (restore = true) => {
+    dialog.current?.close();
+    onClose();
+    if (restore) queueMicrotask(() => invoker?.isConnected && invoker.focus());
+  };
+  return (
+    <dialog
+      ref={dialog}
+      class="info-dialog"
+      aria-labelledby="info-dialog-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const focusable = [
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ];
+        if (!focusable.length) return;
+        const first = focusable[0]!;
+        const last = focusable.at(-1)!;
+        if (
+          first === last ||
+          (event.shiftKey && document.activeElement === first) ||
+          (!event.shiftKey && document.activeElement === last)
+        ) {
+          event.preventDefault();
+          (event.shiftKey ? last : first).focus();
+        }
+      }}
+    >
+      <div class="info-dialog__surface">
+        <header>
+          <h2 id="info-dialog-title">{value.name}</h2>
+          <button
+            type="button"
+            class="dialog-close"
+            autofocus
+            onClick={() => close()}
+            aria-label="Close details"
+          >
+            ×
+          </button>
+        </header>
+        {info.kind === "move" ? (
+          <MoveInfo move={value as MoveDetail} />
+        ) : (
+          <>
+            <p>{(value as BulkAbility).short_description}</p>
+            {(value as BulkAbility).description !==
+              (value as BulkAbility).short_description && (
+              <p>{(value as BulkAbility).description}</p>
+            )}
+          </>
+        )}
+      </div>
+    </dialog>
+  );
+}
+
+function RefinedDetailPane({
+  selected,
+  detailsState,
+  maps,
   error,
   shiny,
-  info,
+  modal,
+  modalInvoker,
+  spriteTemplate,
   onShiny,
-  onInfo,
+  onModal,
+  onCloseModal,
   onSelect,
+  onRetry,
 }: {
-  detail: FormDetail | null;
-  loading: boolean;
+  selected: string | null;
+  detailsState: "idle" | "loading" | "ready" | "error";
+  maps: DetailsMaps | null;
   error: string | null;
   shiny: boolean;
-  info: Info;
+  modal: ModalInfo;
+  modalInvoker: HTMLElement | null;
+  spriteTemplate: string;
   onShiny: () => void;
-  onInfo: (value: Info) => void;
+  onModal: (info: Exclude<ModalInfo, null>, invoker: HTMLElement) => void;
+  onCloseModal: () => void;
   onSelect: (id: string) => void;
+  onRetry: () => void;
 }) {
-  if (loading)
-    return (
-      <aside class="detail-pane state-card" aria-live="polite">
-        <p>Loading Pokémon details…</p>
-      </aside>
-    );
-  if (error)
-    return (
-      <aside class="detail-pane state-card state-card--error" role="alert">
-        <h2>Could not load Pokémon</h2>
-        <p>{error}</p>
-      </aside>
-    );
-  if (!detail)
+  if (!selected)
     return (
       <aside class="detail-pane detail-pane--empty">
         <h2>Choose a Pokémon</h2>
         <p>Select a row or search result to see its full details.</p>
       </aside>
     );
-  const form = detail.form;
-  const otherMegas = form.form_switches.megas.filter(
-    (mega) => mega.id !== form.id,
-  );
+  if (detailsState === "error")
+    return (
+      <aside class="detail-pane state-panel state-card--error" role="alert">
+        <h2>Details unavailable</h2>
+        <p>{error}</p>
+        <button type="button" class="button button--primary" onClick={onRetry}>
+          Retry details
+        </button>
+      </aside>
+    );
+  if (detailsState === "idle" || detailsState === "loading")
+    return (
+      <aside
+        class="detail-pane detail-skeleton"
+        aria-live="polite"
+        aria-label="Loading Pokémon details"
+      >
+        <div class="spinner" aria-hidden="true" />
+        <div class="skeleton skeleton--title" />
+        <div class="skeleton skeleton--sprite" />
+        <div class="skeleton skeleton--rows" />
+        <span class="visually-hidden">Loading Pokémon details…</span>
+      </aside>
+    );
+  if (!maps)
+    return (
+      <aside class="detail-pane state-card state-card--error" role="alert">
+        <h2>Details unavailable</h2>
+        <p>{error}</p>
+        <button type="button" class="button button--primary" onClick={onRetry}>
+          Retry details
+        </button>
+      </aside>
+    );
+  const form = maps.forms.get(selected);
+  if (!form)
+    return (
+      <aside class="detail-pane state-card state-card--error" role="alert">
+        <h2>Pokémon unavailable</h2>
+        <p>This form is missing from the loaded details.</p>
+      </aside>
+    );
+  const abilities = form.ability_slots.map(({ id, slot }) => ({
+    value: maps.abilities.get(id)!,
+    slot,
+  }));
+  const moves = form.move_ids.map((id) => maps.moves.get(id)!);
+  const base = maps.forms.get(form.base_id)!;
+  const megaChoices = form.is_mega
+    ? [form]
+    : form.mega_ids.map((id) => maps.forms.get(id)!);
   return (
     <aside class="detail-pane" aria-labelledby="detail-title">
       <header class="detail-header">
@@ -380,39 +539,51 @@ function DetailPane({
           <h2 id="detail-title">{form.name}</h2>
           <Types values={form.types} />
         </div>
-        <label class="toggle">
-          <input type="checkbox" checked={shiny} onChange={onShiny} />
-          <span>Shiny</span>
-        </label>
+        <div class="form-toggles" aria-label="Sprite and form controls">
+          <button
+            type="button"
+            class={shiny ? "icon-toggle is-active" : "icon-toggle"}
+            aria-pressed={shiny}
+            title={shiny ? "Show normal sprite" : "Show shiny sprite"}
+            aria-label={
+              shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
+            }
+            onClick={onShiny}
+          >
+            <ShinyIcon />
+            <span>Shiny</span>
+          </button>
+          {megaChoices.map((mega) => (
+            <button
+              type="button"
+              key={mega.id}
+              class={form.is_mega ? "icon-toggle is-active" : "icon-toggle"}
+              aria-pressed={form.is_mega}
+              title={
+                form.is_mega
+                  ? `Return to ${base.name}`
+                  : `Switch to ${mega.name}`
+              }
+              aria-label={
+                form.is_mega
+                  ? `Return to base form ${base.name}`
+                  : `Switch to ${mega.name}`
+              }
+              onClick={() => onSelect(form.is_mega ? base.id : mega.id)}
+            >
+              <MegaIcon />
+              <span>{mega.form_label || "Mega"}</span>
+            </button>
+          ))}
+        </div>
       </header>
       <img
         class="pokemon-sprite"
-        src={shiny ? form.sprites.shiny : form.sprites.normal}
+        src={spriteUrl(spriteTemplate, form.id, shiny ? "shiny" : "normal")}
         width="384"
         height="384"
         alt={`${shiny ? "Shiny " : ""}${form.name}`}
       />
-      <div class="form-switches" aria-label="Form switches">
-        {form.id !== form.form_switches.base.id && (
-          <button
-            type="button"
-            class="button button--secondary"
-            onClick={() => onSelect(form.form_switches.base.id)}
-          >
-            Base: {form.form_switches.base.name}
-          </button>
-        )}
-        {otherMegas.map((mega) => (
-          <button
-            type="button"
-            class="button button--secondary"
-            onClick={() => onSelect(mega.id)}
-            key={mega.id}
-          >
-            {mega.name}
-          </button>
-        ))}
-      </div>
       <section>
         <h3>Stats at level 50</h3>
         <p class="section-note">
@@ -441,48 +612,66 @@ function DetailPane({
       <section>
         <h3>Abilities</h3>
         <div class="chip-list">
-          {form.abilities.map((ability) => (
+          {abilities.map(({ value, slot }) => (
             <button
               type="button"
-              onClick={() => onInfo({ kind: "ability", value: ability })}
-              key={`${ability.slot}-${ability.id}`}
+              onClick={(event) =>
+                onModal({ kind: "ability", id: value.id }, event.currentTarget)
+              }
+              key={`${slot}-${value.id}`}
             >
-              {ability.name}
+              {value.name}
             </button>
           ))}
         </div>
       </section>
       <section>
         <h3>
-          Moves <span class="count">{form.moves.length}</span>
+          Moves <span class="count">{moves.length}</span>
         </h3>
-        <div class="move-list">
-          {form.moves.map((move) => (
-            <button
-              type="button"
-              onClick={() => onInfo({ kind: "move", value: move })}
-              key={move.id}
-            >
-              <span>{move.name}</span>
-              <Types values={[move.type]} />
-            </button>
+        <div class="move-table" role="table" aria-label="Legal moves">
+          <div class="move-table__header" role="row">
+            <span role="columnheader">Name</span>
+            <span role="columnheader">Type</span>
+            <span role="columnheader">Category</span>
+            <span role="columnheader">Power</span>
+          </div>
+          {moves.map((move) => (
+            <div class="move-row" role="row" key={move.id}>
+              <span role="cell" class="move-name">
+                <button
+                  type="button"
+                  class="move-row__action"
+                  aria-label={`${move.name}, ${move.type.name} type, ${move.category}, power ${move.category === "Status" ? "not applicable" : move.base_power}`}
+                  onClick={(event) =>
+                    onModal({ kind: "move", id: move.id }, event.currentTarget)
+                  }
+                />
+                <span>{move.name}</span>
+              </span>
+              <span role="cell">
+                <Types values={[move.type]} />
+              </span>
+              <span role="cell" class="move-category">
+                <CategoryIcon
+                  category={move.category as "Physical" | "Special" | "Status"}
+                />
+                <span>{move.category}</span>
+              </span>
+              <span role="cell">
+                {move.category === "Status" ? "—" : move.base_power}
+              </span>
+            </div>
           ))}
         </div>
       </section>
-      {info && (
-        <section class="info-pane" aria-live="polite">
-          <h3>{info.value.name}</h3>
-          {info.kind === "move" ? (
-            <MoveInfo move={info.value} />
-          ) : (
-            <>
-              <p>{info.value.short_description}</p>
-              {info.value.description !== info.value.short_description && (
-                <p>{info.value.description}</p>
-              )}
-            </>
-          )}
-        </section>
+      {modal && (
+        <InformationDialog
+          info={modal}
+          maps={maps}
+          invoker={modalInvoker}
+          onClose={onCloseModal}
+        />
       )}
     </aside>
   );
@@ -493,16 +682,19 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [reloadUrl, setReloadUrl] = useState<string | null>(null);
+  const [indexRetry, setIndexRetry] = useState(0);
   const [filters, setFilters] = useState<Filter[]>([]);
   const [sort, setSort] = useState<Sort>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [detail, setDetail] = useState<FormDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailsState, setDetailsState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [details, setDetails] = useState<DetailsMaps | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsRetry, setDetailsRetry] = useState(0);
   const [shiny, setShiny] = useState(false);
-  const [info, setInfo] = useState<Info>(null);
-  const cache = useRef(new Map<string, FormDetail>());
-  const request = useRef(0);
+  const [modal, setModal] = useState<ModalInfo>(null);
+  const [modalInvoker, setModalInvoker] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -530,53 +722,61 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
       }
     })();
     return () => controller.abort();
-  }, [bootstrap]);
+  }, [bootstrap, indexRetry]);
+
+  useEffect(() => {
+    if (loadState !== "ready" || !index) return;
+    const controller = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      setDetailsState("loading");
+      setDetailsError(null);
+      void (async () => {
+        try {
+          const response = await fetch(bootstrap.details_url, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          });
+          const { maps } = parseDetails(
+            await json(response),
+            bootstrap.active_version,
+            bootstrap.regulation.id,
+          );
+          setDetails(maps);
+          setDetailsState("ready");
+        } catch (reason) {
+          if (controller.signal.aborted) return;
+          const failure = reason as Error & {
+            response?: { code: string; url?: string };
+          };
+          if (
+            failure.response?.code === "data-version-changed" ||
+            failure.message.includes("data changed")
+          ) {
+            setLoadState("stale");
+            setReloadUrl(failure.response?.url ?? null);
+            setMessage(failure.message);
+          } else {
+            setDetailsError(failure.message);
+            setDetailsState("error");
+          }
+        }
+      })();
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      controller.abort();
+    };
+  }, [bootstrap, detailsRetry, index, loadState]);
 
   const select = useCallback(
-    async (id: string) => {
+    (id: string) => {
       if (id === selected) return;
-      const serial = ++request.current;
       setSelected(id);
-      setInfo(null);
+      setModal(null);
+      setModalInvoker(null);
       setShiny(false);
-      setDetailError(null);
-      const cached = cache.current.get(id);
-      if (cached) {
-        setDetail(cached);
-        setDetailLoading(false);
-        return;
-      }
-      setDetail(null);
-      setDetailLoading(true);
-      try {
-        const url = bootstrap.detail_url_template.replace(
-          "__FORM__",
-          encodeURIComponent(id),
-        );
-        const response = await fetch(url, {
-          headers: { Accept: "application/json" },
-        });
-        const data = parseDetail(await json(response));
-        if (serial !== request.current) return;
-        if (data.data_version !== bootstrap.active_version)
-          throw staleDataError(currentPageUrl());
-        cache.current.set(id, data);
-        setDetail(data);
-      } catch (reason) {
-        if (serial !== request.current) return;
-        const failure = reason as Error & {
-          response?: { code: string; url?: string };
-        };
-        if (failure.response?.code === "data-version-changed") {
-          setLoadState("stale");
-          setReloadUrl(failure.response.url ?? null);
-          setMessage(failure.message);
-        } else setDetailError(failure.message);
-      } finally {
-        if (serial === request.current) setDetailLoading(false);
-      }
     },
-    [bootstrap, selected],
+    [selected],
   );
   const visible = useMemo(
     () => (index ? sortedForms(filteredForms(index.forms, filters), sort) : []),
@@ -584,38 +784,99 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   );
   if (loadState === "loading")
     return (
-      <section class="state-card" aria-live="polite">
-        <h1>Pokédex</h1>
-        <p>Loading {bootstrap.regulation.name}…</p>
-      </section>
+      <div class="pokedex-app pokedex-app--shell" aria-live="polite">
+        <section class="pokedex-list">
+          <header class="pokedex-title">
+            <div>
+              <h1>Pokédex</h1>
+            </div>
+            <label class="regulation-picker">
+              Regulation
+              <select disabled>
+                <option>{bootstrap.regulation.label}</option>
+              </select>
+            </label>
+            <p
+              class="result-count result-count--placeholder"
+              aria-hidden="true"
+            >
+              000 of 000 Pokémon
+            </p>
+          </header>
+          <div class="shell-search" />
+          <div class="shell-table" />
+          <span class="visually-hidden">
+            Loading {bootstrap.regulation.label}…
+          </span>
+        </section>
+        <aside class="detail-pane detail-pane--empty">
+          <h2>Choose a Pokémon</h2>
+          <p>Select a row or search result to see its full details.</p>
+        </aside>
+      </div>
     );
   if (loadState !== "ready" || !index)
     return (
-      <section
-        class={`state-card ${loadState === "error" ? "state-card--error" : ""}`}
-        role="alert"
-      >
-        <h1>
-          {loadState === "stale"
-            ? "Pokémon data changed"
-            : "Pokédex unavailable"}
-        </h1>
-        <p>{message}</p>
-        {loadState === "stale" && (
-          <a class="button button--primary" href={reloadUrl ?? location.href}>
-            Reload Pokédex
-          </a>
-        )}
-      </section>
+      <div class="pokedex-app">
+        <section
+          class={`pokedex-list state-panel ${loadState === "error" ? "state-card--error" : ""}`}
+          role="alert"
+        >
+          <h1>
+            {loadState === "stale"
+              ? "Pokémon data changed"
+              : "Pokédex unavailable"}
+          </h1>
+          <p>{message}</p>
+          {loadState === "stale" && (
+            <a class="button button--primary" href={reloadUrl ?? location.href}>
+              Reload Pokédex
+            </a>
+          )}
+          {loadState === "error" && (
+            <button
+              type="button"
+              class="button button--primary"
+              onClick={() => {
+                setMessage(null);
+                setLoadState("loading");
+                setIndexRetry((value) => value + 1);
+              }}
+            >
+              Retry Pokédex
+            </button>
+          )}
+        </section>
+        <aside class="detail-pane detail-pane--empty">
+          <h2>Choose a Pokémon</h2>
+        </aside>
+      </div>
     );
   return (
     <div class="pokedex-app">
       <section class="pokedex-list" aria-labelledby="pokedex-title">
         <header class="pokedex-title">
           <div>
-            <p class="eyebrow">{index.regulation.name}</p>
             <h1 id="pokedex-title">Pokédex</h1>
           </div>
+          <label class="regulation-picker">
+            Regulation
+            <select
+              value={bootstrap.regulation.id}
+              onChange={(event) => {
+                const target = bootstrap.regulations.find(
+                  ({ id }) => id === event.currentTarget.value,
+                );
+                if (target) location.assign(target.url);
+              }}
+            >
+              {bootstrap.regulations.map((regulation) => (
+                <option value={regulation.id} key={regulation.id}>
+                  {regulation.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <p class="result-count" aria-live="polite">
             {visible.length} of {index.forms.length} Pokémon
           </p>
@@ -652,6 +913,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
             sort={sort}
             onSort={(key) => setSort((value) => cycleSort(value, key))}
             onSelect={select}
+            spriteTemplate={bootstrap.sprite_url_template}
           />
         ) : (
           <div class="empty-list">
@@ -660,15 +922,30 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           </div>
         )}
       </section>
-      <DetailPane
-        detail={detail}
-        loading={detailLoading}
-        error={detailError}
+      <RefinedDetailPane
+        selected={selected}
+        detailsState={detailsState}
+        maps={details}
+        error={detailsError}
         shiny={shiny}
-        info={info}
+        modal={modal}
+        modalInvoker={modalInvoker}
+        spriteTemplate={bootstrap.sprite_url_template}
         onShiny={() => setShiny((value) => !value)}
-        onInfo={setInfo}
+        onModal={(value, invoker) => {
+          setModalInvoker(invoker);
+          setModal(value);
+        }}
+        onCloseModal={() => {
+          setModal(null);
+          setModalInvoker(null);
+        }}
         onSelect={select}
+        onRetry={() => {
+          setDetails(null);
+          setDetailsState("idle");
+          setDetailsRetry((value) => value + 1);
+        }}
       />
     </div>
   );

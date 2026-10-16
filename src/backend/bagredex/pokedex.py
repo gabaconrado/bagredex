@@ -17,6 +17,7 @@ from .pokemon_data.models import (
     LearnsetEntry,
     MegaRelation,
     MoveFlagRelation,
+    MoveProfile,
     PokemonProfile,
     PokemonProfileAbility,
     PokemonProfileType,
@@ -30,7 +31,8 @@ REGULATION_IDS = ("m-c", "m-b")
 CANONICAL_ID = re.compile(r"^[a-z0-9]+$")
 INDEX_SCHEMA = "pokedex-index-v1"
 DETAIL_SCHEMA = "pokedex-form-detail-v1"
-BOOTSTRAP_SCHEMA = "pokedex-bootstrap-v1"
+DETAILS_SCHEMA = "pokedex-details-v1"
+BOOTSTRAP_SCHEMA = "pokedex-bootstrap-v2"
 
 
 class PokedexUnavailable(RuntimeError):
@@ -93,6 +95,7 @@ def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
         {
             "id": canonical_id,
             "name": available[canonical_id].name,
+            "label": f"Regulation {canonical_id.upper()}",
             "url": f"{reverse('home')}?regulation={canonical_id}",
         }
         for canonical_id in REGULATION_IDS
@@ -102,7 +105,11 @@ def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
     return {
         "schema_version": BOOTSTRAP_SCHEMA,
         "active_version": version_id,
-        "regulation": {"id": selected.canonical_id, "name": selected.name},
+        "regulation": {
+            "id": selected.canonical_id,
+            "name": selected.name,
+            "label": f"Regulation {selected.canonical_id.upper()}",
+        },
         "regulations": regulations,
         "index_url": (
             f"{reverse('pokedex-index', kwargs={'regulation': selected.canonical_id})}"
@@ -114,6 +121,18 @@ def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
                 kwargs={"regulation": selected.canonical_id, "form": "__FORM__"},
             )
             + f"?version={version_id}"
+        ),
+        "details_url": (
+            f"{reverse('pokedex-details', kwargs={'regulation': selected.canonical_id})}"
+            f"?version={version_id}"
+        ),
+        "sprite_url_template": reverse(
+            "pokedex-sprite",
+            kwargs={
+                "version": version_id,
+                "form": "__FORM__",
+                "variant": "__VARIANT__",
+            },
         ),
     }
 
@@ -220,6 +239,169 @@ def _stat_values(stat_id: str, name: str, base: int) -> dict[str, Any]:
         "real": level_50_stat(base=base, sp=0, hp=is_hp),
         "minimum": level_50_stat(base=base, sp=0, hp=is_hp, nature="hindering"),
         "maximum": level_50_stat(base=base, sp=32, hp=is_hp, nature="increasing"),
+    }
+
+
+def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
+    """Serialize every effective form with shared ability and move metadata once."""
+    _validate_mechanics(snapshot)
+    profiles = list(
+        PokemonProfile.objects.filter(regulation=snapshot.regulation)
+        .select_related("form", "form__base_form")
+        .order_by("form__national_dex_number", "form__canonical_id")
+    )
+    profile_ids = [profile.pk for profile in profiles]
+    form_ids = {profile.form_id for profile in profiles}
+    legal_profiles = set(
+        RegulationMembership.objects.filter(profile_id__in=profile_ids).values_list(
+            "profile_id", flat=True
+        )
+    )
+
+    types_by_profile: dict[Any, list[dict[str, str]]] = {}
+    for type_row in (
+        PokemonProfileType.objects.filter(profile_id__in=profile_ids)
+        .values("profile_id", "position", "type__canonical_id", "type__name")
+        .order_by("profile_id", "position")
+    ):
+        types_by_profile.setdefault(type_row["profile_id"], []).append(
+            {"id": type_row["type__canonical_id"], "name": type_row["type__name"]}
+        )
+
+    ability_slots: dict[Any, list[dict[str, str]]] = {}
+    abilities: dict[str, dict[str, str]] = {}
+    for ability_row in (
+        PokemonProfileAbility.objects.filter(profile_id__in=profile_ids)
+        .values(
+            "profile_id",
+            "slot",
+            "ability_profile__ability__canonical_id",
+            "ability_profile__ability__name",
+            "ability_profile__short_description",
+            "ability_profile__description",
+        )
+        .order_by("profile_id", "slot")
+    ):
+        ability_id = ability_row["ability_profile__ability__canonical_id"]
+        ability_slots.setdefault(ability_row["profile_id"], []).append(
+            {"id": ability_id, "slot": ability_row["slot"]}
+        )
+        abilities[ability_id] = {
+            "id": ability_id,
+            "name": ability_row["ability_profile__ability__name"],
+            "short_description": ability_row["ability_profile__short_description"],
+            "description": ability_row["ability_profile__description"],
+        }
+
+    moves_by_profile: dict[Any, list[tuple[str, str]]] = {}
+    moves: dict[str, dict[str, Any]] = {}
+    move_profile_ids: dict[Any, str] = {}
+    for edge_row in LearnsetEntry.objects.filter(profile_id__in=profile_ids).values(
+        "profile_id",
+        "move_profile_id",
+        "move_profile__move__canonical_id",
+        "move_profile__move__name",
+    ):
+        move_id = edge_row["move_profile__move__canonical_id"]
+        move_name = edge_row["move_profile__move__name"]
+        moves_by_profile.setdefault(edge_row["profile_id"], []).append((move_id, move_name))
+        move_profile_ids[edge_row["move_profile_id"]] = move_id
+    for metadata_row in MoveProfile.objects.filter(pk__in=move_profile_ids).values(
+        "id",
+        "move__canonical_id",
+        "move__name",
+        "type__canonical_id",
+        "type__name",
+        "category",
+        "base_power",
+        "accuracy",
+        "always_hits",
+        "pp",
+        "priority",
+        "target",
+        "short_description",
+        "description",
+    ):
+        move_id = metadata_row["move__canonical_id"]
+        moves[move_id] = {
+            "id": move_id,
+            "name": metadata_row["move__name"],
+            "type": {
+                "id": metadata_row["type__canonical_id"],
+                "name": metadata_row["type__name"],
+            },
+            "category": metadata_row["category"],
+            "base_power": metadata_row["base_power"],
+            "accuracy": metadata_row["accuracy"],
+            "always_hits": metadata_row["always_hits"],
+            "pp": metadata_row["pp"],
+            "priority": metadata_row["priority"],
+            "target": metadata_row["target"],
+            "short_description": metadata_row["short_description"],
+            "description": metadata_row["description"],
+            "flags": [],
+        }
+    for profile_moves in moves_by_profile.values():
+        profile_moves.sort(key=lambda pair: (pair[1].casefold(), pair[0]))
+    for flag_row in (
+        MoveFlagRelation.objects.filter(move_profile_id__in=move_profile_ids)
+        .values("move_profile_id", "flag__canonical_id")
+        .order_by("move_profile_id", "flag__canonical_id")
+    ):
+        moves[move_profile_ids[flag_row["move_profile_id"]]]["flags"].append(
+            flag_row["flag__canonical_id"]
+        )
+
+    megas_by_base: dict[Any, list[tuple[str, str]]] = {}
+    for mega_row in MegaRelation.objects.filter(
+        version=snapshot.version, base_form_id__in=form_ids, mega_form_id__in=form_ids
+    ).values("base_form_id", "mega_form__canonical_id", "mega_form__form_label"):
+        megas_by_base.setdefault(mega_row["base_form_id"], []).append(
+            (mega_row["mega_form__canonical_id"], mega_row["mega_form__form_label"])
+        )
+    for relations in megas_by_base.values():
+        relations.sort(key=lambda pair: (pair[1].casefold(), pair[0]))
+
+    stat_names = (
+        ("hp", "HP", "hp"),
+        ("atk", "Attack", "attack"),
+        ("def", "Defense", "defense"),
+        ("spa", "Special Attack", "special_attack"),
+        ("spd", "Special Defense", "special_defense"),
+        ("spe", "Speed", "speed"),
+    )
+    forms = [
+        {
+            "id": profile.form.canonical_id,
+            "name": profile.form.name,
+            "types": types_by_profile.get(profile.pk, []),
+            "is_list_legal": profile.pk in legal_profiles,
+            "is_mega": profile.form.is_mega,
+            "form_label": profile.form.form_label,
+            "base_id": profile.form.base_form.canonical_id,
+            "mega_ids": [
+                mega_id for mega_id, _ in megas_by_base.get(profile.form.base_form_id, [])
+            ],
+            "stats": [
+                _stat_values(stat_id, name, getattr(profile, field))
+                for stat_id, name, field in stat_names
+            ],
+            "ability_slots": ability_slots.get(profile.pk, []),
+            "move_ids": [move_id for move_id, _ in moves_by_profile.get(profile.pk, [])],
+        }
+        for profile in profiles
+    ]
+
+    def named_order(item: dict[str, Any]) -> tuple[str, str]:
+        return item["name"].casefold(), item["id"]
+
+    return {
+        "schema_version": DETAILS_SCHEMA,
+        "data_version": snapshot.version.pk,
+        "regulation_id": snapshot.regulation.canonical_id,
+        "forms": forms,
+        "abilities": sorted(abilities.values(), key=named_order),
+        "moves": sorted(moves.values(), key=named_order),
     }
 
 
