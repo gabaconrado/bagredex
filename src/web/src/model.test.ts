@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { FormSummary, PokedexIndex } from "./contracts";
+import type { FormSummary, MoveDetail, PokedexIndex } from "./contracts";
 import {
   addFilter,
   cycleSort,
+  cycleMoveSort,
   filteredForms,
   normalizeSearch,
   sortedForms,
   suggestions,
+  sortedMoves,
 } from "./model";
 
 const form = (
@@ -96,5 +98,74 @@ describe("Pokédex selectors", () => {
       key: "atk",
       direction: "ascending",
     });
+  });
+  it("sorts move domains with stable ties and a terminal Status power bucket", () => {
+    const move = (
+      id: string,
+      name: string,
+      type: string,
+      category: MoveDetail["category"],
+      base_power: number,
+    ): MoveDetail => ({
+      id,
+      name,
+      type: { id: type.toLowerCase(), name: type },
+      category,
+      base_power,
+      accuracy: 100,
+      always_hits: false,
+      pp: 5,
+      priority: 0,
+      target: "normal",
+      short_description: "",
+      description: "",
+      flags: [],
+    });
+    const moves = [
+      move("status", "Alpha", "Fire", "Status", 999),
+      move("zero", "Zero", "Water", "Physical", 0),
+      move("tie-b", "Beta", "Fire", "Special", 80),
+      move("tie-a", "Alpha", "Fire", "Special", 80),
+    ];
+    expect(sortedMoves(moves, null).map(({ id }) => id)).toEqual([
+      "status",
+      "zero",
+      "tie-b",
+      "tie-a",
+    ]);
+    expect(
+      sortedMoves(moves, { key: "type", direction: "ascending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["status", "tie-a", "tie-b", "zero"]);
+    expect(
+      sortedMoves(moves, { key: "type", direction: "descending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["zero", "status", "tie-a", "tie-b"]);
+    expect(
+      sortedMoves(moves, { key: "category", direction: "ascending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["zero", "tie-a", "tie-b", "status"]);
+    expect(
+      sortedMoves(moves, { key: "category", direction: "descending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["status", "tie-a", "tie-b", "zero"]);
+    expect(
+      sortedMoves(moves, { key: "power", direction: "ascending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["zero", "tie-a", "tie-b", "status"]);
+    expect(
+      sortedMoves(moves, { key: "power", direction: "descending" }).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["tie-a", "tie-b", "zero", "status"]);
+    const first = cycleMoveSort(null, "type");
+    expect(cycleMoveSort(first, "type")?.direction).toBe("descending");
+    expect(cycleMoveSort(cycleMoveSort(first, "type"), "type")).toBeNull();
+    expect(cycleMoveSort(first, "power")?.key).toBe("power");
   });
 });

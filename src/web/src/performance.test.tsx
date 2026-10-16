@@ -1,8 +1,19 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/preact";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/preact";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./app";
-import type { Bootstrap, FormSummary, PokedexIndex } from "./contracts";
-import { filteredForms, sortedForms, suggestions } from "./model";
+import type {
+  Bootstrap,
+  FormSummary,
+  MoveDetail,
+  PokedexIndex,
+} from "./contracts";
+import { filteredForms, sortedForms, sortedMoves, suggestions } from "./model";
 
 const forms: FormSummary[] = Array.from({ length: 351 }, (_, index) => ({
   id: `pokemon${index}`,
@@ -60,6 +71,163 @@ const bootstrap: Bootstrap = {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+it("keeps representative full-learnset move sorts within one frame", () => {
+  const moves: MoveDetail[] = Array.from({ length: 220 }, (_, index) => ({
+    id: `move${index}`,
+    name: `Move ${String(index).padStart(3, "0")}`,
+    type: {
+      id: index % 2 ? "fire" : "water",
+      name: index % 2 ? "Fire" : "Water",
+    },
+    category: index % 5 === 0 ? "Status" : index % 2 ? "Physical" : "Special",
+    base_power: index % 121,
+    accuracy: 100,
+    always_hits: false,
+    pp: 10,
+    priority: 0,
+    target: "normal",
+    short_description: "",
+    description: "",
+    flags: [],
+  }));
+  for (const key of ["type", "category", "power"] as const) {
+    const start = performance.now();
+    for (let run = 0; run < 100; run += 1)
+      sortedMoves(moves, {
+        key,
+        direction: run % 2 ? "ascending" : "descending",
+      });
+    expect((performance.now() - start) / 100).toBeLessThan(16);
+  }
+});
+
+it("commits warm full-learnset Type, Category, and Power sorts within one frame", async () => {
+  const moves: MoveDetail[] = Array.from({ length: 220 }, (_, moveIndex) => ({
+    id: `detail-move${moveIndex}`,
+    name: `Detail move ${String(moveIndex).padStart(3, "0")}`,
+    type: {
+      id: moveIndex % 2 ? "fire" : "water",
+      name: moveIndex % 2 ? "Fire" : "Water",
+    },
+    category:
+      moveIndex % 5 === 0 ? "Status" : moveIndex % 2 ? "Physical" : "Special",
+    base_power: moveIndex % 121,
+    accuracy: 100,
+    always_hits: false,
+    pp: 10,
+    priority: 0,
+    target: "normal",
+    short_description: "",
+    description: "",
+    flags: [],
+  }));
+  const measuredIndex: PokedexIndex = {
+    ...index,
+    forms: [
+      {
+        ...forms[0]!,
+        ability_ids: [],
+        move_ids: moves.map(({ id }) => id),
+      },
+    ],
+    moves: moves.map(({ id, name }) => ({ id, name })),
+    abilities: [],
+  };
+  const bulk = {
+    schema_version: "pokedex-details-v1",
+    data_version: "v1",
+    regulation_id: "m-c",
+    forms: [
+      {
+        id: forms[0]!.id,
+        name: forms[0]!.name,
+        is_list_legal: true,
+        is_mega: false,
+        form_label: "",
+        base_id: forms[0]!.id,
+        mega_ids: [],
+        types: forms[0]!.types,
+        stats: [
+          {
+            id: "hp",
+            name: "HP",
+            base: 40,
+            real: 115,
+            minimum: 115,
+            maximum: 147,
+          },
+        ],
+        ability_slots: [],
+        move_ids: moves.map(({ id }) => id),
+      },
+    ],
+    abilities: [],
+    moves,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(url === "/index" ? measuredIndex : bulk),
+      } as Response),
+    ),
+  );
+  render(<App bootstrap={bootstrap} />);
+  await screen.findByText("1 of 1 Pokémon");
+  fireEvent.click(screen.getByRole("button", { name: forms[0]!.name }));
+  await screen.findByRole("heading", { name: "Stats" });
+
+  const table = document.querySelector<HTMLElement>(".move-table")!;
+  const firstMove = () =>
+    document.querySelector<HTMLElement>(".move-row .move-name > span")
+      ?.textContent;
+  const durations: Record<string, number> = {};
+  for (const key of ["type", "category", "power"] as const) {
+    const button = screen.getByRole("button", {
+      name: `Sort moves by ${key}`,
+    });
+    // Warm the keyed reorder path, then return this header to inactive.
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
+    const expected = sortedMoves(moves, {
+      key,
+      direction: "ascending",
+    })[0]!.name;
+    const mutation = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        observer.disconnect();
+        resolve();
+      });
+      observer.observe(table, { childList: true, subtree: true });
+    });
+    const start = performance.now();
+    fireEvent.click(button);
+    await mutation;
+    durations[key] = performance.now() - start;
+    expect(firstMove()).toBe(expected);
+    expect(button.parentElement?.getAttribute("aria-sort")).toBe("ascending");
+    fireEvent.click(button);
+    fireEvent.click(button);
+  }
+  await waitFor(() =>
+    expect(Object.values(durations).every((duration) => duration < 16)).toBe(
+      true,
+    ),
+  );
+  console.info(
+    `move-sort-dom-performance ${JSON.stringify(
+      Object.fromEntries(
+        Object.entries(durations).map(([key, value]) => [
+          `${key}_ms`,
+          Number(value.toFixed(2)),
+        ]),
+      ),
+    )}`,
+  );
 });
 
 it("records M-C-scale synthetic render and enforces local selector timing", async () => {

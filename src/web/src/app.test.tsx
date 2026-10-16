@@ -109,6 +109,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Pokédex app", () => {
+  it("restores pointer sort origin but preserves the keyboard viewport", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const { container } = render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    const scroll = container.querySelector<HTMLElement>(".table-scroll")!;
+    const bst = screen.getByRole("button", { name: "BST" });
+    const header = bst.parentElement!;
+    scroll.scrollLeft = 4;
+    fireEvent.scroll(scroll);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    for (const direction of ["ascending", "descending", "none"]) {
+      scroll.scrollLeft = 9;
+      fireEvent.pointerDown(bst);
+      fireEvent.click(bst, { detail: 1 });
+      expect(scroll.scrollLeft).toBe(4);
+      expect(header.getAttribute("aria-sort")).toBe(direction);
+    }
+    scroll.scrollLeft = 7;
+    for (const direction of ["ascending", "descending", "none"]) {
+      fireEvent.click(bst, { detail: 0 });
+      expect(scroll.scrollLeft).toBe(7);
+      expect(header.getAttribute("aria-sort")).toBe(direction);
+    }
+  });
+
   it("paints the index before one bulk request and resolves the latest pending selection", async () => {
     const bulbasaur = {
       ...index.forms[0]!,
@@ -205,6 +237,15 @@ describe("Pokédex app", () => {
     await user.type(search, "char");
     await user.keyboard("{ArrowDown}{Enter}");
     await screen.findByRole("heading", { name: "Charizard" });
+    const selectedSprite = screen.getByRole("img", { name: "Charizard" });
+    const shinyControl = screen.getByRole("button", {
+      name: "Show shiny Charizard",
+    });
+    expect(
+      selectedSprite.compareDocumentPosition(shinyControl) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText("Shiny")).toBeNull();
     expect(
       [...document.querySelectorAll<SVGElement>(".icon")].every(
         (icon) => icon.getAttribute("fill") === "currentColor",
@@ -381,6 +422,42 @@ describe("Pokédex app", () => {
     expect(
       screen.getByRole("button", { name: "Switch to Charizard-Mega" }),
     ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show level-50 stat calculation information",
+      }),
+    );
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to Charizard-Mega-X" }),
+    );
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to base form Charizard" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show level-50 stat calculation information",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show shiny Charizard" }),
+    );
+    expect(screen.getByRole("tooltip")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show level-50 stat calculation information",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sort moves by type" }));
+    const typeHeader = screen
+      .getByRole("button", { name: /Sort moves by type/ })
+      .closest("[role=columnheader]")!;
+    expect(typeHeader.getAttribute("aria-sort")).toBe("ascending");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show normal Charizard" }),
+    );
+    expect(typeHeader.getAttribute("aria-sort")).toBe("ascending");
     const blaze = screen.getByRole("button", { name: "Blaze" });
     fireEvent.click(blaze);
     await screen.findByRole("dialog");
@@ -389,6 +466,12 @@ describe("Pokédex app", () => {
     );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).not.toBe(blaze);
+    expect(
+      screen
+        .getByRole("button", { name: "Sort moves by type" })
+        .closest("[role=columnheader]")
+        ?.getAttribute("aria-sort"),
+    ).toBe("none");
     expect(
       screen.getByRole("button", { name: "Return to base form Charizard" }),
     ).toBeTruthy();
@@ -432,6 +515,60 @@ describe("Pokédex app", () => {
     expect(statusRow.textContent).toContain("—");
     const zeroRow = screen.getByRole("row", { name: /Zero Move.*Physical.*0/ });
     expect(zeroRow.textContent).toMatch(/0$/);
+    const powerButton = screen.getByRole("button", {
+      name: "Sort moves by power",
+    });
+    const powerHeader = powerButton.closest("[role=columnheader]")!;
+    fireEvent.click(powerButton);
+    expect(powerHeader.getAttribute("aria-sort")).toBe("ascending");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Sort moves by power/ }),
+    );
+    expect(powerHeader.getAttribute("aria-sort")).toBe("descending");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Sort moves by power/ }),
+    );
+    expect(powerHeader.getAttribute("aria-sort")).toBe("none");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sort moves by category" }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /Sort moves by category/ })
+        .closest("[role=columnheader]")
+        ?.getAttribute("aria-sort"),
+    ).toBe("ascending");
+    expect(powerHeader.getAttribute("aria-sort")).toBe("none");
+  });
+  it("exposes the exact stats explanation by hover, focus, pin, outside click, and Escape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    await user.click(screen.getByRole("button", { name: "Charizard" }));
+    const info = await screen.findByRole("button", {
+      name: "Show level-50 stat calculation information",
+    });
+    expect(screen.getByRole("heading", { name: "Stats" })).toBeTruthy();
+    await user.hover(info);
+    expect(screen.getByRole("tooltip").textContent).toBe(
+      "Real: 0 SP, neutral nature. Min: 0 SP, hindering nature. Max: 32 SP, increasing nature.",
+    );
+    await user.unhover(info);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.click(info);
+    expect(info.getAttribute("aria-expanded")).toBe("true");
+    await user.click(document.body);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.click(info);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(document.activeElement).toBe(info);
   });
   it("exposes complete combobox relationships and closes with Escape", async () => {
     vi.stubGlobal(

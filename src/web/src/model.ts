@@ -1,4 +1,10 @@
-import type { FormSummary, NamedValue, PokedexIndex, Stats } from "./contracts";
+import type {
+  FormSummary,
+  MoveDetail,
+  NamedValue,
+  PokedexIndex,
+  Stats,
+} from "./contracts";
 
 export type FilterKind = "move" | "ability" | "type";
 export type Filter = NamedValue & { kind: FilterKind };
@@ -8,6 +14,11 @@ export type Sort = {
   direction: "ascending" | "descending";
 } | null;
 export type Suggestion = NamedValue & { kind: "pokemon" | FilterKind };
+export type MoveSortKey = "type" | "category" | "power";
+export type MoveSort = {
+  key: MoveSortKey;
+  direction: "ascending" | "descending";
+} | null;
 
 export const statLabels: Record<SortKey, string> = {
   hp: "HP",
@@ -87,6 +98,43 @@ export function cycleSort(sort: Sort, key: SortKey): Sort {
   if (!sort || sort.key !== key) return { key, direction: "ascending" };
   if (sort.direction === "ascending") return { key, direction: "descending" };
   return null;
+}
+
+export function cycleMoveSort(sort: MoveSort, key: MoveSortKey): MoveSort {
+  if (!sort || sort.key !== key) return { key, direction: "ascending" };
+  if (sort.direction === "ascending") return { key, direction: "descending" };
+  return null;
+}
+
+const compareText = (left: string, right: string) =>
+  normalizeSearch(left) < normalizeSearch(right)
+    ? -1
+    : normalizeSearch(left) > normalizeSearch(right)
+      ? 1
+      : 0;
+const moveTie = (left: MoveDetail, right: MoveDetail) =>
+  compareText(left.name, right.name) || compareText(left.id, right.id);
+const categoryRank = { Physical: 0, Special: 1, Status: 2 } as const;
+
+export function sortedMoves(moves: MoveDetail[], sort: MoveSort): MoveDetail[] {
+  if (!sort) return [...moves];
+  const direction = sort.direction === "ascending" ? 1 : -1;
+  return [...moves].sort((left, right) => {
+    let primary = 0;
+    if (sort.key === "type")
+      primary = compareText(left.type.name, right.type.name);
+    if (sort.key === "category")
+      primary =
+        categoryRank[left.category as keyof typeof categoryRank] -
+        categoryRank[right.category as keyof typeof categoryRank];
+    if (sort.key === "power") {
+      const leftStatus = left.category === "Status";
+      const rightStatus = right.category === "Status";
+      if (leftStatus !== rightStatus) return leftStatus ? 1 : -1;
+      if (!leftStatus) primary = left.base_power - right.base_power;
+    }
+    return primary ? primary * direction : moveTie(left, right);
+  });
 }
 
 export function addFilter(filters: Filter[], filter: Filter): Filter[] {

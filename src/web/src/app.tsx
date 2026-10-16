@@ -19,15 +19,19 @@ import { parseApiError, parseDetails, parseIndex } from "./contracts";
 import { CategoryIcon, MegaIcon, ShinyIcon } from "./icons";
 import {
   addFilter,
+  cycleMoveSort,
   cycleSort,
   filteredForms,
   sortedForms,
+  sortedMoves,
   statLabels,
   suggestions,
   type Filter,
   type Sort,
   type SortKey,
   type Suggestion,
+  type MoveSort,
+  type MoveSortKey,
 } from "./model";
 
 type LoadState = "loading" | "ready" | "error" | "stale";
@@ -272,8 +276,34 @@ function PokemonTable({
   onSelect: (id: string) => void;
   spriteTemplate: string;
 }) {
+  const scroll = useRef<HTMLDivElement>(null);
+  const settledScrollLeft = useRef(0);
+  const settleFrame = useRef<number | null>(null);
+  const pointerScrollLeft = useRef<number | null>(null);
+  const recordSettledScroll = () => {
+    if (settleFrame.current !== null) cancelAnimationFrame(settleFrame.current);
+    settleFrame.current = requestAnimationFrame(() => {
+      settleFrame.current = requestAnimationFrame(() => {
+        settledScrollLeft.current = scroll.current?.scrollLeft ?? 0;
+        settleFrame.current = null;
+      });
+    });
+  };
+  useEffect(
+    () => () => {
+      if (settleFrame.current !== null)
+        cancelAnimationFrame(settleFrame.current);
+    },
+    [],
+  );
+  const activateSort = (key: SortKey, pointer: boolean) => {
+    const origin = pointer ? pointerScrollLeft.current : null;
+    onSort(key);
+    if (origin !== null && scroll.current) scroll.current.scrollLeft = origin;
+    pointerScrollLeft.current = null;
+  };
   return (
-    <div class="table-scroll">
+    <div class="table-scroll" ref={scroll} onScroll={recordSettledScroll}>
       <table class="pokemon-table">
         <caption class="visually-hidden">Pokémon in this regulation</caption>
         <thead>
@@ -292,15 +322,18 @@ function PokemonTable({
                 <button
                   type="button"
                   class={sort?.key === key ? "sort is-active" : "sort"}
-                  onClick={() => onSort(key)}
+                  onPointerDown={() => {
+                    pointerScrollLeft.current = settledScrollLeft.current;
+                  }}
+                  onClick={(event) => activateSort(key, event.detail > 0)}
                 >
                   {statLabels[key]}
-                  <span aria-hidden="true">
+                  <span class="sort-indicator" aria-hidden="true">
                     {sort?.key === key
                       ? sort.direction === "ascending"
                         ? " ↑"
                         : " ↓"
-                      : ""}
+                      : " ↕"}
                   </span>
                 </button>
               </th>
@@ -444,6 +477,74 @@ function InformationDialog({
   );
 }
 
+const statExplanation =
+  "Real: 0 SP, neutral nature. Min: 0 SP, hindering nature. Max: 32 SP, increasing nature.";
+
+function StatsHeading() {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [suppressed, setSuppressed] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const open = !suppressed && (hovered || focused || pinned);
+  useEffect(() => {
+    if (!pinned) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) {
+        setPinned(false);
+        setSuppressed(true);
+      }
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [pinned]);
+  return (
+    <div
+      class="stats-heading"
+      ref={root}
+      onMouseEnter={() => {
+        setSuppressed(false);
+        setHovered(true);
+      }}
+      onMouseLeave={() => setHovered(false)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setPinned(false);
+          setSuppressed(true);
+        }
+      }}
+    >
+      <h3>Stats</h3>
+      <button
+        type="button"
+        class="info-button"
+        aria-label="Show level-50 stat calculation information"
+        aria-expanded={open}
+        aria-controls="stats-explanation"
+        title="Level-50 stat calculations"
+        onFocus={() => {
+          setSuppressed(false);
+          setFocused(true);
+        }}
+        onBlur={() => setFocused(false)}
+        onClick={() => {
+          setPinned((value) => {
+            setSuppressed(value);
+            return !value;
+          });
+        }}
+      >
+        i
+      </button>
+      {open && (
+        <span class="stats-tooltip" id="stats-explanation" role="tooltip">
+          {statExplanation}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RefinedDetailPane({
   selected,
   detailsState,
@@ -473,6 +574,8 @@ function RefinedDetailPane({
   onSelect: (id: string) => void;
   onRetry: () => void;
 }) {
+  const [moveSort, setMoveSort] = useState<MoveSort>(null);
+  useEffect(() => setMoveSort(null), [selected]);
   if (!selected)
     return (
       <aside class="detail-pane detail-pane--empty">
@@ -526,7 +629,10 @@ function RefinedDetailPane({
     value: maps.abilities.get(id)!,
     slot,
   }));
-  const moves = form.move_ids.map((id) => maps.moves.get(id)!);
+  const moves = sortedMoves(
+    form.move_ids.map((id) => maps.moves.get(id)!),
+    moveSort,
+  );
   const base = maps.forms.get(form.base_id)!;
   const megaChoices = form.is_mega
     ? [form]
@@ -539,43 +645,6 @@ function RefinedDetailPane({
           <h2 id="detail-title">{form.name}</h2>
           <Types values={form.types} />
         </div>
-        <div class="form-toggles" aria-label="Sprite and form controls">
-          <button
-            type="button"
-            class={shiny ? "icon-toggle is-active" : "icon-toggle"}
-            aria-pressed={shiny}
-            title={shiny ? "Show normal sprite" : "Show shiny sprite"}
-            aria-label={
-              shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
-            }
-            onClick={onShiny}
-          >
-            <ShinyIcon />
-            <span>Shiny</span>
-          </button>
-          {megaChoices.map((mega) => (
-            <button
-              type="button"
-              key={mega.id}
-              class={form.is_mega ? "icon-toggle is-active" : "icon-toggle"}
-              aria-pressed={form.is_mega}
-              title={
-                form.is_mega
-                  ? `Return to ${base.name}`
-                  : `Switch to ${mega.name}`
-              }
-              aria-label={
-                form.is_mega
-                  ? `Return to base form ${base.name}`
-                  : `Switch to ${mega.name}`
-              }
-              onClick={() => onSelect(form.is_mega ? base.id : mega.id)}
-            >
-              <MegaIcon />
-              <span>{mega.form_label || "Mega"}</span>
-            </button>
-          ))}
-        </div>
       </header>
       <img
         class="pokemon-sprite"
@@ -584,12 +653,46 @@ function RefinedDetailPane({
         height="384"
         alt={`${shiny ? "Shiny " : ""}${form.name}`}
       />
+      <div class="form-toggles" aria-label="Sprite and form controls">
+        <button
+          type="button"
+          class={shiny ? "icon-toggle is-active" : "icon-toggle"}
+          aria-pressed={shiny}
+          title={shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`}
+          aria-label={
+            shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
+          }
+          onClick={onShiny}
+        >
+          <ShinyIcon />
+        </button>
+        {megaChoices.map((mega) => (
+          <button
+            type="button"
+            key={mega.id}
+            class={form.is_mega ? "icon-toggle is-active" : "icon-toggle"}
+            aria-pressed={form.is_mega}
+            title={
+              form.is_mega
+                ? `Return to base form ${base.name}`
+                : `Switch to ${mega.name}`
+            }
+            aria-label={
+              form.is_mega
+                ? `Return to base form ${base.name}`
+                : `Switch to ${mega.name}`
+            }
+            onClick={() => onSelect(form.is_mega ? base.id : mega.id)}
+          >
+            <MegaIcon />
+            <span class="mega-marker">
+              {/[XYZ]$/.exec(mega.form_label)?.[0] ?? "M"}
+            </span>
+          </button>
+        ))}
+      </div>
       <section>
-        <h3>Stats at level 50</h3>
-        <p class="section-note">
-          Real: 0 SP, neutral nature. Min: 0 SP, hindering nature. Max: 32 SP,
-          increasing nature.
-        </p>
+        <StatsHeading key={form.id} />
         <div class="stat-grid" role="table" aria-label="Level 50 stats">
           <div class="stat-grid__header" role="row">
             <span role="columnheader">Stat</span>
@@ -632,9 +735,35 @@ function RefinedDetailPane({
         <div class="move-table" role="table" aria-label="Legal moves">
           <div class="move-table__header" role="row">
             <span role="columnheader">Name</span>
-            <span role="columnheader">Type</span>
-            <span role="columnheader">Category</span>
-            <span role="columnheader">Power</span>
+            {(["type", "category", "power"] as MoveSortKey[]).map((key) => (
+              <span
+                role="columnheader"
+                aria-sort={moveSort?.key === key ? moveSort.direction : "none"}
+                key={key}
+              >
+                <button
+                  type="button"
+                  class="move-sort"
+                  aria-label={`Sort moves by ${key}${moveSort?.key === key ? `, ${moveSort.direction}` : ""}`}
+                  onClick={() =>
+                    setMoveSort((value) => cycleMoveSort(value, key))
+                  }
+                >
+                  {key === "category" ? (
+                    <CategoryIcon category="Physical" />
+                  ) : (
+                    key[0]!.toUpperCase() + key.slice(1)
+                  )}
+                  <span class="sort-indicator" aria-hidden="true">
+                    {moveSort?.key === key
+                      ? moveSort.direction === "ascending"
+                        ? "↑"
+                        : "↓"
+                      : "↕"}
+                  </span>
+                </button>
+              </span>
+            ))}
           </div>
           {moves.map((move) => (
             <div class="move-row" role="row" key={move.id}>
@@ -853,7 +982,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
       </div>
     );
   return (
-    <div class="pokedex-app">
+    <div class="pokedex-app" data-details-state={detailsState}>
       <section class="pokedex-list" aria-labelledby="pokedex-title">
         <header class="pokedex-title">
           <div>
