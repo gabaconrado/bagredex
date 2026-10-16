@@ -20,7 +20,7 @@ def test_authenticated_home_renders_for_user(client: Client) -> None:
 
     response = client.get("/")
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     assert response.templates[0].name == "home.html"
 
 

@@ -21,6 +21,26 @@ compose_local() {
   podman compose -p "${compose_project}" -f "${base_compose}" -f "${local_compose}" "$@"
 }
 
+install_frontend() {
+  require_tools npm
+  npm --prefix "${script_dir}/src/web" ci --ignore-scripts --no-audit --no-fund
+}
+
+build_frontend() {
+  require_tools npm node
+  npm --prefix "${script_dir}/src/web" run build
+  node "${script_dir}/deploy/scripts/verify-vite-assets.mjs" \
+    "${script_dir}/src/web/static/web/dist/.vite/manifest.json" \
+    "${script_dir}/src/web/static/web/dist"
+}
+
+check_frontend() {
+  require_tools npm
+  npm --prefix "${script_dir}/src/web" run check
+  npm --prefix "${script_dir}/src/web" test
+  build_frontend
+}
+
 check_backend() {
   require_tools uv
   uv --directory "${script_dir}/src/backend" run ruff format --check .
@@ -55,7 +75,7 @@ check_deploy() {
 }
 
 run_local() {
-  require_tools podman
+  require_tools podman npm
   cleanup() {
     local status="${1:-$?}"
     trap - EXIT INT TERM
@@ -65,6 +85,8 @@ run_local() {
   trap 'cleanup "$?"' EXIT
   trap 'cleanup 130; exit 130' INT
   trap 'cleanup 143; exit 143' TERM
+  install_frontend
+  build_frontend
   compose_local up --build
   cleanup 0
 }
@@ -82,6 +104,9 @@ usage() {
     '' \
     'Commands:' \
     '  check                 Run all local checks and tests' \
+    '  check-web             Check, test, and build the Web GUI' \
+    '  build-web             Install locked dependencies and build the Web GUI' \
+    '  watch-web             Rebuild Web GUI assets when source files change' \
     '  check-backend         Run backend formatting, linting, typing, and Django checks' \
     '  test                  Run backend tests' \
     '  check-deploy          Run documentation, shell, and deployment tests' \
@@ -96,7 +121,10 @@ main() {
   [[ -n "${command}" ]] || { usage >&2; return 2; }
   shift
   case "${command}" in
-    check) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_backend; test_backend; check_deploy ;;
+    check) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_frontend; check_backend; test_backend; check_deploy ;;
+    check-web) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_frontend ;;
+    build-web) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; install_frontend; build_frontend ;;
+    watch-web) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; install_frontend; npm --prefix "${script_dir}/src/web" run build -- --watch ;;
     check-backend) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_backend ;;
     test) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; test_backend ;;
     check-deploy) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_deploy ;;

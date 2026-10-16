@@ -1,11 +1,37 @@
 {% extends "base.html" %}
+{% load vite %}
 
-{% block title %}Bagredex{% endblock %}
+{% block title %}Pokédex · Bagredex{% endblock %}
+
+{% block head %}
+  {% if pokedex_bootstrap %}{% vite_styles 'src/pokedex.tsx' %}{% endif %}
+{% endblock %}
+
+{% block header_controls %}
+  {% if pokedex_bootstrap %}
+    <nav class="regulation-nav" aria-label="Regulation">
+      {% for regulation in pokedex_bootstrap.regulations %}
+        <a href="{{ regulation.url }}" {% if regulation.id == pokedex_bootstrap.regulation.id %}aria-current="page"{% endif %}>{{ regulation.id|upper }}</a>
+      {% endfor %}
+    </nav>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
-  <section class="welcome" aria-labelledby="welcome-title">
-    <p class="welcome__eyebrow">Pokémon VGC companion</p>
-    <h1 id="welcome-title">Bagredex</h1>
-    <p class="welcome__message">Coming soon</p>
-  </section>
+  {% if pokedex_unavailable %}
+    <section class="state-card state-card--error" aria-labelledby="unavailable-title">
+      <p class="eyebrow">Pokémon VGC companion</p>
+      <h1 id="unavailable-title">Pokédex unavailable</h1>
+      <p>{{ pokedex_unavailable }}</p>
+      <p>Load and activate a Pokémon data release, then reload this page.</p>
+    </section>
+  {% else %}
+    {{ pokedex_bootstrap|json_script:"pokedex-bootstrap" }}
+    <div data-pokedex-root><section class="state-card" aria-live="polite"><h1>Pokédex</h1><p>Loading {{ pokedex_bootstrap.regulation.name }}…</p></section></div>
+    <noscript><p class="state-card state-card--error">JavaScript is required for interactive Pokédex search and details.</p></noscript>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {% if pokedex_bootstrap %}<script type="module" src="{% vite_asset 'src/pokedex.tsx' %}"></script>{% endif %}
 {% endblock %}

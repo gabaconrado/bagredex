@@ -1,5 +1,16 @@
 FROM ghcr.io/astral-sh/uv:0.8.15 AS uv
 
+FROM docker.io/library/node:26.7.0-bookworm-slim AS frontend-dependencies
+WORKDIR /app/src/web
+COPY src/web/package.json src/web/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
+FROM frontend-dependencies AS frontend-build
+COPY src/web/ ./
+COPY deploy/scripts/verify-vite-assets.mjs /tmp/verify-vite-assets.mjs
+RUN npm run build
+RUN node /tmp/verify-vite-assets.mjs static/web/dist/.vite/manifest.json static/web/dist
+
 FROM docker.io/library/python:3.14.7-slim-bookworm AS python-dependencies
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/app/.venv
 COPY --from=uv /uv /usr/local/bin/uv
@@ -10,6 +21,7 @@ RUN uv sync --frozen --no-dev
 FROM python-dependencies AS static-collection
 COPY src/backend/ /app/src/backend/
 COPY src/web/ /app/src/web/
+COPY --from=frontend-build /app/src/web/static/web/dist/ /app/src/web/static/web/dist/
 RUN DJANGO_SETTINGS_MODULE=bagredex.settings.local \
     uv run --no-dev python manage.py collectstatic --noinput
 
@@ -38,6 +50,7 @@ COPY src/data/overrides/ /app/src/data/overrides/
 COPY src/data/releases/ /app/src/data/releases/
 COPY src/data/schema/ /app/src/data/schema/
 COPY src/web/ /app/src/web/
+COPY --from=frontend-build /app/src/web/static/web/dist/ /app/src/web/static/web/dist/
 USER 10001:10001
 EXPOSE 8000
 CMD ["gunicorn", "--bind=0.0.0.0:8000", "--workers=1", "--threads=4", "bagredex.wsgi:application"]

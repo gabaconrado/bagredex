@@ -1,0 +1,1 @@
+"""Bagredex template tag library."""

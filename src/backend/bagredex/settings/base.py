@@ -43,6 +43,7 @@ TEMPLATES: list[dict[str, Any]] = [
         "DIRS": [WEB_ROOT / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
+            "libraries": {"vite": "bagredex.templatetags.vite"},
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
@@ -90,3 +91,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "/static/"
 STATIC_ROOT = Path(os.getenv("DJANGO_STATIC_ROOT", BACKEND_ROOT / "staticfiles"))
 STATICFILES_DIRS = [WEB_ROOT / "static"]
+
+POKEMON_DATA_RELEASES_ROOT = REPOSITORY_ROOT / "src" / "data" / "releases"
+VITE_MANIFEST_PATH = Path(
+    os.getenv(
+        "BAGREDEX_VITE_MANIFEST_PATH",
+        WEB_ROOT / "static" / "web" / "dist" / ".vite" / "manifest.json",
+    )
+)

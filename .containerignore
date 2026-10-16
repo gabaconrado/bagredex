@@ -13,3 +13,5 @@ src/backend/.venv
 src/backend/**/__pycache__
 src/data/fixtures
 src/data/tests
+src/web/node_modules
+src/web/static/web/dist

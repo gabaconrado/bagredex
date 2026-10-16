@@ -9,6 +9,21 @@ from . import views
 urlpatterns = [
     path("", views.home, name="home"),
     path(
+        "pokedex/data/<str:regulation>/index/",
+        views.pokedex_index,
+        name="pokedex-index",
+    ),
+    path(
+        "pokedex/data/<str:regulation>/pokemon/<str:form>/details/",
+        views.pokedex_form_detail,
+        name="pokedex-form-detail",
+    ),
+    path(
+        "pokedex/sprites/<str:version>/<str:form>/<str:variant>.webp",
+        views.pokedex_sprite,
+        name="pokedex-sprite",
+    ),
+    path(
         "login/",
         auth_views.LoginView.as_view(
             template_name="registration/login.html",

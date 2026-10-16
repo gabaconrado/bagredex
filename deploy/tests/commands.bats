@@ -17,8 +17,39 @@ teardown() {
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"run"* ]]
   [[ "${output}" == *"migrate"* ]]
+  [[ "${output}" == *"build-web"* ]]
+  [[ "${output}" == *"watch-web"* ]]
   [[ "${output}" == *"publish VERSION"* ]]
   [[ "${output}" == *"deploy VERSION"* ]]
+}
+
+@test "Web GUI build uses the exact lockfile and excludes generated build inputs" {
+  grep -Fq 'npm ci --ignore-scripts --no-audit --no-fund' \
+    "${REPOSITORY_ROOT}/deploy/Containerfile"
+  grep -Fq 'COPY --from=frontend-build /app/src/web/static/web/dist/' \
+    "${REPOSITORY_ROOT}/deploy/Containerfile"
+  grep -Fq 'verify-vite-assets.mjs static/web/dist/.vite/manifest.json static/web/dist' \
+    "${REPOSITORY_ROOT}/deploy/Containerfile"
+  grep -Fxq 'src/web/node_modules' "${REPOSITORY_ROOT}/.containerignore"
+  grep -Fxq 'src/web/static/web/dist' "${REPOSITORY_ROOT}/.containerignore"
+}
+
+@test "local run installs and builds frontend assets before compose startup" {
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "npm %s\\n" "$*" >>"${COMMAND_LOG}"' >"${MOCK_BIN}/npm"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/node"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "podman %s\\n" "$*" >>"${COMMAND_LOG}"' \
+    '[[ "$*" == *" up --build"* ]] && exit 7' \
+    'exit 0' >"${MOCK_BIN}/podman"
+  chmod +x "${MOCK_BIN}/node" "${MOCK_BIN}/npm" "${MOCK_BIN}/podman"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" \
+    "${REPOSITORY_ROOT}/bagredex.sh" run
+  [ "${status}" -eq 7 ]
+  [ "$(grep -n '^npm .* ci ' "${COMMAND_LOG}" | cut -d: -f1)" -lt \
+    "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | cut -d: -f1)" ]
+  [ "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | cut -d: -f1)" -lt \
+    "$(grep -n '^podman .* up --build$' "${COMMAND_LOG}" | cut -d: -f1)" ]
 }
 
 @test "unknown command is rejected" {
@@ -28,11 +59,13 @@ teardown() {
 }
 
 @test "run tears down local compose when startup fails" {
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/npm"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/node"
   printf '%s\n' '#!/usr/bin/env bash' \
     'printf "%s\\n" "$*" >>"${COMMAND_LOG}"' \
     '[[ "$*" == *" up --build"* ]] && exit 7' \
     'exit 0' >"${MOCK_BIN}/podman"
-  chmod +x "${MOCK_BIN}/podman"
+  chmod +x "${MOCK_BIN}/node" "${MOCK_BIN}/npm" "${MOCK_BIN}/podman"
   run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" \
     "${REPOSITORY_ROOT}/bagredex.sh" run
   [ "${status}" -eq 7 ]

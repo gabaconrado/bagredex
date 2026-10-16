@@ -1,0 +1,679 @@
+"""Request and contract tests for the regulation-aware Pokédex backend."""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any, cast
+from urllib.parse import parse_qs, urlsplit
+
+import pytest
+from django.db import connection
+from django.http import StreamingHttpResponse
+from django.test import Client
+from django.test.utils import CaptureQueriesContext
+
+from bagredex.accounts.models import User
+from bagredex.pokedex import PokedexUnavailable, Snapshot, form_detail
+from bagredex.pokemon_data.models import (
+    Ability,
+    AbilityProfile,
+    DataVersion,
+    LearnsetEntry,
+    MechanicsProfile,
+    MegaRelation,
+    Move,
+    MoveFlag,
+    MoveFlagRelation,
+    MoveProfile,
+    PokemonForm,
+    PokemonProfile,
+    PokemonProfileAbility,
+    PokemonProfileType,
+    Regulation,
+    RegulationMembership,
+    Sprite,
+    SpriteMapping,
+    Type,
+)
+from bagredex.pokemon_data.services import activate_pokemon_data
+
+VERSION_ID = "showdown-test-s1-i1-0123456789ab"
+
+
+def _version(identifier: str = VERSION_ID) -> DataVersion:
+    return DataVersion.objects.create(
+        id=identifier,
+        bundle_hash="a" * 64,
+        bundle_schema_version="1",
+        importer_version="1",
+        source_shape_version="test",
+        provenance={},
+        validation_summary={},
+        semantic_inventory={},
+        semantic_diff={},
+        manifest={},
+    )
+
+
+def _seal(version: DataVersion) -> None:
+    DataVersion.objects.filter(pk=version.pk).update(status=DataVersion.Status.LOADED)
+    version.status = DataVersion.Status.LOADED
+
+
+@pytest.fixture
+def pokedex_data(tmp_path: Path, settings: Any) -> dict[str, Any]:
+    """Create a small but relation-complete immutable snapshot."""
+    settings.POKEMON_DATA_RELEASES_ROOT = tmp_path
+    version = _version()
+    mechanics = MechanicsProfile.objects.create(
+        version=version,
+        canonical_id="champions",
+        level=50,
+        sp_minimum=0,
+        sp_maximum=32,
+        hp_formula="base + sp + 75",
+        other_formula="truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages={"hindering": 90, "neutral": 100, "increasing": 110},
+    )
+    regulations = {
+        identifier: Regulation.objects.create(
+            version=version,
+            canonical_id=identifier,
+            name=name,
+            showdown_format_id=identifier,
+            mod="champions",
+            ruleset=[],
+            mechanics_profile=mechanics,
+        )
+        for identifier, name in (("m-c", "Regulation M-C"), ("m-b", "Regulation M-B"))
+    }
+    fire = Type.objects.create(version=version, canonical_id="fire", name="Fire")
+    flying = Type.objects.create(version=version, canonical_id="flying", name="Flying")
+    ability = Ability.objects.create(version=version, canonical_id="blaze", name="Blaze")
+    hidden_ability = Ability.objects.create(
+        version=version, canonical_id="solarpower", name="Solar Power"
+    )
+    move = Move.objects.create(version=version, canonical_id="airslash", name="Air Slash")
+    early_move = Move.objects.create(version=version, canonical_id="acrobatics", name="acrobatics")
+    flag = MoveFlag.objects.create(version=version, canonical_id="protect")
+    contact = MoveFlag.objects.create(version=version, canonical_id="contact")
+    base_id = uuid.uuid4()
+    base = PokemonForm.objects.create(
+        id=base_id,
+        version=version,
+        canonical_id="charizard",
+        name="Charizard",
+        national_dex_number=6,
+        base_form_id=base_id,
+        form_label="",
+        is_mega=False,
+        sprite_id="charizard",
+    )
+    mega = PokemonForm.objects.create(
+        version=version,
+        canonical_id="charizardmegax",
+        name="Charizard-Mega-X",
+        national_dex_number=6,
+        base_form=base,
+        form_label="Mega-X",
+        is_mega=True,
+        sprite_id="charizardmegax",
+    )
+    mega_y = PokemonForm.objects.create(
+        version=version,
+        canonical_id="charizardmegay",
+        name="Charizard-Mega-Y",
+        national_dex_number=6,
+        base_form=base,
+        form_label="Mega-Y",
+        is_mega=True,
+        sprite_id="charizardmegay",
+    )
+    MegaRelation.objects.create(version=version, base_form=base, mega_form=mega)
+    MegaRelation.objects.create(version=version, base_form=base, mega_form=mega_y)
+    profiles: dict[tuple[str, str], PokemonProfile] = {}
+    for regulation_id, regulation in regulations.items():
+        ability_profile = AbilityProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            ability=ability,
+            short_description="Boosts Fire moves.",
+            description="Boosts Fire-type moves when HP is low.",
+        )
+        hidden_ability_profile = AbilityProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            ability=hidden_ability,
+            short_description="Boosts Special Attack.",
+            description="Boosts Special Attack in sunshine.",
+        )
+        move_profile = MoveProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            move=move,
+            type=flying,
+            category=MoveProfile.Category.SPECIAL,
+            base_power=0,
+            accuracy=None,
+            always_hits=True,
+            pp=15,
+            priority=0,
+            target="normal",
+            short_description="Never misses.",
+            description="This move never misses.",
+        )
+        MoveFlagRelation.objects.create(move_profile=move_profile, flag=flag)
+        early_move_profile = MoveProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            move=early_move,
+            type=flying,
+            category=MoveProfile.Category.PHYSICAL,
+            base_power=55,
+            accuracy=100,
+            always_hits=False,
+            pp=15,
+            priority=0,
+            target="normal",
+            short_description="Deals damage.",
+            description="Deals damage.",
+        )
+        MoveFlagRelation.objects.create(move_profile=early_move_profile, flag=flag)
+        MoveFlagRelation.objects.create(move_profile=early_move_profile, flag=contact)
+        for form, stats in (
+            (base, (78, 84, 78, 109, 85, 100)),
+            (mega, (78, 130, 111, 130, 85, 100)),
+            (mega_y, (78, 104, 78, 159, 115, 100)),
+        ):
+            profile = PokemonProfile.objects.create(
+                version=version,
+                regulation=regulation,
+                form=form,
+                hp=stats[0],
+                attack=stats[1],
+                defense=stats[2],
+                special_attack=stats[3],
+                special_defense=stats[4],
+                speed=stats[5],
+                bst=sum(stats),
+            )
+            profiles[(regulation_id, form.canonical_id)] = profile
+            PokemonProfileType.objects.create(profile=profile, type=fire, position=0)
+            PokemonProfileAbility.objects.create(
+                profile=profile, ability_profile=ability_profile, slot="0"
+            )
+            PokemonProfileAbility.objects.create(
+                profile=profile, ability_profile=hidden_ability_profile, slot="H"
+            )
+            for learned_move in (early_move_profile, move_profile):
+                LearnsetEntry.objects.create(
+                    profile=profile,
+                    move_profile=learned_move,
+                    form_resolution=LearnsetEntry.FormResolution.DIRECT,
+                    source_form=form,
+                    source_mod=LearnsetEntry.SourceMod.CHAMPIONS,
+                    source_kind=LearnsetEntry.SourceKind.DIRECT,
+                )
+        RegulationMembership.objects.create(profile=profiles[(regulation_id, mega.canonical_id)])
+    # Base is deliberately toggle-only in M-C and legal in M-B.
+    RegulationMembership.objects.create(profile=profiles[("m-b", base.canonical_id)])
+    large_profile = profiles[("m-c", base.canonical_id)]
+    for number in range(30):
+        extra_move = Move.objects.create(
+            version=version,
+            canonical_id=f"testmove{number}",
+            name=f"Test Move {number:02}",
+        )
+        extra_profile = MoveProfile.objects.create(
+            version=version,
+            regulation=regulations["m-c"],
+            move=extra_move,
+            type=flying,
+            category=MoveProfile.Category.STATUS,
+            base_power=0,
+            accuracy=100,
+            always_hits=False,
+            pp=10,
+            priority=0,
+            target="normal",
+            short_description="Test.",
+            description="Test.",
+        )
+        LearnsetEntry.objects.create(
+            profile=large_profile,
+            move_profile=extra_profile,
+            form_resolution=LearnsetEntry.FormResolution.DIRECT,
+            source_form=base,
+            source_mod=LearnsetEntry.SourceMod.CHAMPIONS,
+            source_kind=LearnsetEntry.SourceKind.DIRECT,
+        )
+    for form in (base, mega, mega_y):
+        mapping = SpriteMapping.objects.create(
+            version=version,
+            form=form,
+            pokeapi_pokemon_id=6,
+            pokeapi_identifier=form.canonical_id,
+            mapping_rule=SpriteMapping.Rule.NORMALIZED_IDENTIFIER,
+        )
+        for variant in Sprite.Variant.values:
+            relative = f"sprites/{variant}/{form.canonical_id}.webp"
+            path = tmp_path / VERSION_ID / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"RIFF-test-WEBP")
+            Sprite.objects.create(
+                version=version,
+                mapping=mapping,
+                variant=variant,
+                path=relative,
+                source_path="source.png",
+                sha256=("b" if variant == "normal" else "c") * 64,
+                width=384,
+                height=384,
+                provenance={},
+            )
+    _seal(version)
+    activate_pokemon_data(version.pk)
+    return {"version": version, "profiles": profiles, "release_root": tmp_path}
+
+
+@pytest.fixture
+def authenticated_client(client: Client) -> Client:
+    user = User.objects.create_user(username="leaf", password="test-password")
+    client.force_login(user)
+    return client
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "url",
+    (
+        "/pokedex/data/m-c/index/?version=x",
+        "/pokedex/data/m-c/pokemon/charizard/details/?version=x",
+        "/pokedex/sprites/x/charizard/normal.webp",
+    ),
+)
+def test_pokedex_endpoints_require_authentication(client: Client, url: str) -> None:
+    response = client.get(url)
+    assert response.status_code == 302
+    location = urlsplit(response.headers["Location"])
+    assert location.path == "/login/"
+    assert parse_qs(location.query) == {"next": [url]}
+
+
+@pytest.mark.django_db
+def test_home_bootstrap_and_regulation_validation(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    response = authenticated_client.get("/?regulation=m-b")
+    assert response.status_code == 200
+    bootstrap = response.context["pokedex_bootstrap"]
+    assert bootstrap["schema_version"] == "pokedex-bootstrap-v1"
+    assert bootstrap["active_version"] == VERSION_ID
+    assert bootstrap["regulation"] == {"id": "m-b", "name": "Regulation M-B"}
+    assert bootstrap["index_url"].endswith(f"/pokedex/data/m-b/index/?version={VERSION_ID}")
+    assert "__FORM__" in bootstrap["detail_url_template"]
+    assert authenticated_client.get("/?regulation=m-c&regulation=m-b").status_code == 400
+    assert authenticated_client.get("/?regulation=anything").status_code == 400
+
+
+@pytest.mark.django_db
+def test_home_and_index_report_missing_active_data(
+    authenticated_client: Client, settings: Any, tmp_path: Path
+) -> None:
+    settings.VITE_MANIFEST_PATH = tmp_path / "missing-manifest.json"
+    response = authenticated_client.get("/")
+    assert response.status_code == 503
+    assert response.context["pokedex_unavailable"]
+    response = authenticated_client.get("/pokedex/data/m-c/index/?version=missing")
+    assert response.status_code == 503
+    assert response.json()["code"] == "data-unavailable"
+
+
+@pytest.mark.django_db
+def test_index_contract_scoping_order_etag_and_query_bound(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    url = f"/pokedex/data/m-b/index/?version={VERSION_ID}"
+    with CaptureQueriesContext(connection) as queries:
+        response = authenticated_client.get(url)
+    # Two authentication/session queries plus six Pokédex queries, independent of row count.
+    assert len(queries) <= 8
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, no-cache"
+    payload = response.json()
+    assert payload["schema_version"] == "pokedex-index-v1"
+    assert [form["id"] for form in payload["forms"]] == ["charizard", "charizardmegax"]
+    assert payload["forms"][0]["types"] == [{"id": "fire", "name": "Fire"}]
+    assert payload["forms"][0]["ability_ids"] == ["blaze", "solarpower"]
+    assert payload["forms"][0]["move_ids"] == ["acrobatics", "airslash"]
+    assert payload["moves"] == [
+        {"id": "acrobatics", "name": "acrobatics"},
+        {"id": "airslash", "name": "Air Slash"},
+    ]
+    assert payload["abilities"] == [
+        {"id": "blaze", "name": "Blaze"},
+        {"id": "solarpower", "name": "Solar Power"},
+    ]
+    assert payload["types"] == [{"id": "fire", "name": "Fire"}]
+    cached = authenticated_client.get(url, HTTP_IF_NONE_MATCH=response.headers["ETag"])
+    assert cached.status_code == 304
+    assert cached.content == b""
+    other = authenticated_client.get(f"/pokedex/data/m-c/index/?version={VERSION_ID}").json()
+    assert [form["id"] for form in other["forms"]] == ["charizardmegax"]
+
+
+@pytest.mark.django_db
+def test_detail_contract_toggle_only_stats_moves_and_query_bound(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    url = f"/pokedex/data/m-c/pokemon/charizard/details/?version={VERSION_ID}"
+    with CaptureQueriesContext(connection) as queries:
+        response = authenticated_client.get(url)
+    # Two authentication/session queries plus ten detail queries, independent of learnset size.
+    assert len(queries) <= 12
+    form = response.json()["form"]
+    assert form["is_list_legal"] is False
+    assert form["form_switches"] == {
+        "base": {"id": "charizard", "name": "Charizard"},
+        "megas": [
+            {"id": "charizardmegax", "name": "Charizard-Mega-X"},
+            {"id": "charizardmegay", "name": "Charizard-Mega-Y"},
+        ],
+    }
+    assert form["sprites"]["normal"].endswith(
+        f"/pokedex/sprites/{VERSION_ID}/charizard/normal.webp"
+    )
+    assert form["stats"][0] == {
+        "id": "hp",
+        "name": "HP",
+        "base": 78,
+        "real": 153,
+        "minimum": 153,
+        "maximum": 185,
+    }
+    assert form["stats"][1] == {
+        "id": "atk",
+        "name": "Attack",
+        "base": 84,
+        "real": 104,
+        "minimum": 93,
+        "maximum": 149,
+    }
+    assert [ability["slot"] for ability in form["abilities"]] == ["0", "H"]
+    assert [move["id"] for move in form["moves"]] == [
+        "acrobatics",
+        "airslash",
+        *(f"testmove{number}" for number in range(30)),
+    ]
+    assert form["moves"][0]["flags"] == ["contact", "protect"]
+    assert form["moves"][1]["base_power"] == 0
+    assert form["moves"][1]["accuracy"] is None
+    assert form["moves"][1]["always_hits"] is True
+    assert form["moves"][0]["priority"] == 0
+    assert form["moves"][1]["flags"] == ["protect"]
+
+
+@pytest.mark.django_db
+def test_detail_query_bound_is_independent_of_large_learnset(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    with CaptureQueriesContext(connection) as queries:
+        response = authenticated_client.get(
+            f"/pokedex/data/m-c/pokemon/charizard/details/?version={VERSION_ID}"
+        )
+    assert response.status_code == 200
+    assert len(response.json()["form"]["moves"]) == 32
+    assert len(queries) <= 12
+
+
+@pytest.mark.django_db
+def test_stale_version_and_boundary_errors(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    stale = authenticated_client.get("/pokedex/data/m-c/index/?version=old")
+    assert stale.status_code == 409
+    assert stale.json() == {
+        "code": "data-version-changed",
+        "message": "The active Pokémon data changed. Reload the Pokédex.",
+        "active_version": VERSION_ID,
+        "url": "/?regulation=m-c",
+    }
+    assert authenticated_client.get("/pokedex/data/m-c/index/").status_code == 400
+    assert (
+        authenticated_client.get(
+            f"/pokedex/data/m-c/index/?version={VERSION_ID}&version={VERSION_ID}"
+        ).status_code
+        == 400
+    )
+    assert authenticated_client.get("/pokedex/data/not-real/index/?version=old").status_code == 400
+    assert (
+        authenticated_client.get(
+            f"/pokedex/data/m-c/pokemon/Bad-ID/details/?version={VERSION_ID}"
+        ).status_code
+        == 400
+    )
+    assert (
+        authenticated_client.get(
+            f"/pokedex/data/m-c/pokemon/missing/details/?version={VERSION_ID}"
+        ).status_code
+        == 404
+    )
+    assert (
+        authenticated_client.post(f"/pokedex/data/m-c/index/?version={VERSION_ID}").status_code
+        == 405
+    )
+
+
+@pytest.mark.django_db
+def test_missing_detail_ignores_conditional_etag(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    url = f"/pokedex/data/m-c/pokemon/missing/details/?version={VERSION_ID}"
+    assert authenticated_client.get(url, HTTP_IF_NONE_MATCH="*").status_code == 404
+
+
+@pytest.mark.django_db
+def test_incompatible_mechanics_fail_closed(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    version = pokedex_data["version"]
+    regulation = Regulation.objects.select_related("mechanics_profile").get(
+        version=version, canonical_id="m-c"
+    )
+    regulation.mechanics_profile.sp_maximum = 31
+    with pytest.raises(PokedexUnavailable, match="unsupported stat mechanics"):
+        form_detail(Snapshot(version=version, regulation=regulation), "charizard")
+
+
+@pytest.mark.django_db
+def test_activation_changes_etag_and_rejects_old_page_version(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    old_url = f"/pokedex/data/m-c/index/?version={VERSION_ID}"
+    old_response = authenticated_client.get(old_url)
+    new_version = _version("showdown-next-s1-i1-fedcba987654")
+    mechanics = MechanicsProfile.objects.create(
+        version=new_version,
+        canonical_id="champions",
+        level=50,
+        sp_minimum=0,
+        sp_maximum=32,
+        hp_formula="base + sp + 75",
+        other_formula="truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages={"hindering": 90, "neutral": 100, "increasing": 110},
+    )
+    Regulation.objects.create(
+        version=new_version,
+        canonical_id="m-c",
+        name="New M-C",
+        showdown_format_id="m-c",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=mechanics,
+    )
+    _seal(new_version)
+    activate_pokemon_data(new_version.pk)
+    stale = authenticated_client.get(old_url, HTTP_IF_NONE_MATCH=old_response.headers["ETag"])
+    assert stale.status_code == 409
+    assert authenticated_client.get("/pokedex/data/m-b/index/?version=old").status_code == 409
+    assert (
+        authenticated_client.get(f"/pokedex/data/m-b/index/?version={new_version.pk}").status_code
+        == 404
+    )
+    current = authenticated_client.get(
+        f"/pokedex/data/m-c/index/?version={new_version.pk}",
+        HTTP_IF_NONE_MATCH=old_response.headers["ETag"],
+    )
+    assert current.status_code == 200
+    assert current.headers["ETag"] != old_response.headers["ETag"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", ("index", "detail", "sprite"))
+def test_pokedex_read_routes_reject_non_get(
+    authenticated_client: Client, pokedex_data: dict[str, Any], endpoint: str
+) -> None:
+    urls = {
+        "index": f"/pokedex/data/m-c/index/?version={VERSION_ID}",
+        "detail": f"/pokedex/data/m-c/pokemon/charizard/details/?version={VERSION_ID}",
+        "sprite": f"/pokedex/sprites/{VERSION_ID}/charizard/normal.webp",
+    }
+    response = authenticated_client.post(urls[endpoint])
+    assert response.status_code == 405
+    assert response.headers["Allow"] == "GET"
+
+
+@pytest.mark.django_db
+def test_sprite_response_is_exact_private_and_path_safe(
+    authenticated_client: Client, pokedex_data: dict[str, Any], tmp_path: Path
+) -> None:
+    url = f"/pokedex/sprites/{VERSION_ID}/charizard/normal.webp"
+    response = authenticated_client.get(url)
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "image/webp"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Cache-Control"] == "private, max-age=31536000, immutable"
+    content = cast(Iterable[bytes], cast(StreamingHttpResponse, response).streaming_content)
+    assert b"".join(content) == b"RIFF-test-WEBP"
+    cached = authenticated_client.get(url, HTTP_IF_NONE_MATCH='"' + "b" * 64 + '"')
+    assert cached.status_code == 304
+    shiny = authenticated_client.get(f"/pokedex/sprites/{VERSION_ID}/charizard/shiny.webp")
+    assert shiny.status_code == 200
+    assert shiny.headers["ETag"] == '"' + "c" * 64 + '"'
+    assert (
+        authenticated_client.get(
+            f"/pokedex/sprites/{VERSION_ID}/charizard/invalid.webp"
+        ).status_code
+        == 400
+    )
+    assert (
+        authenticated_client.get(f"/pokedex/sprites/{VERSION_ID}/Bad-ID/normal.webp").status_code
+        == 400
+    )
+    assert (
+        authenticated_client.get("/pokedex/sprites/missing/charizard/normal.webp").status_code
+        == 404
+    )
+    sprite = Sprite.objects.get(mapping__form__canonical_id="charizard", variant="normal")
+    sprite_file = tmp_path / VERSION_ID / sprite.path
+    sprite_file.unlink()
+    assert authenticated_client.get(url).status_code == 404
+
+
+@pytest.mark.django_db
+def test_retained_version_sprite_is_served(
+    authenticated_client: Client, pokedex_data: dict[str, Any]
+) -> None:
+    retained = _version("retained-version")
+    retained_id = uuid.uuid4()
+    form = PokemonForm.objects.create(
+        id=retained_id,
+        version=retained,
+        canonical_id="charizard",
+        name="Charizard",
+        national_dex_number=6,
+        base_form_id=retained_id,
+        form_label="",
+        is_mega=False,
+        sprite_id="charizard",
+    )
+    mapping = SpriteMapping.objects.create(
+        version=retained,
+        form=form,
+        pokeapi_pokemon_id=6,
+        pokeapi_identifier="charizard",
+        mapping_rule=SpriteMapping.Rule.NORMALIZED_IDENTIFIER,
+    )
+    relative = "sprites/normal/charizard.webp"
+    sprite_path = pokedex_data["release_root"] / retained.pk / relative
+    sprite_path.parent.mkdir(parents=True)
+    sprite_path.write_bytes(b"retained")
+    Sprite.objects.create(
+        version=retained,
+        mapping=mapping,
+        variant="normal",
+        path=relative,
+        source_path="source.png",
+        sha256="d" * 64,
+        width=384,
+        height=384,
+        provenance={},
+    )
+    outside = pokedex_data["release_root"] / "outside.webp"
+    outside.write_bytes(b"secret")
+    symlink = pokedex_data["release_root"] / retained.pk / "sprites" / "normal" / "escape.webp"
+    symlink.symlink_to(outside)
+    unsafe_paths = {
+        "absoluteform": str(outside),
+        "traversalform": "../../outside.webp",
+        "symlinkform": "sprites/normal/escape.webp",
+    }
+    for form_id, declared_path in unsafe_paths.items():
+        unsafe_id = uuid.uuid4()
+        unsafe_form = PokemonForm.objects.create(
+            id=unsafe_id,
+            version=retained,
+            canonical_id=form_id,
+            name=form_id,
+            national_dex_number=1,
+            base_form_id=unsafe_id,
+            form_label="",
+            is_mega=False,
+            sprite_id=form_id,
+        )
+        unsafe_mapping = SpriteMapping.objects.create(
+            version=retained,
+            form=unsafe_form,
+            pokeapi_pokemon_id=1,
+            pokeapi_identifier=form_id,
+            mapping_rule=SpriteMapping.Rule.NORMALIZED_IDENTIFIER,
+        )
+        Sprite.objects.create(
+            version=retained,
+            mapping=unsafe_mapping,
+            variant="normal",
+            path=declared_path,
+            source_path="source.png",
+            sha256="e" * 64,
+            width=384,
+            height=384,
+            provenance={},
+        )
+    _seal(retained)
+    response = authenticated_client.get("/pokedex/sprites/retained-version/charizard/normal.webp")
+    assert response.status_code == 200
+    assert (
+        authenticated_client.get(
+            "/pokedex/sprites/retained-version/charizard/shiny.webp"
+        ).status_code
+        == 404
+    )
+    for form_id in unsafe_paths:
+        assert (
+            authenticated_client.get(
+                f"/pokedex/sprites/retained-version/{form_id}/normal.webp"
+            ).status_code
+            == 404
+        )
