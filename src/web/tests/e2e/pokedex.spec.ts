@@ -626,6 +626,64 @@ test("navigates Mega forms in both directions and replaces detail information", 
     "position",
     "absolute",
   );
+  const statusCategory = moveTable.getByText("Status", { exact: true }).first();
+  const statusRow = statusCategory.locator("xpath=ancestor::*[@role='row'][1]");
+  const statusIcon = statusRow.locator(".move-category img.icon");
+  await expect(statusIcon).toHaveAttribute("src", /status-move-[^/]+\.svg$/);
+  await expect(statusIcon).toHaveAttribute("alt", "");
+  expect(
+    await statusIcon.evaluate((image) => ({
+      present: image.hasAttribute("aria-hidden"),
+      value: image.getAttribute("aria-hidden"),
+    })),
+  ).toEqual({ present: true, value: expect.stringMatching(/^(?:true)?$/) });
+  await expect(statusIcon).toHaveJSProperty("complete", true);
+  const [statusIconBox, statusContrast] = await Promise.all([
+    statusIcon.boundingBox(),
+    statusRow.evaluate((row) => {
+      const rgb = (value: string) =>
+        (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      const luminance = ([red, green, blue]: number[]) => {
+        const channels = [red!, green!, blue!].map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return (
+          0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!
+        );
+      };
+      const ratio = (left: number[], right: number[]) => {
+        const [bright, dark] = [luminance(left), luminance(right)].sort(
+          (a, b) => b - a,
+        );
+        return (bright! + 0.05) / (dark! + 0.05);
+      };
+      const deep = [0x4f, 0x6f, 0x82];
+      const white = [255, 255, 255];
+      const background = rgb(getComputedStyle(row).backgroundColor);
+      return {
+        background: getComputedStyle(row).backgroundColor,
+        deepToBackground: ratio(deep, background),
+        whiteToDeep: ratio(white, deep),
+      };
+    }),
+  ]);
+  expect(statusIconBox?.width).toBeGreaterThanOrEqual(19.99);
+  expect(statusIconBox?.width).toBeLessThanOrEqual(20.01);
+  expect(statusIconBox?.height).toBeGreaterThanOrEqual(19.99);
+  expect(statusIconBox?.height).toBeLessThanOrEqual(20.01);
+  expect(statusContrast.deepToBackground).toBeGreaterThanOrEqual(3);
+  expect(statusContrast.whiteToDeep).toBeGreaterThanOrEqual(3);
+  await testInfo.attach("status-icon-real-row", {
+    body: await statusRow.screenshot(),
+    contentType: "image/png",
+  });
+  await testInfo.attach("status-icon-contrast", {
+    body: Buffer.from(JSON.stringify(statusContrast, null, 2)),
+    contentType: "application/json",
+  });
   const inactiveMoveIndicator = moveTable
     .getByRole("button", { name: "Sort moves by category" })
     .locator(".sort-indicator");
