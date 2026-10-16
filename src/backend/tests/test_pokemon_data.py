@@ -498,8 +498,8 @@ def test_bundle_reader_keeps_legality_distinct_from_toggle_profiles(tmp_path: Pa
     assert "m-b:examplemonmega" not in bundle.semantic_inventory["regulation_memberships.json"]
 
 
-def test_production_bundle_reader_requires_pinned_real_counts(tmp_path: Path) -> None:
-    with pytest.raises(BundleReadError, match="pinned bundle count forms"):
+def test_production_bundle_reader_rejects_non_allowlisted_bundle(tmp_path: Path) -> None:
+    with pytest.raises(BundleReadError, match="not an allowlisted pinned release"):
         read_bundle(_bundle(tmp_path))
 
 
@@ -630,19 +630,78 @@ def test_bundle_reader_rejects_missing_nested_fields_with_context(tmp_path: Path
 
 def test_committed_release_has_pinned_real_counts() -> None:
     releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
-    bundles = sorted(path for path in releases.glob("showdown-*") if path.is_dir())
-    if not bundles:
+    expected_bundle = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+    if not expected_bundle.is_dir():
         pytest.skip("the data owner has not published the reviewed release yet")
 
-    bundle = read_bundle(bundles[-1])
+    bundle = read_bundle(expected_bundle)
 
     for name, expected in EXPECTED_PINNED_COUNTS.items():
         assert bundle.manifest["counts"][name] == expected
     assert bundle.manifest["counts"]["legal_forms_by_regulation"] == {
-        "m-b": 316,
-        "m-c": 351,
+        "m-b": 314,
+        "m-c": 349,
     }
+    memberships = json.loads(
+        (expected_bundle / "regulation_memberships.json").read_text(encoding="utf-8")
+    )
+    member_keys = {
+        (membership["regulation_id"], membership["form_id"]) for membership in memberships
+    }
+    assert not member_keys.intersection(
+        {
+            (regulation_id, form_id)
+            for regulation_id in ("m-b", "m-c")
+            for form_id in ("magearnamega", "magearnaoriginalmega")
+        }
+    )
     assert bundle.provenance["showdown"]["source_counts"] == EXPECTED_SOURCE_COUNTS
+
+
+def test_current_and_preceding_committed_releases_remain_readable_for_rollback() -> None:
+    releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
+    current = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+    preceding = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
+    if not current.is_dir() or not preceding.is_dir():
+        pytest.skip("the current and preceding reviewed releases are both required")
+
+    assert read_bundle(current).identifier == current.name
+    assert read_bundle(preceding).identifier == preceding.name
+
+
+def test_arbitrary_valid_i1_bundle_is_not_an_allowlisted_runtime_bundle(tmp_path: Path) -> None:
+    release = _bundle(tmp_path)
+    assert read_bundle(release, require_pinned=False).identifier == release.name
+
+    with pytest.raises(BundleReadError, match="not an allowlisted pinned release"):
+        read_bundle(release)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_committed_releases_load_and_support_audited_rollback_and_reactivation(
+    settings: Any,
+) -> None:
+    releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
+    current_path = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+    preceding_path = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
+    if not current_path.is_dir() or not preceding_path.is_dir():
+        pytest.skip("the current and preceding reviewed releases are both required")
+    settings.POKEMON_DATA_RELEASES_ROOT = releases
+
+    current = load_pokemon_data(current_path).version
+    preceding = load_pokemon_data(preceding_path).version
+    activate_pokemon_data(current.pk)
+    rollback = activate_pokemon_data(preceding.pk)
+    reactivation = activate_pokemon_data(current.pk)
+
+    assert rollback.previous_identifier == current.pk
+    assert rollback.new_identifier == preceding.pk
+    assert reactivation.previous_identifier == preceding.pk
+    assert reactivation.new_identifier == current.pk
+    assert ActiveDataVersion.objects.get().version_id == current.pk
+    assert DataActivation.objects.count() == 3
+    assert RegulationMembership.objects.filter(profile__version=current).count() == 663
+    assert RegulationMembership.objects.filter(profile__version=preceding).count() == 667
 
 
 def test_build_command_preserves_paths_and_delegates_to_data_importer(

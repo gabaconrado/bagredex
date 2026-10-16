@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "1"
-IMPORTER_VERSION = "1"
+IMPORTER_VERSION = "2"
+LEGACY_IMPORTER_VERSION = "1"
 SOURCE_SHAPE_VERSION = "showdown-champions-1"
 EXPECTED_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_COMMIT_DATE = "2026-10-13"
@@ -29,7 +30,8 @@ SHOWDOWN_NOTICE_PATH = "POKEMON-SHOWDOWN-LICENSE.txt"
 SHOWDOWN_NOTICE_SHA256 = "b2002a9fd52ba8db3783a05fbdebfb09c34fd09513b90f6b390a2c0dfbc93ed0"
 WEBP_TOOL_VERSION = "1.3.2"
 SPRITE_MAPPING_VERSION = "pokeapi-csv-v1"
-SPRITE_MAPPING_SHA256 = "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"
+SPRITE_MAPPING_SHA256 = "2fd464a37c34f7c543ebd153f39ca6c47f3d6788617b932db6f75f640a537602"
+LEGACY_SPRITE_MAPPING_SHA256 = "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"
 SPRITE_EXCEPTIONS = {
     "aegislash": "aegislash-shield",
     "basculegion": "basculegion-male",
@@ -117,6 +119,12 @@ ALLOWED_MOVE_FLAGS = frozenset(
     }
 )
 EXPECTED_PINNED_COUNTS = {
+    "forms": 350, "types": 18, "memberships": 663, "profiles": 700,
+    "abilities": 216, "ability_profiles": 432, "moves": 510, "move_profiles": 1020,
+    "move_flags": 37, "move_flag_relations": 3928, "learnsets": 43429,
+    "mega_relations": 82, "sprites": 700, "sprite_mappings": 350,
+}
+LEGACY_PINNED_COUNTS = {
     "forms": 353, "types": 18, "memberships": 667, "profiles": 706,
     "abilities": 217, "ability_profiles": 434, "moves": 510, "move_profiles": 1020,
     "move_flags": 37, "move_flag_relations": 3928, "learnsets": 43891,
@@ -852,7 +860,12 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     mapping_by_form = {value["form_id"]: value for value in sprite_mappings}
     if set(mapping_by_form) != form_ids:
         raise BundleError("sprite_mappings.json: every included form requires one mapping")
-    if hashlib.sha256(_canonical_bytes(sprite_mappings)).hexdigest() != SPRITE_MAPPING_SHA256:
+    mapping_hash = hashlib.sha256(_canonical_bytes(sprite_mappings)).hexdigest()
+    expected_mapping_hash = (
+        LEGACY_SPRITE_MAPPING_SHA256 if len(forms) == LEGACY_PINNED_COUNTS["forms"]
+        else SPRITE_MAPPING_SHA256
+    )
+    if mapping_hash != expected_mapping_hash:
         raise BundleError("sprite_mappings.json: pinned exact mapping hash changed")
     for form_id, mapping in mapping_by_form.items():
         expected_identifier = SPRITE_EXCEPTIONS.get(form_id)
@@ -925,7 +938,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     if provenance["sprites"] != {
         "revision": EXPECTED_SPRITES_REVISION, "clean_tree": True,
         "family": "sprites/pokemon/other/home", "mapping_rule_version": SPRITE_MAPPING_VERSION,
-        "mapping_revision": EXPECTED_POKEAPI_REVISION, "mapping_sha256": SPRITE_MAPPING_SHA256,
+        "mapping_revision": EXPECTED_POKEAPI_REVISION, "mapping_sha256": expected_mapping_hash,
         "cwebp_version": WEBP_TOOL_VERSION,
         "cwebp_args": list(CWEBP_ARGUMENTS), "license": "license-not-supplied",
         "mapping_exceptions": dict(sorted(SPRITE_EXCEPTIONS.items())),
@@ -952,6 +965,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         raise BundleError("provenance.json: unexpected PokeAPI sprites revision")
     if provenance.get("pokeapi_mapping", {}).get("revision") != EXPECTED_POKEAPI_REVISION:
         raise BundleError("provenance.json: unexpected PokeAPI mapping revision")
+    legacy_release = Counter(x["regulation_id"] for x in memberships) == {"m-b": 316, "m-c": 351}
     summary = {
         "status": "valid", "errors": [], "warnings": [], "overlays": provenance["overlays"],
         "source_counts": provenance["showdown"]["source_counts"],
@@ -973,7 +987,9 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "move_flag_usage": dict(sorted(Counter(value["flag_id"] for value in move_flag_relations).items())),
         },
         "ignored_source_categories": {
-            "illegal_or_past_forms": "excluded by the effective regulation FormatsData table",
+            (
+                "illegal_or_past_forms" if legacy_release else "illegal_or_nonstandard_forms"
+            ): "excluded by the effective regulation FormatsData table",
             "unreferenced_moves_and_abilities": "not attached to an included effective form profile",
             "non_home_sprites": "outside the approved PokeAPI HOME family",
             "source_pngs": "converted to deterministic static WebP derivatives rather than shipped",
@@ -983,24 +999,36 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "mega_relation_percent": 100, "normal_sprite_percent": 100, "shiny_sprite_percent": 100,
         },
     }
-    for key, expected in EXPECTED_PINNED_COUNTS.items():
+    expected_counts = LEGACY_PINNED_COUNTS if legacy_release else EXPECTED_PINNED_COUNTS
+    for key, expected in expected_counts.items():
         if summary["counts"].get(key) != expected:
             raise BundleError(f"pinned bundle count {key}: expected {expected}, found {summary['counts'].get(key)}")
-    if summary["counts"]["legal_forms_by_regulation"] != {"m-b": 316, "m-c": 351}:
+    expected_memberships = {"m-b": 316, "m-c": 351} if legacy_release else {"m-b": 314, "m-c": 349}
+    if summary["counts"]["legal_forms_by_regulation"] != expected_memberships:
         raise BundleError("pinned bundle regulation membership counts changed")
-    if summary["counts"]["learnsets_by_regulation"] != {"m-b": 21946, "m-c": 21945}:
+    expected_learnsets = (
+        {"m-b": 21946, "m-c": 21945}
+        if legacy_release else {"m-b": 21715, "m-c": 21714}
+    )
+    if summary["counts"]["learnsets_by_regulation"] != expected_learnsets:
         raise BundleError("pinned bundle regulation learnset counts changed")
-    if summary["counts"]["learnsets_by_form_resolution"] != {
-        "base-to-mega": 11270, "changed-form": 932, "direct": 31689,
-    }:
+    expected_resolution = (
+        {"base-to-mega": 11270, "changed-form": 932, "direct": 31689}
+        if legacy_release else {"base-to-mega": 10962, "changed-form": 932, "direct": 31535}
+    )
+    if summary["counts"]["learnsets_by_form_resolution"] != expected_resolution:
         raise BundleError("pinned bundle learnset form-resolution counts changed")
-    if summary["counts"]["learnsets_by_source_mod"] != {
-        "base": 676, "champions": 43164, "championsregmb": 51,
-    }:
+    expected_source_mod = (
+        {"base": 676, "champions": 43164, "championsregmb": 51}
+        if legacy_release else {"base": 214, "champions": 43164, "championsregmb": 51}
+    )
+    if summary["counts"]["learnsets_by_source_mod"] != expected_source_mod:
         raise BundleError("pinned bundle learnset source-mod counts changed")
-    if summary["counts"]["learnsets_by_source_kind"] != {
-        "direct": 21607, "inherited": 22233, "override": 51,
-    }:
+    expected_source_kind = (
+        {"direct": 21607, "inherited": 22233, "override": 51}
+        if legacy_release else {"direct": 21607, "inherited": 21771, "override": 51}
+    )
+    if summary["counts"]["learnsets_by_source_kind"] != expected_source_kind:
         raise BundleError("pinned bundle learnset source-kind counts changed")
     if provenance["showdown"]["source_counts"] != {
         "pokedex": 1518, "base_moves": 954, "base_abilities": 321, "base_learnsets": 1289,
@@ -1011,6 +1039,10 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         or "cinderace" not in {form_id for regulation_id, form_id in membership_ids if regulation_id == "m-c"}
         or not {"charizard", "charizardmegax", "charizardmegay"} <= form_ids):
         raise BundleError("pinned bundle representative legality or form goldens changed")
+    if not legacy_release and ({"magearnamega", "magearnaoriginalmega"} & {
+        form_id for _, form_id in membership_ids
+    }):
+        raise BundleError("pinned bundle includes nonstandard Magearna Mega membership")
     if verify_manifest:
         manifest = _load_json(bundle, "manifest.json")
         expected_manifest_fields = {
@@ -1022,8 +1054,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         _fields(manifest, expected_manifest_fields, "manifest.json")
         if manifest["bundle_schema_version"] != SCHEMA_VERSION:
             raise BundleError("manifest.json: unsupported bundle schema version")
-        if manifest["importer_version"] != IMPORTER_VERSION or manifest["source_shape_version"] != SOURCE_SHAPE_VERSION:
+        importer_version = manifest["importer_version"]
+        if importer_version not in {LEGACY_IMPORTER_VERSION, IMPORTER_VERSION}:
             raise BundleError("manifest.json: unsupported importer or source-shape version")
+        if manifest["source_shape_version"] != SOURCE_SHAPE_VERSION:
+            raise BundleError("manifest.json: unsupported importer or source-shape version")
+        if importer_version == LEGACY_IMPORTER_VERSION and not legacy_release:
+            raise BundleError("manifest.json: importer version 1 cannot contain version 2 legality semantics")
+        if importer_version == IMPORTER_VERSION and legacy_release:
+            raise BundleError("manifest.json: importer version 2 cannot contain legacy legality semantics")
         if manifest["formats"] != regulations or manifest["mechanics_profile_id"] != MECHANICS_PROFILE["id"]:
             raise BundleError("manifest.json: format or mechanics contract mismatch")
         if manifest["validation_status"] != "valid" or manifest["overlays"] != provenance["overlays"]:
@@ -1062,7 +1101,10 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         bundle_hash = hashlib.sha256(_canonical_bytes(file_records)).hexdigest()
         if manifest.get("bundle_hash") != bundle_hash:
             raise BundleError("manifest.json: canonical bundle hash mismatch")
-        expected_id = f"showdown-{EXPECTED_REVISION[:8]}-s{SCHEMA_VERSION}-i{IMPORTER_VERSION}-{bundle_hash[:12]}"
+        expected_id = (
+            f"showdown-{EXPECTED_REVISION[:8]}-s{SCHEMA_VERSION}-i{importer_version}-"
+            f"{bundle_hash[:12]}"
+        )
         if manifest.get("bundle_id") != expected_id:
             raise BundleError("manifest.json: bundle identifier does not match its canonical hash")
         if manifest.get("showdown", {}).get("revision") != EXPECTED_REVISION:

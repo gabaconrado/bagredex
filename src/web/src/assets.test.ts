@@ -29,7 +29,7 @@ const assets = {
   ],
   "status-move.svg": [
     status,
-    "8cc0aec5fe120ab7c21034cbe84e8f18f5349dcba7453c25c1313cb57381e331",
+    "08aecce0937641f0054f7f7f120e7c81a6fa83f2c2b6d6681455acd387aad000",
   ],
 } as const;
 
@@ -55,6 +55,12 @@ describe("supplied Pokédex icons", () => {
     expect(readdirSync("src/assets/pokedex-icons").sort()).toEqual(
       Object.keys(assets).sort(),
     );
+  });
+
+  it("keeps the approved Status geometry with pale blue and white only", () => {
+    expect(status).toContain("#B7D9EB");
+    expect(status).toContain("#FFFFFF");
+    expect(status).not.toMatch(/#000(?:000)?\b|\bblack\b/i);
   });
 
   it.each([

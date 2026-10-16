@@ -27,6 +27,15 @@ Champions Reg M-B inheritance layers, validates all references, maps forms throu
 CSV identities, and converts only the required normal and shiny HOME PNGs to static 384 by 384
 WebPs. Missing sprites, invalid PNGs, tool drift, and unknown source flags fail the build.
 
+A form is a regulation member only when its effective Showdown formats entry has a tier other than
+`Illegal` and `isNonstandard` is absent, `null`, or exactly `false`. Every meaningful marker,
+including unknown future markers, is excluded by default. Profiles required by base-to-Mega
+relations remain separate from selectable regulation membership.
+
+Importer version 2 introduces this fail-closed legality and dependency-closure policy. Validation
+continues to accept the retained version-1 release only with its exact legacy legality semantics;
+newly generated corrected bundles use `i2` in their content-addressed identifier.
+
 Rebuilding identical inputs returns the existing bundle without rewriting it. Output files use
 canonical UTF-8 JSON with sorted keys, compact separators, stable record order, and a final newline.
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:

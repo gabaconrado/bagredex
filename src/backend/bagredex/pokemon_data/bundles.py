@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any, cast
 
 SUPPORTED_SCHEMA_VERSION = "1"
-SUPPORTED_IMPORTER_VERSION = "1"
+SUPPORTED_IMPORTER_VERSION = "2"
+SUPPORTED_IMPORTER_VERSIONS = frozenset({"1", SUPPORTED_IMPORTER_VERSION})
 SUPPORTED_SOURCE_SHAPE_VERSION = "showdown-champions-1"
 EXPECTED_SHOWDOWN_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_SPRITES_REVISION = "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
 EXPECTED_POKEAPI_REVISION = "81d20919845b6a445969b9265aab5cec6b04cece"
-EXPECTED_SPRITE_MAPPING_SHA256 = "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"
+EXPECTED_SPRITE_MAPPING_SHA256 = "2fd464a37c34f7c543ebd153f39ca6c47f3d6788617b932db6f75f640a537602"
+LEGACY_SPRITE_MAPPING_SHA256 = "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"
 EXPECTED_COMMIT_DATE = "2026-10-13"
 EXPECTED_CWEBP_VERSION = "1.3.2"
 SHOWDOWN_NOTICE_PATH = "POKEMON-SHOWDOWN-LICENSE.txt"
@@ -45,6 +47,22 @@ EXPECTED_CWEBP_ARGS = [
 ID_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
 EXPECTED_PINNED_COUNTS = {
+    "forms": 350,
+    "types": 18,
+    "memberships": 663,
+    "profiles": 700,
+    "abilities": 216,
+    "ability_profiles": 432,
+    "moves": 510,
+    "move_profiles": 1020,
+    "move_flags": 37,
+    "move_flag_relations": 3928,
+    "learnsets": 43429,
+    "mega_relations": 82,
+    "sprites": 700,
+    "sprite_mappings": 350,
+}
+LEGACY_PINNED_COUNTS = {
     "forms": 353,
     "types": 18,
     "memberships": 667,
@@ -59,6 +77,58 @@ EXPECTED_PINNED_COUNTS = {
     "mega_relations": 84,
     "sprites": 706,
     "sprite_mappings": 353,
+}
+PINNED_GROUP_COUNTS = {
+    "legal_forms_by_regulation": {"m-b": 314, "m-c": 349},
+    "learnsets_by_regulation": {"m-b": 21715, "m-c": 21714},
+    "learnsets_by_form_resolution": {
+        "base-to-mega": 10962,
+        "changed-form": 932,
+        "direct": 31535,
+    },
+    "learnsets_by_source_mod": {
+        "base": 214,
+        "champions": 43164,
+        "championsregmb": 51,
+    },
+    "learnsets_by_source_kind": {
+        "direct": 21607,
+        "inherited": 21771,
+        "override": 51,
+    },
+}
+LEGACY_GROUP_COUNTS = {
+    "legal_forms_by_regulation": {"m-b": 316, "m-c": 351},
+    "learnsets_by_regulation": {"m-b": 21946, "m-c": 21945},
+    "learnsets_by_form_resolution": {
+        "base-to-mega": 11270,
+        "changed-form": 932,
+        "direct": 31689,
+    },
+    "learnsets_by_source_mod": {
+        "base": 676,
+        "champions": 43164,
+        "championsregmb": 51,
+    },
+    "learnsets_by_source_kind": {
+        "direct": 21607,
+        "inherited": 22233,
+        "override": 51,
+    },
+}
+PINNED_RELEASE_CONTRACTS = {
+    "showdown-3a766f2c-s1-i2-4bedbf1eb44d": (
+        "4bedbf1eb44d797b319aa5f750698463fb5cca6a63de6ff725d5c0bb0bc115a9",
+        EXPECTED_PINNED_COUNTS,
+        PINNED_GROUP_COUNTS,
+        EXPECTED_SPRITE_MAPPING_SHA256,
+    ),
+    "showdown-3a766f2c-s1-i1-923ba416555c": (
+        "923ba416555ca33c4b5d17f84d246661d6ef61a6170959aac807454a1978ead2",
+        LEGACY_PINNED_COUNTS,
+        LEGACY_GROUP_COUNTS,
+        LEGACY_SPRITE_MAPPING_SHA256,
+    ),
 }
 EXPECTED_SOURCE_COUNTS = {
     "pokedex": 1518,
@@ -1046,7 +1116,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     )
     if manifest.get("bundle_schema_version") != SUPPORTED_SCHEMA_VERSION:
         raise BundleReadError("manifest.json: unsupported bundle schema version")
-    if manifest.get("importer_version") != SUPPORTED_IMPORTER_VERSION:
+    if manifest.get("importer_version") not in SUPPORTED_IMPORTER_VERSIONS:
         raise BundleReadError("manifest.json: unsupported importer version")
     if manifest.get("source_shape_version") != SUPPORTED_SOURCE_SHAPE_VERSION:
         raise BundleReadError("manifest.json: unsupported source shape version")
@@ -1121,9 +1191,10 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         _exact_keys(source, {"revision", "clean_tree"}, f"manifest.json:{field}")
         if source.get("revision") != expected_revision or source.get("clean_tree") is not True:
             raise BundleReadError(f"manifest.json: unexpected {field} source")
+    importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_id = (
         f"showdown-{revision[:8]}-s{SUPPORTED_SCHEMA_VERSION}"
-        f"-i{SUPPORTED_IMPORTER_VERSION}-{bundle_hash[:12]}"
+        f"-i{importer_version}-{bundle_hash[:12]}"
     )
     if manifest.get("bundle_id") != expected_id or directory.name != expected_id:
         raise BundleReadError(
@@ -1316,33 +1387,18 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if validation.get("source_counts") != source_counts:
         raise BundleReadError("validation.json: source counts do not match provenance")
     if require_pinned:
-        for name, expected in EXPECTED_PINNED_COUNTS.items():
+        contract = PINNED_RELEASE_CONTRACTS.get(cast(str, manifest.get("bundle_id")))
+        if contract is None or contract[0] != bundle_hash:
+            raise BundleReadError("bundle is not an allowlisted pinned release")
+        _, pinned_counts, pinned_group_counts, pinned_mapping_sha256 = contract
+        for name, expected in pinned_counts.items():
             if expected_counts.get(name) != expected:
                 raise BundleReadError(
                     f"pinned bundle count {name}: expected {expected}, "
                     f"found {expected_counts.get(name)}"
                 )
-        if sprite_provenance["mapping_sha256"] != EXPECTED_SPRITE_MAPPING_SHA256:
+        if sprite_provenance["mapping_sha256"] != pinned_mapping_sha256:
             raise BundleReadError("provenance.json: unexpected pinned sprite mapping hash")
-        pinned_group_counts = {
-            "legal_forms_by_regulation": {"m-b": 316, "m-c": 351},
-            "learnsets_by_regulation": {"m-b": 21946, "m-c": 21945},
-            "learnsets_by_form_resolution": {
-                "base-to-mega": 11270,
-                "changed-form": 932,
-                "direct": 31689,
-            },
-            "learnsets_by_source_mod": {
-                "base": 676,
-                "champions": 43164,
-                "championsregmb": 51,
-            },
-            "learnsets_by_source_kind": {
-                "direct": 21607,
-                "inherited": 22233,
-                "override": 51,
-            },
-        }
         for name, group_expected in pinned_group_counts.items():
             if expected_counts.get(name) != group_expected:
                 raise BundleReadError(f"pinned bundle count {name} changed")

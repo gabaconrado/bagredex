@@ -216,7 +216,7 @@ test("switches explicit regulations and supports keyboard selection", async ({
     expect(focusExtent).toBeGreaterThan(0);
     const externalGap =
       lowerBox.y - (inputBox.y + inputBox.height + focusExtent);
-    const insetEdgeVisible = await search.evaluate((input) => {
+    const cleanEdge = await search.evaluate((input) => {
       const box = input.getBoundingClientRect();
       const elementAtEdge = document.elementFromPoint(
         box.x + box.width / 2,
@@ -224,23 +224,26 @@ test("switches explicit regulations and supports keyboard selection", async ({
       );
       return {
         edgeOwnsPointer: elementAtEdge === input,
-        insetPainted: getComputedStyle(input).boxShadow.includes("inset"),
+        borderBottomStyle: getComputedStyle(input).borderBottomStyle,
+        borderBottomWidth: getComputedStyle(input).borderBottomWidth,
+        boxShadow: getComputedStyle(input).boxShadow,
       };
     });
     await testInfo.attach(`search-focus-${state}-geometry`, {
       body: Buffer.from(
         JSON.stringify(
-          { externalGap, focusExtent, inputBox, lowerBox, insetEdgeVisible },
+          { cleanEdge, externalGap, focusExtent, inputBox, lowerBox },
           null,
           2,
         ),
       ),
       contentType: "application/json",
     });
-    expect(
-      externalGap >= 0 ||
-        (insetEdgeVisible.edgeOwnsPointer && insetEdgeVisible.insetPainted),
-    ).toBe(true);
+    expect(externalGap).toBeGreaterThanOrEqual(0);
+    expect(cleanEdge.edgeOwnsPointer).toBe(true);
+    expect(cleanEdge.borderBottomStyle).toBe("solid");
+    expect(Number.parseFloat(cleanEdge.borderBottomWidth)).toBe(1);
+    expect(cleanEdge.boxShadow).not.toContain("inset");
   };
   await assertVisibleLowerFocusEdge(page.locator(".table-scroll"), "closed");
   await testInfo.attach("search-focus-closed", {
@@ -562,6 +565,23 @@ test("navigates Mega forms in both directions and replaces detail information", 
   const inactiveShinyBackground = await shinyToggle.evaluate(
     (element) => getComputedStyle(element).backgroundColor,
   );
+  const inactiveMega = page
+    .getByRole("button", { name: /Switch to Charizard-Mega/ })
+    .first();
+  const controlSurface = (element: HTMLElement) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      borderColor: style.borderColor,
+      borderRadius: style.borderRadius,
+      borderStyle: style.borderStyle,
+      borderWidth: style.borderWidth,
+      boxShadow: style.boxShadow,
+    };
+  };
+  expect(await shinyToggle.evaluate(controlSurface)).toEqual(
+    await inactiveMega.evaluate(controlSurface),
+  );
   await expect(shinyToggle.locator(".icon--shiny")).toHaveCSS(
     "filter",
     /invert\(1\)/,
@@ -583,8 +603,17 @@ test("navigates Mega forms in both directions and replaces detail information", 
     "shiny sprite controls",
   );
   await expect(rowSprite).toHaveAttribute("src", normalRowSource!);
+  const statTable = page.getByRole("table", { name: "Level 50 stats" });
+  for (const cell of await statTable
+    .locator('[role="columnheader"], [role="rowheader"], [role="cell"]')
+    .all())
+    await expect(cell).toHaveCSS("text-align", "center");
   const moveTable = page.getByLabel("Legal moves");
   await expect(moveTable.getByText("Name", { exact: true })).toBeVisible();
+  for (const cell of await moveTable
+    .locator('[role="columnheader"], [role="cell"]')
+    .all())
+    await expect(cell).toHaveCSS("text-align", "center");
   await expect(
     moveTable.getByRole("button", { name: "Sort moves by category" }),
   ).toBeVisible();
@@ -644,6 +673,39 @@ test("navigates Mega forms in both directions and replaces detail information", 
       }
     };
     await assertMoveIndicatorContained();
+    const [buttonBox, contentBox, labelBox] = await Promise.all([
+      button.boundingBox(),
+      button.evaluate((element) => {
+        const label = element.querySelector<HTMLElement>(".move-sort__label")!;
+        const indicator =
+          element.querySelector<HTMLElement>(".sort-indicator")!;
+        const left = Math.min(
+          label.getBoundingClientRect().left,
+          indicator.getBoundingClientRect().left,
+        );
+        const right = Math.max(
+          label.getBoundingClientRect().right,
+          indicator.getBoundingClientRect().right,
+        );
+        return { x: left, width: right - left };
+      }),
+      textRangeBox(button.locator(".move-sort__label")),
+    ]);
+    expect(
+      Math.abs(
+        contentBox.x +
+          contentBox.width / 2 -
+          ((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0) / 2),
+      ),
+    ).toBeLessThanOrEqual(1);
+    expect(labelBox?.x ?? 0).toBeGreaterThanOrEqual((buttonBox?.x ?? 0) - 1);
+    expect((labelBox?.x ?? 0) + (labelBox?.width ?? 0)).toBeLessThanOrEqual(
+      (buttonBox?.x ?? 0) + (buttonBox?.width ?? 0) + 1,
+    );
+    if (key === "power")
+      expect(await button.locator(".move-sort__label").textContent()).toBe(
+        "Power",
+      );
     await button.focus();
     await page.keyboard.press("Shift+Tab");
     await page.keyboard.press("Tab");

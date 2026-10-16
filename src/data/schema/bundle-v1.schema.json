@@ -22,11 +22,41 @@
     "counts",
     "files"
   ],
+  "oneOf": [
+    {
+      "title": "Retained importer v1 release",
+      "properties": {
+        "bundle_id": {"const": "showdown-3a766f2c-s1-i1-923ba416555c"},
+        "bundle_hash": {"const": "923ba416555ca33c4b5d17f84d246661d6ef61a6170959aac807454a1978ead2"},
+        "importer_version": {"const": "1"},
+        "counts": {"$ref": "#/$defs/importer_v1_counts"},
+        "sprite_provenance": {
+          "properties": {
+            "mapping_sha256": {"const": "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"}
+          }
+        }
+      }
+    },
+    {
+      "title": "Current importer v2 release",
+      "properties": {
+        "bundle_id": {"const": "showdown-3a766f2c-s1-i2-4bedbf1eb44d"},
+        "bundle_hash": {"const": "4bedbf1eb44d797b319aa5f750698463fb5cca6a63de6ff725d5c0bb0bc115a9"},
+        "importer_version": {"const": "2"},
+        "counts": {"$ref": "#/$defs/importer_v2_counts"},
+        "sprite_provenance": {
+          "properties": {
+            "mapping_sha256": {"const": "2fd464a37c34f7c543ebd153f39ca6c47f3d6788617b932db6f75f640a537602"}
+          }
+        }
+      }
+    }
+  ],
   "properties": {
-    "bundle_id": {"type": "string", "pattern": "^showdown-[0-9a-f]{8}-s1-i1-[0-9a-f]{12}$"},
+    "bundle_id": {"type": "string", "pattern": "^showdown-[0-9a-f]{8}-s1-i[12]-[0-9a-f]{12}$"},
     "bundle_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "bundle_schema_version": {"const": "1"},
-    "importer_version": {"const": "1"},
+    "importer_version": {"enum": ["1", "2"]},
     "source_shape_version": {"const": "showdown-champions-1"},
     "showdown": {
       "type": "object", "additionalProperties": false,
@@ -44,26 +74,7 @@
     "overlays": {"type": "array", "items": {"$ref": "#/$defs/applied_overlay"}},
     "validation_status": {"const": "valid"},
     "validation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "counts": {
-      "type": "object", "additionalProperties": false,
-      "required": ["forms", "types", "memberships", "profiles", "abilities", "ability_profiles", "moves", "move_profiles", "move_flags", "move_flag_relations", "learnsets", "mega_relations", "sprites", "sprite_mappings", "sprites_by_variant", "sprite_mapping_rules", "legal_forms_by_regulation", "learnsets_by_regulation", "learnsets_by_form_resolution", "learnsets_by_source_mod", "learnsets_by_source_kind", "move_flag_usage"],
-      "properties": {
-        "forms": {"const": 353}, "types": {"const": 18}, "memberships": {"const": 667},
-        "profiles": {"const": 706}, "abilities": {"const": 217}, "ability_profiles": {"const": 434},
-        "moves": {"const": 510}, "move_profiles": {"const": 1020}, "move_flags": {"const": 37},
-        "move_flag_relations": {"const": 3928}, "learnsets": {"const": 43891},
-        "mega_relations": {"const": 84}, "sprites": {"const": 706}, "sprite_mappings": {"const": 353},
-        "sprites_by_variant": {"const": {"normal": 353, "shiny": 353}},
-        "sprite_mapping_rules": {"const": {"exception": 46, "normalized-identifier": 660}},
-        "legal_forms_by_regulation": {"const": {"m-b": 316, "m-c": 351}},
-        "learnsets_by_regulation": {"const": {"m-b": 21946, "m-c": 21945}},
-        "learnsets_by_form_resolution": {"const": {"base-to-mega": 11270, "changed-form": 932, "direct": 31689}},
-        "learnsets_by_source_mod": {"const": {"base": 676, "champions": 43164, "championsregmb": 51}},
-        "learnsets_by_source_kind": {"const": {"direct": 21607, "inherited": 22233, "override": 51}},
-        "move_flag_usage": {"type": "object", "minProperties": 37, "maxProperties": 37,
-          "additionalProperties": {"type": "integer", "minimum": 1}}
-      }
-    },
+    "counts": {"type": "object"},
     "files": {
       "type": "array",
       "items": {
@@ -79,6 +90,38 @@
     }
   },
   "$defs": {
+    "importer_v1_counts": {
+      "const": {
+        "abilities": 217, "ability_profiles": 434, "forms": 353, "learnsets": 43891,
+        "learnsets_by_form_resolution": {"base-to-mega": 11270, "changed-form": 932, "direct": 31689},
+        "learnsets_by_regulation": {"m-b": 21946, "m-c": 21945},
+        "learnsets_by_source_kind": {"direct": 21607, "inherited": 22233, "override": 51},
+        "learnsets_by_source_mod": {"base": 676, "champions": 43164, "championsregmb": 51},
+        "legal_forms_by_regulation": {"m-b": 316, "m-c": 351},
+        "mega_relations": 84, "memberships": 667, "move_flag_relations": 3928,
+        "move_flag_usage": {"allyanim": 94, "bite": 16, "bullet": 36, "bypasssub": 104, "cantusetwice": 2, "charge": 20, "contact": 338, "dance": 18, "defrost": 12, "distance": 38, "failcopycat": 52, "failencore": 8, "failinstruct": 42, "failmefirst": 18, "failmimic": 8, "futuremove": 2, "gravity": 10, "heal": 46, "metronome": 888, "minimize": 12, "mirror": 794, "mustpressure": 8, "noassist": 64, "nonsky": 50, "noparentalbond": 12, "nosketch": 2, "nosleeptalk": 28, "powder": 12, "protect": 794, "pulse": 12, "punch": 32, "recharge": 14, "reflectable": 118, "slicing": 44, "snatch": 112, "sound": 50, "wind": 18},
+        "move_flags": 37, "move_profiles": 1020, "moves": 510, "profiles": 706,
+        "sprite_mapping_rules": {"exception": 46, "normalized-identifier": 660},
+        "sprite_mappings": 353, "sprites": 706,
+        "sprites_by_variant": {"normal": 353, "shiny": 353}, "types": 18
+      }
+    },
+    "importer_v2_counts": {
+      "const": {
+        "abilities": 216, "ability_profiles": 432, "forms": 350, "learnsets": 43429,
+        "learnsets_by_form_resolution": {"base-to-mega": 10962, "changed-form": 932, "direct": 31535},
+        "learnsets_by_regulation": {"m-b": 21715, "m-c": 21714},
+        "learnsets_by_source_kind": {"direct": 21607, "inherited": 21771, "override": 51},
+        "learnsets_by_source_mod": {"base": 214, "champions": 43164, "championsregmb": 51},
+        "legal_forms_by_regulation": {"m-b": 314, "m-c": 349},
+        "mega_relations": 82, "memberships": 663, "move_flag_relations": 3928,
+        "move_flag_usage": {"allyanim": 94, "bite": 16, "bullet": 36, "bypasssub": 104, "cantusetwice": 2, "charge": 20, "contact": 338, "dance": 18, "defrost": 12, "distance": 38, "failcopycat": 52, "failencore": 8, "failinstruct": 42, "failmefirst": 18, "failmimic": 8, "futuremove": 2, "gravity": 10, "heal": 46, "metronome": 888, "minimize": 12, "mirror": 794, "mustpressure": 8, "noassist": 64, "nonsky": 50, "noparentalbond": 12, "nosketch": 2, "nosleeptalk": 28, "powder": 12, "protect": 794, "pulse": 12, "punch": 32, "recharge": 14, "reflectable": 118, "slicing": 44, "snatch": 112, "sound": 50, "wind": 18},
+        "move_flags": 37, "move_profiles": 1020, "moves": 510, "profiles": 700,
+        "sprite_mapping_rules": {"exception": 46, "normalized-identifier": 654},
+        "sprite_mappings": 350, "sprites": 700,
+        "sprites_by_variant": {"normal": 350, "shiny": 350}, "types": 18
+      }
+    },
     "sprite_source": {
       "type": "object", "additionalProperties": false, "required": ["revision", "clean_tree"],
       "properties": {"revision": {"const": "ba403973fdf9d0ac59175813861e6a1f8ed5020c"}, "clean_tree": {"const": true}}
@@ -103,7 +146,7 @@
         "revision": {"const": "ba403973fdf9d0ac59175813861e6a1f8ed5020c"}, "clean_tree": {"const": true},
         "family": {"const": "sprites/pokemon/other/home"}, "mapping_rule_version": {"const": "pokeapi-csv-v1"},
         "mapping_revision": {"const": "81d20919845b6a445969b9265aab5cec6b04cece"},
-        "mapping_sha256": {"const": "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"},
+        "mapping_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "cwebp_version": {"const": "1.3.2"}, "cwebp_args": {"type": "array", "items": {"type": "string"}},
         "license": {"const": "license-not-supplied"}, "mapping_exceptions": {"type": "object"}
       }

@@ -2,6 +2,7 @@
 
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
 import {resolveLearnset} from './learnset-resolution.mjs';
 
 const root = path.resolve(process.argv[2] || '');
@@ -81,32 +82,14 @@ const configurations = [
 ];
 
 const legalIDs = config => Object.entries(config.formats)
-  .filter(([, value]) => value.tier !== 'Illegal' && value.isNonstandard !== 'Past')
+  .filter(([id, value]) => isStandardFormatsEntry(value, `${config.mod} FormatsData ${id}`))
   .map(([id]) => id).sort();
 const isMega = species => Boolean(species.forme?.includes('Mega'));
 const baseID = species => toID(species.baseSpecies || species.name);
 const spriteID = species => species.spriteid ||
   (toID(species.baseSpecies || species.name) + ((species.baseSpecies || species.name) !== species.name ? `-${toID(species.forme)}` : ''));
 
-const selected = new Set();
-for (const config of configurations) for (const id of legalIDs(config)) selected.add(id);
-const pending = [...selected];
-while (pending.length) {
-  const id = pending.shift();
-  const species = pokedex[id];
-  if (!species) throw new Error(`data/pokedex.ts: legal form ${id} is missing`);
-  const base = pokedex[baseID(species)];
-  for (const relatedID of isMega(species) ? [baseID(species)] : []) {
-    if (!selected.has(relatedID)) { selected.add(relatedID); pending.push(relatedID); }
-  }
-  for (const otherName of base?.otherFormes || species.otherFormes || []) {
-    const otherID = toID(otherName);
-    if (pokedex[otherID] && isMega(pokedex[otherID]) && !selected.has(otherID)) {
-      selected.add(otherID);
-      pending.push(otherID);
-    }
-  }
-}
+const selected = new Set(selectRelatedFormIDs(configurations.flatMap(legalIDs), pokedex));
 
 const forms = [...selected].sort().map(id => {
   const species = pokedex[id];

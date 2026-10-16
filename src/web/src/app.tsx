@@ -815,7 +815,7 @@ function RefinedDetailPane({
                     onModal({ kind: "move", id: move.id }, event.currentTarget)
                   }
                 />
-                <span>{move.name}</span>
+                <span title={move.name}>{move.name}</span>
               </span>
               <span role="cell">
                 <Types values={[move.type]} />

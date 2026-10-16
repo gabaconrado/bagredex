@@ -9,7 +9,12 @@ The following SVG files were created by the Bagredex user and supplied to the pr
 | `physical-move.svg`  | `4f73e0b23df40523c63d57e34eaf3af958e9c32310a609136375575b99caaae6` |
 | `shiny.svg`          | `bf78e73fbbb38103302779d89792bb80d2ccd3b4beaccf9e557bf7b38b7c5430` |
 | `special-move.svg`   | `541a9bf1efb9a94ec9a292ea33afcd95ac6c4d7b38ebddbbbd506693048a77a9` |
-| `status-move.svg`    | `8cc0aec5fe120ab7c21034cbe84e8f18f5349dcba7453c25c1313cb57381e331` |
+| `status-move.svg`    | `08aecce0937641f0054f7f7f120e7c81a6fa83f2c2b6d6681455acd387aad000` |
 
-The files are copied byte-for-byte from the user-supplied references. Bagredex does not optimize,
-recolor, or rewrite their SVG content.
+The Mega, Physical, Shiny, and Special files are copied byte-for-byte from the user-supplied
+references. Bagredex does not optimize or rewrite their SVG content.
+
+The user-supplied Status source has SHA-256
+`8cc0aec5fe120ab7c21034cbe84e8f18f5349dcba7453c25c1313cb57381e331`. The packaged file makes the
+approved Bagredex substitution from `#000000` to pale blue `#B7D9EB`; its geometry and white portion
+are otherwise unchanged.

@@ -18,6 +18,7 @@ from src.data.importer.bundle import (
     _parse_webp,
     _sprite_records,
     _unique,
+    compare_bundles,
     validate_bundle,
 )
 
@@ -100,8 +101,8 @@ class SpriteSelectionTests(unittest.TestCase):
             self.skipTest("local source snapshots are unavailable")
         forms = _extract(showdown)["forms"]
         mapping = _load_sprite_mapping(forms, pokeapi)
-        self.assertEqual(len(mapping), 353)
-        self.assertEqual(len({value["pokemon_id"] for value in mapping.values()}), 353)
+        self.assertEqual(len(mapping), 350)
+        self.assertEqual(len({value["pokemon_id"] for value in mapping.values()}), 350)
         self.assertEqual(mapping["aegislash"]["pokemon_identifier"], "aegislash-shield")
         self.assertEqual(mapping["meowsticfmega"]["pokemon_identifier"], "meowstic-female-mega")
 
@@ -194,6 +195,28 @@ class OverlayTests(unittest.TestCase):
 
 
 class SchemaArtifactTests(unittest.TestCase):
+    @staticmethod
+    def _matching_manifest_schema_branches(schema: dict, manifest: dict) -> int:
+        matches = 0
+        for branch in schema["oneOf"]:
+            properties = branch["properties"]
+            if any(
+                manifest[field] != constraint["const"]
+                for field, constraint in properties.items()
+                if "const" in constraint
+            ):
+                continue
+            counts_name = properties["counts"]["$ref"].rsplit("/", 1)[-1]
+            if manifest["counts"] != schema["$defs"][counts_name]["const"]:
+                continue
+            expected_mapping_hash = properties["sprite_provenance"]["properties"][
+                "mapping_sha256"
+            ]["const"]
+            if manifest["sprite_provenance"]["mapping_sha256"] != expected_mapping_hash:
+                continue
+            matches += 1
+        return matches
+
     def test_schema_documents_are_valid_json(self) -> None:
         schema_root = Path(__file__).parents[1] / "schema"
         for path in sorted(schema_root.glob("*.json")):
@@ -217,8 +240,141 @@ class SchemaArtifactTests(unittest.TestCase):
         )
         self.assertTrue(all("$ref" in value["items"] for value in roots.values()))
 
+    def test_manifest_schema_accepts_only_coherent_importer_release_contracts(self) -> None:
+        data_root = Path(__file__).parents[1]
+        schema = json.loads((data_root / "schema" / "bundle-v1.schema.json").read_text())
+        releases = data_root / "releases"
+        legacy = json.loads(
+            (releases / "showdown-3a766f2c-s1-i1-923ba416555c" / "manifest.json").read_text()
+        )
+        current = json.loads(
+            (releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d" / "manifest.json").read_text()
+        )
+        self.assertEqual(self._matching_manifest_schema_branches(schema, legacy), 1)
+        self.assertEqual(self._matching_manifest_schema_branches(schema, current), 1)
+
+        mismatches = []
+        for field in ("bundle_id", "bundle_hash", "counts"):
+            value = dict(legacy)
+            value[field] = current[field]
+            mismatches.append(value)
+        mapping_mismatch = dict(legacy)
+        mapping_mismatch["sprite_provenance"] = dict(legacy["sprite_provenance"])
+        mapping_mismatch["sprite_provenance"]["mapping_sha256"] = current[
+            "sprite_provenance"
+        ]["mapping_sha256"]
+        mismatches.append(mapping_mismatch)
+        for value in mismatches:
+            with self.subTest(mismatch=value):
+                self.assertEqual(self._matching_manifest_schema_branches(schema, value), 0)
+
 
 class LocalSnapshotIntegrationTests(unittest.TestCase):
+    def test_standard_formats_entry_truth_table_fails_closed(self) -> None:
+        legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
+        cases = [
+            [{"tier": "OU"}, True],
+            [{"tier": "OU", "isNonstandard": None}, True],
+            [{"tier": "OU", "isNonstandard": False}, True],
+            [{"tier": "Illegal"}, False],
+            [{"tier": "Illegal", "isNonstandard": None}, False],
+            [{"tier": "Illegal", "isNonstandard": False}, False],
+            [{"tier": "OU", "isNonstandard": "Future"}, False],
+            [{"tier": "OU", "isNonstandard": "Past"}, False],
+            [{"tier": "OU", "isNonstandard": "LGPE"}, False],
+            [{"tier": "OU", "isNonstandard": "CAP"}, False],
+            [{"tier": "OU", "isNonstandard": ""}, False],
+            [{"tier": "OU", "isNonstandard": "Unknown category"}, False],
+        ]
+        script = (
+            f"import {{isStandardFormatsEntry}} from {json.dumps(legality)};"
+            f"const cases={json.dumps(cases)};"
+            "process.stdout.write(JSON.stringify(cases.map(([entry]) => "
+            "isStandardFormatsEntry(entry))));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(json.loads(result.stdout), [expected for _, expected in cases])
+
+    def test_standard_formats_entry_rejects_malformed_records_with_context(self) -> None:
+        legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
+        script = (
+            f"import {{isStandardFormatsEntry}} from {json.dumps(legality)};"
+            "const malformed=[null,undefined,'standard',42,true,[]];"
+            "const errors=malformed.map((value,index)=>{try{"
+            "isStandardFormatsEntry(value,`champions FormatsData broken-${index}`);return null;"
+            "}catch(error){return error.message;}});"
+            "process.stdout.write(JSON.stringify(errors));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            json.loads(result.stdout),
+            [
+                f"champions FormatsData broken-{index}: expected an object"
+                for index in range(6)
+            ],
+        )
+
+    def test_nonstandard_mega_profile_can_be_retained_without_membership(self) -> None:
+        legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
+        script = (
+            f"import {{isStandardFormatsEntry,selectRelatedFormIDs}} from {json.dumps(legality)};"
+            "const formats={base:{tier:'OU'},basemega:{tier:'OU',isNonstandard:'Future'}};"
+            "const pokedex={"
+            "base:{name:'Base',otherFormes:['Base-Mega']},"
+            "basemega:{name:'Base-Mega',baseSpecies:'Base',forme:'Mega'}"
+            "};"
+            "const memberships=Object.entries(formats).filter(([,value])=>"
+            "isStandardFormatsEntry(value)).map(([id])=>id);"
+            "process.stdout.write(JSON.stringify({memberships,profiles:"
+            "selectRelatedFormIDs(memberships,pokedex)}));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            json.loads(result.stdout),
+            {"memberships": ["base"], "profiles": ["base", "basemega"]},
+        )
+
+    def test_current_future_membership_candidates_are_exactly_magearna_megas(self) -> None:
+        showdown = Path(__file__).parents[3] / "references" / "pokemon-showdown"
+        if not showdown.is_dir():
+            self.skipTest("user-supplied Showdown snapshot is not present")
+        champions = (showdown / "data/mods/champions/formats-data.ts").as_uri()
+        regulation_b = (showdown / "data/mods/championsregmb/formats-data.ts").as_uri()
+        script = (
+            f"import {{FormatsData as champions}} from {json.dumps(champions)};"
+            f"import {{FormatsData as regulationB}} from {json.dumps(regulation_b)};"
+            "const candidates=table=>Object.entries(table).filter(([,value])=>"
+            "value.tier!=='Illegal'&&value.isNonstandard==='Future').map(([id])=>id).sort();"
+            "process.stdout.write(JSON.stringify({champions:candidates(champions),"
+            "regulationB:candidates(regulationB)}));"
+        )
+        result = subprocess.run(
+            ["node", "--no-warnings", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected = ["magearnamega", "magearnaoriginalmega"]
+        self.assertEqual(
+            json.loads(result.stdout),
+            {"champions": expected, "regulationB": expected},
+        )
+
     def test_synthetic_pre_evolution_fallback_records_resolution(self) -> None:
         data_root = Path(__file__).parents[1]
         fixture = json.loads((data_root / "fixtures" / "pre-evolution-learnset.json").read_text())
@@ -246,10 +402,14 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         second = _extract(showdown)
         self.assertEqual(_canonical_bytes(first), _canonical_bytes(second))
         self.assertEqual({value["id"] for value in first["formats"]}, {"m-b", "m-c"})
-        self.assertEqual(len(first["regulations"]["m-c"]["memberships"]), 351)
-        self.assertEqual(len(first["regulations"]["m-b"]["memberships"]), 316)
-        self.assertEqual(len(first["regulations"]["m-c"]["profiles"]), 353)
-        self.assertEqual(len(first["regulations"]["m-b"]["profiles"]), 353)
+        self.assertEqual(len(first["regulations"]["m-c"]["memberships"]), 349)
+        self.assertEqual(len(first["regulations"]["m-b"]["memberships"]), 314)
+        for regulation_id in ("m-c", "m-b"):
+            membership_ids = {
+                value["form_id"] for value in first["regulations"][regulation_id]["memberships"]
+            }
+            self.assertNotIn("magearnamega", membership_ids)
+            self.assertNotIn("magearnaoriginalmega", membership_ids)
         forms = {value["id"]: value for value in first["forms"]}
         self.assertEqual(forms["charizardmegax"]["sprite_id"], "charizard-megax")
         self.assertTrue(forms["absolmegaz"]["is_mega"])
@@ -337,12 +497,94 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
 
 
 class PublishedBundleMutationTests(unittest.TestCase):
+    def test_corrected_release_has_exact_legality_and_dependency_delta(self) -> None:
+        releases = Path(__file__).parents[1] / "releases"
+        candidates = []
+        for bundle in releases.glob("showdown-*"):
+            if not bundle.is_dir():
+                continue
+            manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+            if manifest["importer_version"] == "2" and manifest["counts"]["memberships"] == 663:
+                candidates.append(bundle)
+        self.assertEqual(len(candidates), 1)
+        bundle = candidates[0]
+        self.assertEqual(bundle.name, "showdown-3a766f2c-s1-i2-4bedbf1eb44d")
+        summary = validate_bundle(bundle)
+        self.assertEqual(summary["counts"]["legal_forms_by_regulation"], {"m-b": 314, "m-c": 349})
+        self.assertEqual(summary["counts"]["forms"], 350)
+        self.assertEqual(summary["counts"]["profiles"], 700)
+        self.assertEqual(summary["counts"]["mega_relations"], 82)
+        self.assertEqual(summary["counts"]["sprites"], 700)
+
+        memberships = json.loads(
+            (bundle / "regulation_memberships.json").read_text(encoding="utf-8")
+        )
+        membership_ids = {(value["regulation_id"], value["form_id"]) for value in memberships}
+        for regulation_id in ("m-b", "m-c"):
+            self.assertNotIn((regulation_id, "magearnamega"), membership_ids)
+            self.assertNotIn((regulation_id, "magearnaoriginalmega"), membership_ids)
+        forms = {value["id"] for value in json.loads(
+            (bundle / "forms.json").read_text(encoding="utf-8")
+        )}
+        self.assertTrue({"magearna", "magearnamega", "magearnaoriginalmega"}.isdisjoint(forms))
+
+        old_bundle = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
+        difference = compare_bundles(old_bundle, bundle)["files"]
+        for filename, changes in difference.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(changes["added"], 0)
+                self.assertEqual(changes["changed"], 0)
+        self.assertEqual(
+            difference["regulation_memberships.json"]["removed_keys"],
+            [
+                "m-b:magearnamega",
+                "m-b:magearnaoriginalmega",
+                "m-c:magearnamega",
+                "m-c:magearnaoriginalmega",
+            ],
+        )
+        expected_removal_counts = {
+            "abilities.json": 1,
+            "ability_profiles.json": 2,
+            "forms.json": 3,
+            "learnsets.json": 462,
+            "mega_relations.json": 2,
+            "profiles.json": 6,
+            "regulation_memberships.json": 4,
+            "sprite_mappings.json": 3,
+            "sprites.json": 6,
+        }
+        self.assertEqual(
+            {
+                filename: changes["removed"]
+                for filename, changes in difference.items()
+                if changes["removed"]
+            },
+            expected_removal_counts,
+        )
+        self.assertEqual(difference["abilities.json"]["removed_keys"], ["soulheart"])
+        self.assertEqual(
+            difference["ability_profiles.json"]["removed_keys"],
+            ["m-b:soulheart", "m-c:soulheart"],
+        )
+        for filename in (
+            "forms.json",
+            "learnsets.json",
+            "mega_relations.json",
+            "profiles.json",
+            "sprite_mappings.json",
+            "sprites.json",
+        ):
+            with self.subTest(dependent_removals=filename):
+                self.assertTrue(
+                    all("magearna" in key for key in difference[filename]["removed_keys"])
+                )
+
     def test_published_release_preserves_representative_real_goldens(self) -> None:
         releases = Path(__file__).parents[1] / "releases"
-        available = sorted(path for path in releases.glob("showdown-*") if path.is_dir())
-        if not available:
+        bundle = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+        if not bundle.is_dir():
             self.skipTest("reviewed release has not been generated")
-        bundle = available[0]
 
         def records(filename: str) -> list[dict]:
             return json.loads((bundle / filename).read_text(encoding="utf-8"))
@@ -444,12 +686,12 @@ class PublishedBundleMutationTests(unittest.TestCase):
 
     def test_representative_contract_mutations_fail_closed(self) -> None:
         releases = Path(__file__).parents[1] / "releases"
-        available = sorted(path for path in releases.glob("showdown-*") if path.is_dir())
-        if not available:
+        reviewed = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+        if not reviewed.is_dir():
             self.skipTest("reviewed release has not been generated")
         with tempfile.TemporaryDirectory() as name:
-            bundle = Path(name) / available[0].name
-            shutil.copytree(available[0], bundle)
+            bundle = Path(name) / reviewed.name
+            shutil.copytree(reviewed, bundle)
 
             def rejected(filename: str, mutate) -> None:
                 path = bundle / filename
@@ -478,6 +720,15 @@ class PublishedBundleMutationTests(unittest.TestCase):
             notice.write_bytes(original_notice)
             rejected("manifest.json", lambda value: value.update({"unexpected": True}))
             rejected("manifest.json", lambda value: value.update({"validation_status": 1}))
+            rejected(
+                "manifest.json",
+                lambda value: value.update(
+                    {
+                        "bundle_id": value["bundle_id"].replace("-i2-", "-i1-"),
+                        "importer_version": "1",
+                    }
+                ),
+            )
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ from bagredex.pokemon_data.models import (
     SpriteMapping,
     Type,
 )
-from bagredex.pokemon_data.services import activate_pokemon_data
+from bagredex.pokemon_data.services import activate_pokemon_data, load_pokemon_data
 
 VERSION_ID = "showdown-test-s1-i1-0123456789ab"
 
@@ -381,6 +381,35 @@ def test_index_contract_scoping_order_etag_and_query_bound(
     assert cached.content == b""
     other = authenticated_client.get(f"/pokedex/data/m-c/index/?version={VERSION_ID}").json()
     assert [form["id"] for form in other["forms"]] == ["charizardmegax"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_reviewed_release_excludes_nonstandard_magearna_forms_from_both_indexes(
+    authenticated_client: Client, settings: Any
+) -> None:
+    release = (
+        settings.REPOSITORY_ROOT
+        / "src"
+        / "data"
+        / "releases"
+        / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+    )
+    if not release.is_dir():
+        pytest.skip("the data owner has not published the reviewed release yet")
+    settings.POKEMON_DATA_RELEASES_ROOT = release.parent
+    loaded = load_pokemon_data(release)
+    activate_pokemon_data(loaded.version.pk)
+
+    for regulation_id, expected_count in (("m-b", 314), ("m-c", 349)):
+        response = authenticated_client.get(
+            f"/pokedex/data/{regulation_id}/index/?version={loaded.version.pk}"
+        )
+        assert response.status_code == 200
+        form_ids = {form["id"] for form in response.json()["forms"]}
+        assert len(form_ids) == expected_count
+        assert "charizard" in form_ids
+        assert "magearnamega" not in form_ids
+        assert "magearnaoriginalmega" not in form_ids
 
 
 @pytest.mark.django_db
