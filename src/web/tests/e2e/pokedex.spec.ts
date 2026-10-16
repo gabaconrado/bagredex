@@ -22,6 +22,20 @@ const textRangeBox = (locator: Locator) =>
     return range.getBoundingClientRect().toJSON();
   });
 
+async function expectResponsiveTableRange(page: Page, state: string) {
+  const scroll = page.locator(".table-scroll");
+  await expect(page.locator(".pokemon-table thead th")).toHaveCount(10);
+  const range = await scroll.evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  if ((page.viewportSize()?.width ?? 1000) > 640)
+    expect(range, `${state} has no horizontal table range`).toBeLessThanOrEqual(
+      0,
+    );
+  else
+    expect(range, `${state} retains phone table overflow`).toBeGreaterThan(0);
+}
+
 function expectStableBoxes(
   baseline: (Box | null)[],
   current: (Box | null)[],
@@ -273,6 +287,7 @@ test("combines move, ability, and type filters and cycles sorting", async ({
     filters.getByRole("button", { name: "Remove Fire type filter" }),
   ).toBeVisible();
   await expect(filters.getByRole("button")).toHaveCount(3);
+  await expectResponsiveTableRange(page, "AND-filtered result");
 
   // M-C has four Protect + Intimidate + Fire forms, but none is both Fire and Water.
   await search.fill("water");
@@ -291,6 +306,7 @@ test("combines move, ability, and type filters and cycles sorting", async ({
   await filters
     .getByRole("button", { name: "Remove Water type filter" })
     .click();
+  await expectResponsiveTableRange(page, "restored filtered result");
   const hp = page.locator('button.sort[title="Sort by HP"]');
   await revealInTable(page, hp);
   await hp.click();
@@ -314,12 +330,13 @@ test("keeps mid-width stat controls accessible and contained @mid-width", async 
   page,
 }) => {
   const scroll = page.locator(".table-scroll");
-  const table = page.locator(".pokemon-table");
   const buttons = page.locator(".pokemon-table thead .sort");
   await expect(buttons).toHaveCount(7);
   expect(
-    await table.evaluate((element) => element.scrollWidth),
-  ).toBeGreaterThan(await scroll.evaluate((element) => element.clientWidth));
+    await scroll.evaluate((element) => element.scrollWidth),
+  ).toBeLessThanOrEqual(
+    await scroll.evaluate((element) => element.clientWidth),
+  );
 
   for (const button of await buttons.all()) {
     await revealInTable(page, button);
@@ -358,6 +375,81 @@ test("keeps mid-width stat controls accessible and contained @mid-width", async 
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "none");
   }
+});
+
+test("fits every column and stat target immediately above phone width @boundary", async ({
+  page,
+}) => {
+  const scroll = page.locator(".table-scroll");
+  const columns = page.locator(".pokemon-table thead th");
+  const buttons = page.locator(".pokemon-table thead .sort");
+  await expect(columns).toHaveCount(10);
+  await expect(buttons).toHaveCount(7);
+  await expectResponsiveTableRange(page, "641px boundary");
+  for (const button of await buttons.all()) {
+    const header = button.locator("xpath=ancestor::th");
+    const [buttonBox, headerBox] = await Promise.all([
+      button.boundingBox(),
+      header.boundingBox(),
+    ]);
+    expect(buttonBox?.width).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.height).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.x ?? 0).toBeGreaterThanOrEqual((headerBox?.x ?? 0) - 1);
+    expect((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0)).toBeLessThanOrEqual(
+      (headerBox?.x ?? 0) + (headerBox?.width ?? 0) + 1,
+    );
+    await button.click();
+    await expect(header).toHaveAttribute("aria-sort", "ascending");
+    await expectResponsiveTableRange(page, "641px sorted boundary");
+  }
+  expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(0);
+});
+
+test("contains centered full stat labels on genuinely wide tables @wide", async ({
+  page,
+}) => {
+  const scroll = page.locator(".table-scroll");
+  const buttons = page.locator(".pokemon-table thead .sort");
+  await expectResponsiveTableRange(page, "wide full-label table");
+  await expect(buttons).toHaveCount(7);
+  for (const button of await buttons.all()) {
+    const header = button.locator("xpath=ancestor::th");
+    const full = button.locator(".sort-label--full");
+    const short = button.locator(".sort-label--short");
+    await expect(full).toBeVisible();
+    await expect(short).toBeHidden();
+    const [buttonBox, headerBox] = await Promise.all([
+      button.boundingBox(),
+      header.boundingBox(),
+    ]);
+    expect(buttonBox?.width).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.height).toBeGreaterThanOrEqual(43.99);
+    for (const direction of ["ascending", "descending", "none"]) {
+      const [contentBox, labelBox, indicatorBox] = await Promise.all([
+        button.locator(".sort-content").boundingBox(),
+        textRangeBox(full),
+        textRangeBox(button.locator(".sort-indicator")),
+      ]);
+      expect(
+        Math.abs(
+          (contentBox?.x ?? 0) +
+            (contentBox?.width ?? 0) / 2 -
+            ((headerBox?.x ?? 0) + (headerBox?.width ?? 0) / 2),
+        ),
+      ).toBeLessThanOrEqual(1);
+      expect(labelBox?.x ?? 0).toBeGreaterThanOrEqual((buttonBox?.x ?? 0) - 1);
+      expect(
+        (indicatorBox?.x ?? 0) + (indicatorBox?.width ?? 0),
+      ).toBeLessThanOrEqual((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0) + 1);
+      expect((labelBox?.x ?? 0) + (labelBox?.width ?? 0)).toBeLessThanOrEqual(
+        (indicatorBox?.x ?? 0) + 1,
+      );
+      await button.click();
+      await expect(header).toHaveAttribute("aria-sort", direction);
+      await expectResponsiveTableRange(page, `wide ${direction} stat sort`);
+    }
+  }
+  expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(0);
 });
 
 test("selects an entire data row exactly once by pointer, touch, and keyboard", async ({
@@ -403,21 +495,19 @@ test("selects an entire data row exactly once by pointer, touch, and keyboard", 
   }
   await activate(firstRow.locator(".pokemon-table__sprite"));
   await expectSelection(0, 1);
+  await expectResponsiveTableRange(page, "sprite-cell selection");
   const selectedBackground = await firstRow.evaluate(
     (row) => getComputedStyle(row).backgroundColor,
   );
   expect(selectedBackground).not.toBe("rgba(0, 0, 0, 0)");
 
   let revision = 2;
-  if ((page.viewportSize()?.width ?? 1000) > 640) {
-    await activate(rows.nth(1).locator(".pokemon-table__types"));
-    await expectSelection(1, revision);
-    revision += 1;
-  } else {
-    await expect(rows.nth(1).locator(".pokemon-table__types")).toBeHidden();
-  }
+  await activate(rows.nth(1).locator(".pokemon-table__types"));
+  await expectSelection(1, revision);
+  revision += 1;
   await activate(rows.nth(2).locator("[data-label=HP]"));
   await expectSelection(2, revision);
+  await expectResponsiveTableRange(page, "stat-cell selection");
   revision += 1;
   const enterButton = rows.nth(3).getByRole("button");
   await enterButton.focus();
@@ -443,9 +533,9 @@ test("navigates Mega forms in both directions and replaces detail information", 
   await expect(rowSprite).toHaveAttribute("loading", "lazy");
   await expect(rowSprite).toHaveAttribute("src", /charizard\/normal/);
   const normalRowSource = await rowSprite.getAttribute("src");
-  const shinyToggle = page.getByRole("button", {
-    name: "Show shiny Charizard",
-  });
+  await expect(rowSprite).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const shinyToggle = page.locator("button.icon-toggle--shiny");
+  await expect(shinyToggle).toHaveAccessibleName("Show shiny Charizard");
   const spriteFrame = page.locator(".sprite-frame");
   const toggleRow = page.locator(".form-toggles");
   const stableSpriteControls = async () => {
@@ -469,10 +559,23 @@ test("navigates Mega forms in both directions and replaces detail information", 
     "src",
     /shiny-[A-Za-z0-9_-]+\.svg$/,
   );
+  const inactiveShinyBackground = await shinyToggle.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await expect(shinyToggle.locator(".icon--shiny")).toHaveCSS(
+    "filter",
+    /invert\(1\)/,
+  );
   await shinyToggle.click();
+  await expect(shinyToggle).toHaveAccessibleName("Show normal Charizard");
   await expect(
     page.getByRole("img", { name: "Shiny Charizard" }),
   ).toBeVisible();
+  expect(
+    await shinyToggle.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  ).not.toBe(inactiveShinyBackground);
   expectStableBoxes(
     [...spriteControlBaseline],
     [...(await stableSpriteControls())],
@@ -698,7 +801,7 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     ).toBeVisible();
     await expect(
       page.getByRole("columnheader", { name: "Types" }),
-    ).toBeHidden();
+    ).toBeVisible();
   }
   // Finish the initial background request before intercepting reload traffic.
   // Otherwise Firefox can dispose that older APIResponse during navigation.
@@ -765,6 +868,44 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     ["root", "app", "list", "detail", "toolbar", "heading", "picker"],
     "server shell to loaded index",
   );
+  if ((page.viewportSize()?.width ?? 1000) <= 640) {
+    const rows = page.locator(".pokemon-table tbody tr");
+    const widestDualTypeRow = await rows.evaluateAll((elements) => {
+      let widest = { index: -1, width: -1 };
+      elements.forEach((row, index) => {
+        const badges = row.querySelectorAll(
+          ".pokemon-table__types .type-badge",
+        );
+        if (badges.length >= 2) {
+          const boxes = [...badges].map((badge) =>
+            badge.getBoundingClientRect(),
+          );
+          const width =
+            Math.max(...boxes.map((box) => box.right)) -
+            Math.min(...boxes.map((box) => box.left));
+          if (width > widest.width) widest = { index, width };
+        }
+      });
+      return widest.index;
+    });
+    expect(widestDualTypeRow).toBeGreaterThanOrEqual(0);
+    const typeCell = rows
+      .nth(widestDualTypeRow)
+      .locator(".pokemon-table__types");
+    const badges = typeCell.locator(".type-badge");
+    const [cellBox, badgeBoxes] = await Promise.all([
+      typeCell.boundingBox(),
+      boxes(await badges.all()),
+    ]);
+    expect(await badges.count()).toBeGreaterThanOrEqual(2);
+    for (const badgeBox of badgeBoxes) {
+      expect(badgeBox?.x ?? 0).toBeGreaterThanOrEqual((cellBox?.x ?? 0) - 1);
+      expect((badgeBox?.x ?? 0) + (badgeBox?.width ?? 0)).toBeLessThanOrEqual(
+        (cellBox?.x ?? 0) + (cellBox?.width ?? 0) + 1,
+      );
+      expect(badgeBox?.width ?? 0).toBeGreaterThan(20);
+    }
+  }
   const longestName = await page
     .locator(".pokemon-table tbody th button")
     .evaluateAll(
@@ -836,6 +977,67 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   const searchToolbar = page.locator(".search");
   const scroll = page.locator(".table-scroll");
   const columns = page.locator(".pokemon-table thead th");
+  await expect(columns).toHaveCount(10);
+  const tableOverflow = await scroll.evaluate((element) => ({
+    client: element.clientWidth,
+    scroll: element.scrollWidth,
+  }));
+  if ((page.viewportSize()?.width ?? 1000) > 640) {
+    expect(tableOverflow.scroll).toBeLessThanOrEqual(tableOverflow.client);
+    expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(0);
+  } else {
+    expect(tableOverflow.scroll).toBeGreaterThan(tableOverflow.client);
+    await expect(firstRow.locator(".pokemon-table__types")).toBeVisible();
+  }
+  for (const columnIndex of [1, 2]) {
+    const header = columns.nth(columnIndex);
+    const [headerBox, headerTextBox] = await Promise.all([
+      header.boundingBox(),
+      textRangeBox(header),
+    ]);
+    expect(
+      Math.abs(
+        (headerBox?.x ?? 0) +
+          (headerBox?.width ?? 0) / 2 -
+          ((headerTextBox?.x ?? 0) + (headerTextBox?.width ?? 0) / 2),
+      ),
+      `column ${columnIndex} header text center`,
+    ).toBeLessThanOrEqual(1);
+  }
+  const firstRowCells = firstRow.locator("th, td");
+  const [nameCellBox, nameTextBox, typesCellBox, typeBadgeGroupBox] =
+    await Promise.all([
+      firstRowCells.nth(1).boundingBox(),
+      textRangeBox(firstRowCells.nth(1).getByRole("button")),
+      firstRowCells.nth(2).boundingBox(),
+      firstRowCells
+        .nth(2)
+        .locator(".type-list")
+        .evaluate((list) => {
+          const boxes = [...list.children].map((child) =>
+            child.getBoundingClientRect(),
+          );
+          const left = Math.min(...boxes.map((box) => box.left));
+          const right = Math.max(...boxes.map((box) => box.right));
+          return { x: left, width: right - left };
+        }),
+    ]);
+  expect(
+    Math.abs(
+      (nameCellBox?.x ?? 0) +
+        (nameCellBox?.width ?? 0) / 2 -
+        ((nameTextBox?.x ?? 0) + (nameTextBox?.width ?? 0) / 2),
+    ),
+    "Pokémon name text center",
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
+      (typesCellBox?.x ?? 0) +
+        (typesCellBox?.width ?? 0) / 2 -
+        (typeBadgeGroupBox.x + typeBadgeGroupBox.width / 2),
+    ),
+    "type badge group center",
+  ).toBeLessThanOrEqual(1);
   const measuredLayout = [
     app,
     list,
@@ -931,7 +1133,7 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     });
     expect(ownsVisibleCenter).toBe(true);
     const visibleLabel = button.locator(
-      (page.viewportSize()?.width ?? 1000) <= 1152
+      (page.viewportSize()?.width ?? 1000) <= 1600
         ? ".sort-label--short"
         : ".sort-label--full",
     );
@@ -954,9 +1156,10 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       .locator("th, td")
       .nth(buttonIndex + 3)
       .locator(".stat-value");
-    const [valueBox, valueTextBox] = await Promise.all([
+    const [valueBox, valueTextBox, sortContentBox] = await Promise.all([
       value.locator("xpath=..").boundingBox(),
       textRangeBox(value),
+      button.locator(".sort-content").boundingBox(),
     ]);
     expect(
       Math.abs(
@@ -968,11 +1171,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     ).toBeLessThanOrEqual(1);
     expect(
       Math.abs(
-        (indicatorBox?.x ?? 0) +
-          (indicatorBox?.width ?? 0) -
-          ((valueTextBox?.x ?? 0) + (valueTextBox?.width ?? 0)),
+        (sortContentBox?.x ?? 0) +
+          (sortContentBox?.width ?? 0) / 2 -
+          ((valueTextBox?.x ?? 0) + (valueTextBox?.width ?? 0) / 2),
       ),
-      `stat ${buttonIndex} arrow and numeric text right anchors`,
+      `stat ${buttonIndex} sort group and numeric text centers`,
     ).toBeLessThanOrEqual(1);
   }
   await expect(
@@ -1063,6 +1266,13 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(
         pointerOrigin,
       );
+      if ((page.viewportSize()?.width ?? 1000) > 640)
+        expect(
+          await scroll.evaluate(
+            (element) => element.scrollWidth - element.clientWidth,
+          ),
+          `${label} ${direction} has no horizontal range`,
+        ).toBeLessThanOrEqual(0);
       await expectNoOuterShiftSince(page, shiftStart);
     }
   }
@@ -1086,6 +1296,13 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(
       keyboardScrollLeft,
     );
+    if ((page.viewportSize()?.width ?? 1000) > 640)
+      expect(
+        await scroll.evaluate(
+          (element) => element.scrollWidth - element.clientWidth,
+        ),
+        `keyboard HP ${direction} has no horizontal range`,
+      ).toBeLessThanOrEqual(0);
     expectStableBoxes(
       keyboardSortBoxes,
       await boxes(measuredLayout),

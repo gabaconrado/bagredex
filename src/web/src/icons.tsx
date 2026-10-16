@@ -4,11 +4,24 @@ import shinyUrl from "./assets/pokedex-icons/shiny.svg?no-inline";
 import specialMoveUrl from "./assets/pokedex-icons/special-move.svg?no-inline";
 import statusMoveUrl from "./assets/pokedex-icons/status-move.svg?no-inline";
 
-const DecorativeIcon = ({ src }: { src: string }) => (
-  <img class="icon" src={src} alt="" aria-hidden="true" />
+const DecorativeIcon = ({
+  src,
+  className = "",
+}: {
+  src: string;
+  className?: string;
+}) => (
+  <img
+    class={`icon${className ? ` ${className}` : ""}`}
+    src={src}
+    alt=""
+    aria-hidden="true"
+  />
 );
 
-export const ShinyIcon = () => <DecorativeIcon src={shinyUrl} />;
+export const ShinyIcon = () => (
+  <DecorativeIcon src={shinyUrl} className="icon--shiny" />
+);
 
 export const MegaIcon = () => <DecorativeIcon src={megaEvolutionUrl} />;
 

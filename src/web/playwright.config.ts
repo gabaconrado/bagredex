@@ -14,7 +14,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop-light",
-      grepInvert: /@mid-width/,
+      grepInvert: /@mid-width|@boundary|@wide/,
       use: {
         ...devices["Desktop Chrome"],
         colorScheme: "light",
@@ -23,7 +23,7 @@ export default defineConfig({
     },
     {
       name: "tablet-dark-reduced",
-      grepInvert: /@mid-width/,
+      grepInvert: /@mid-width|@boundary|@wide/,
       use: {
         ...devices["iPad (gen 7)"],
         colorScheme: "dark",
@@ -41,8 +41,48 @@ export default defineConfig({
       },
     },
     {
+      name: "boundary-light",
+      grep: /@boundary/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 641, height: 900 },
+        colorScheme: "light",
+        reducedMotion: "no-preference",
+      },
+    },
+    {
+      name: "firefox-boundary-dark",
+      grep: /@boundary/,
+      use: {
+        browserName: "firefox",
+        viewport: { width: 641, height: 900 },
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+      },
+    },
+    {
+      name: "wide-light",
+      grep: /@wide/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1680, height: 1000 },
+        colorScheme: "light",
+        reducedMotion: "no-preference",
+      },
+    },
+    {
+      name: "firefox-wide-dark",
+      grep: /@wide/,
+      use: {
+        browserName: "firefox",
+        viewport: { width: 1680, height: 1000 },
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+      },
+    },
+    {
       name: "phone-light",
-      grepInvert: /@mid-width/,
+      grepInvert: /@mid-width|@boundary|@wide/,
       use: {
         ...devices["Pixel 7"],
         colorScheme: "light",
@@ -51,7 +91,7 @@ export default defineConfig({
     },
     {
       name: "firefox-desktop-light",
-      grepInvert: /@mid-width/,
+      grepInvert: /@mid-width|@boundary|@wide/,
       use: {
         ...devices["Desktop Firefox"],
         colorScheme: "light",
@@ -60,7 +100,7 @@ export default defineConfig({
     },
     {
       name: "firefox-tablet-dark-reduced",
-      grepInvert: /@mid-width/,
+      grepInvert: /@mid-width|@boundary|@wide/,
       use: {
         browserName: "firefox",
         viewport: { width: 820, height: 1180 },

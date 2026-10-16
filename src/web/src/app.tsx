@@ -685,7 +685,11 @@ function RefinedDetailPane({
         <div class="form-toggles" aria-label="Sprite and form controls">
           <button
             type="button"
-            class={shiny ? "icon-toggle is-active" : "icon-toggle"}
+            class={
+              shiny
+                ? "icon-toggle icon-toggle--shiny is-active"
+                : "icon-toggle icon-toggle--shiny"
+            }
             aria-pressed={shiny}
             title={
               shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`

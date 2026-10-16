@@ -336,6 +336,8 @@ describe("Pokédex app", () => {
     const shinyControl = screen.getByRole("button", {
       name: "Show shiny Charizard",
     });
+    expect(shinyControl.classList.contains("icon-toggle--shiny")).toBe(true);
+    expect(shinyControl.querySelector(".icon--shiny")).toBeTruthy();
     expect(
       selectedSprite.compareDocumentPosition(shinyControl) &
         Node.DOCUMENT_POSITION_FOLLOWING,

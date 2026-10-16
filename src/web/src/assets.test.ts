@@ -25,11 +25,11 @@ const assets = {
   ],
   "special-move.svg": [
     special,
-    "c4adeb63d4767a301515fcb6f083e6b9412f83250b0eb59b0a1d07be66291ab0",
+    "541a9bf1efb9a94ec9a292ea33afcd95ac6c4d7b38ebddbbbd506693048a77a9",
   ],
   "status-move.svg": [
     status,
-    "7df5db865c299dbd75b7188aedc14db404565c187b3c057e54c3da5592bb9a1a",
+    "8cc0aec5fe120ab7c21034cbe84e8f18f5349dcba7453c25c1313cb57381e331",
   ],
 } as const;
 
@@ -70,5 +70,16 @@ describe("supplied Pokédex icons", () => {
     expect(image.getAttribute("alt")).toBe("");
     expect(image.getAttribute("aria-hidden")).toBe("true");
     expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("marks only the Shiny image for white presentation", () => {
+    const shinyIcon = render(ShinyIcon()).container.querySelector("img.icon")!;
+    const megaIcon = render(MegaIcon()).container.querySelector("img.icon")!;
+    const specialIcon = render(
+      CategoryIcon({ category: "Special" }),
+    ).container.querySelector("img.icon")!;
+    expect(shinyIcon.classList.contains("icon--shiny")).toBe(true);
+    expect(megaIcon.classList.contains("icon--shiny")).toBe(false);
+    expect(specialIcon.classList.contains("icon--shiny")).toBe(false);
   });
 });
