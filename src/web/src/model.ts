@@ -95,14 +95,19 @@ export function sortedForms(forms: FormSummary[], sort: Sort): FormSummary[] {
 }
 
 export function cycleSort(sort: Sort, key: SortKey): Sort {
-  if (!sort || sort.key !== key) return { key, direction: "ascending" };
-  if (sort.direction === "ascending") return { key, direction: "descending" };
+  if (!sort || sort.key !== key) return { key, direction: "descending" };
+  if (sort.direction === "descending") return { key, direction: "ascending" };
   return null;
 }
 
 export function cycleMoveSort(sort: MoveSort, key: MoveSortKey): MoveSort {
-  if (!sort || sort.key !== key) return { key, direction: "ascending" };
-  if (sort.direction === "ascending") return { key, direction: "descending" };
+  const first = key === "power" ? "descending" : "ascending";
+  if (!sort || sort.key !== key) return { key, direction: first };
+  if (sort.direction === first)
+    return {
+      key,
+      direction: first === "ascending" ? "descending" : "ascending",
+    };
   return null;
 }
 

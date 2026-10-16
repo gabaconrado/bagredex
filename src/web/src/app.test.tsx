@@ -7,7 +7,12 @@ import {
 } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App, formatMoveTarget, PokemonRow } from "./app";
+import {
+  App,
+  formatMoveTarget,
+  PokemonRow,
+  shortcutTargetExcluded,
+} from "./app";
 import type { Bootstrap, BulkDetails, PokedexIndex } from "./contracts";
 
 const bootstrap: Bootstrap = {
@@ -117,7 +122,170 @@ describe("move target presentation", () => {
     expect(formatMoveTarget(target)).toBe(expected);
   });
 });
+describe("Pokédex shortcut eligibility", () => {
+  it("excludes interactive and editable targets according to each shortcut", () => {
+    const input = document.createElement("input");
+    const button = document.createElement("button");
+    const link = document.createElement("a");
+    link.href = "/";
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const nested = document.createElement("span");
+    editable.append(nested);
+    expect(shortcutTargetExcluded(input, "/")).toBe(true);
+    expect(shortcutTargetExcluded(button, "/")).toBe(true);
+    expect(shortcutTargetExcluded(link, "/")).toBe(true);
+    expect(shortcutTargetExcluded(nested, "/")).toBe(true);
+    expect(shortcutTargetExcluded(input, "?")).toBe(true);
+    expect(shortcutTargetExcluded(button, "?")).toBe(false);
+    expect(shortcutTargetExcluded(document.body, "/")).toBe(false);
+  });
+});
 describe("Pokédex app", () => {
+  it("restores help opened from an information dialog to its connected invoker", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await user.click(await screen.findByRole("button", { name: "Charizard" }));
+    const ability = await screen.findByRole("button", { name: "Blaze" });
+    await user.click(ability);
+    await screen.findByRole("dialog", { name: "Blaze" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close details" }),
+    );
+    await user.keyboard("?");
+    const help = await screen.findByRole("dialog", {
+      name: "Pokédex keyboard shortcuts",
+    });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    fireEvent(help, new Event("cancel", { cancelable: true }));
+    await waitFor(() => expect(document.activeElement).toBe(ability));
+  });
+  it("supports global search/help shortcuts and suggestion traversal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(detail),
+      ),
+    );
+    const user = userEvent.setup();
+    const { unmount } = render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    const heading = screen.getByRole("heading", { name: "Pokédex" });
+    heading.tabIndex = -1;
+    await user.click(heading);
+    heading.focus();
+    let slashPrevented = false;
+    const observeSlash = (event: KeyboardEvent) => {
+      if (event.key === "/") slashPrevented = event.defaultPrevented;
+    };
+    window.addEventListener("keydown", observeSlash);
+    await user.keyboard("/");
+    window.removeEventListener("keydown", observeSlash);
+    const search = screen.getByLabelText(/Search Pokémon/);
+    expect(document.activeElement).toBe(search);
+    expect(slashPrevented).toBe(true);
+    await user.type(search, "a");
+    const modifiedKeys = [
+      ...["Tab", "Enter"].flatMap((key) =>
+        (["ctrlKey", "metaKey", "altKey"] as const).map(
+          (modifier) => [key, modifier] as const,
+        ),
+      ),
+      ...["ArrowDown", "ArrowUp"].flatMap((key) =>
+        (["ctrlKey", "metaKey"] as const).map(
+          (modifier) => [key, modifier] as const,
+        ),
+      ),
+    ];
+    for (const [key, modifier] of modifiedKeys) {
+      const modified = new KeyboardEvent("keydown", {
+        key,
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      fireEvent(search, modified);
+      expect(modified.defaultPrevented).toBe(false);
+      expect(search.getAttribute("aria-activedescendant")).toBeNull();
+    }
+    await user.tab();
+    expect(document.activeElement).toBe(search);
+    expect(search.getAttribute("aria-activedescendant")).toBeTruthy();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(document.activeElement).toBe(search);
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    const activeGroup = () =>
+      document
+        .getElementById(search.getAttribute("aria-activedescendant")!)
+        ?.closest(".suggestions__group")
+        ?.querySelector("h3")?.textContent;
+    expect(activeGroup()).toBe("Pokémon");
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(activeGroup()).toBe("Moves");
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(activeGroup()).toBe("Abilities");
+    await user.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    expect(activeGroup()).toBe("Pokémon");
+    await user.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    expect(activeGroup()).toBe("Abilities");
+    await user.keyboard("{Escape}");
+    expect(document.activeElement).not.toBe(search);
+    expect((search as HTMLInputElement).value).toBe("a");
+    search.focus();
+    await user.type(search, "?");
+    expect((search as HTMLInputElement).value).toBe("a?");
+    search.blur();
+    heading.focus();
+    let helpPrevented = false;
+    const observeHelp = (event: KeyboardEvent) => {
+      if (event.key === "?") helpPrevented = event.defaultPrevented;
+    };
+    window.addEventListener("keydown", observeHelp);
+    await user.keyboard("?");
+    window.removeEventListener("keydown", observeHelp);
+    expect(helpPrevented).toBe(true);
+    const dialog = await screen.findByRole("dialog", {
+      name: "Pokédex keyboard shortcuts",
+    });
+    expect(dialog.querySelectorAll("kbd")).toHaveLength(7);
+    expect(dialog.textContent).toContain("↑ / ↓");
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close shortcuts" }),
+    );
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    search.focus();
+    await user.clear(search);
+    await user.type(search, "definitely-no-result");
+    expect(screen.getByText("No matches")).toBeTruthy();
+    const emptyTab = new KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true,
+    });
+    fireEvent(search, emptyTab);
+    expect(emptyTab.defaultPrevented).toBe(false);
+    const modified = new KeyboardEvent("keydown", {
+      key: "s",
+      ctrlKey: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(modified);
+    expect(modified.defaultPrevented).toBe(false);
+    unmount();
+    const afterUnmount = new KeyboardEvent("keydown", {
+      key: "/",
+      cancelable: true,
+    });
+    window.dispatchEvent(afterUnmount);
+    expect(afterUnmount.defaultPrevented).toBe(false);
+  });
   it("dispatches exactly one row selection for cells, Enter, and Space", async () => {
     const onSelect = vi.fn();
     const user = userEvent.setup();
@@ -171,7 +339,7 @@ describe("Pokédex app", () => {
     const scroll = container.querySelector<HTMLElement>(".table-scroll")!;
     const bst = screen.getByRole("button", { name: "Sort by BST" });
     const header = bst.closest("th")!;
-    for (const direction of ["ascending", "descending", "none"]) {
+    for (const direction of ["descending", "ascending", "none"]) {
       scroll.scrollLeft = 9;
       fireEvent.pointerDown(bst);
       fireEvent.click(bst, { detail: 1 });
@@ -179,7 +347,7 @@ describe("Pokédex app", () => {
       expect(header.getAttribute("aria-sort")).toBe(direction);
     }
     scroll.scrollLeft = 7;
-    for (const direction of ["ascending", "descending", "none"]) {
+    for (const direction of ["descending", "ascending", "none"]) {
       fireEvent.click(bst, { detail: 0 });
       expect(scroll.scrollLeft).toBe(7);
       expect(header.getAttribute("aria-sort")).toBe(direction);
@@ -236,10 +404,10 @@ describe("Pokédex app", () => {
     const indicator = hp.querySelector(".sort-indicator")!;
     expect(indicator.classList.contains("is-inactive")).toBe(true);
     fireEvent.click(hp);
-    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, ascending");
+    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, descending");
     expect(indicator.classList.contains("is-inactive")).toBe(false);
     fireEvent.click(hp);
-    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, descending");
+    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, ascending");
     fireEvent.click(hp);
     expect(hp.getAttribute("aria-label")).toBe("Sort by HP");
     expect(indicator.classList.contains("is-inactive")).toBe(true);
@@ -737,11 +905,11 @@ describe("Pokédex app", () => {
     });
     const powerHeader = powerButton.closest("[role=columnheader]")!;
     fireEvent.click(powerButton);
-    expect(powerHeader.getAttribute("aria-sort")).toBe("ascending");
+    expect(powerHeader.getAttribute("aria-sort")).toBe("descending");
     fireEvent.click(
       screen.getByRole("button", { name: /Sort moves by power/ }),
     );
-    expect(powerHeader.getAttribute("aria-sort")).toBe("descending");
+    expect(powerHeader.getAttribute("aria-sort")).toBe("ascending");
     fireEvent.click(
       screen.getByRole("button", { name: /Sort moves by power/ }),
     );

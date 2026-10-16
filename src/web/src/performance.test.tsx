@@ -193,9 +193,10 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
     fireEvent.click(button);
     fireEvent.click(button);
     fireEvent.click(button);
+    const firstDirection = key === "power" ? "descending" : "ascending";
     const expected = sortedMoves(moves, {
       key,
-      direction: "ascending",
+      direction: firstDirection,
     })[0]!.name;
     const mutation = new Promise<void>((resolve) => {
       const observer = new MutationObserver(() => {
@@ -210,7 +211,7 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
     durations[key] = performance.now() - start;
     expect(firstMove()).toBe(expected);
     expect(button.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(
-      "ascending",
+      firstDirection,
     );
     fireEvent.click(button);
     fireEvent.click(button);
@@ -250,7 +251,7 @@ it("records M-C-scale synthetic render and enforces local selector timing", asyn
   const speed = screen.getByRole("button", { name: "Sort by Speed" });
   fireEvent.click(speed);
   expect(speed.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(
-    "ascending",
+    "descending",
   );
   const sortRenderMs = performance.now() - sortStart;
   const search = screen.getByLabelText(/Search Pokémon/);

@@ -83,20 +83,20 @@ describe("Pokédex selectors", () => {
   it("cycles a single sort and uses dex and identifier tie breakers", () => {
     let sort = cycleSort(null, "hp");
     expect(sortedForms(forms, sort).map(({ id }) => id)).toEqual([
-      "second",
       "firsta",
       "firstb",
+      "second",
     ]);
     sort = cycleSort(sort, "hp");
     expect(sortedForms(forms, sort).map(({ id }) => id)).toEqual([
+      "second",
       "firsta",
       "firstb",
-      "second",
     ]);
     expect(cycleSort(sort, "hp")).toBeNull();
     expect(cycleSort(sort, "atk")).toEqual({
       key: "atk",
-      direction: "ascending",
+      direction: "descending",
     });
   });
   it("sorts move domains with stable ties and a terminal Status power bucket", () => {
@@ -166,6 +166,25 @@ describe("Pokédex selectors", () => {
     const first = cycleMoveSort(null, "type");
     expect(cycleMoveSort(first, "type")?.direction).toBe("descending");
     expect(cycleMoveSort(cycleMoveSort(first, "type"), "type")).toBeNull();
-    expect(cycleMoveSort(first, "power")?.key).toBe("power");
+    const category = cycleMoveSort(null, "category");
+    expect(category).toEqual({ key: "category", direction: "ascending" });
+    expect(cycleMoveSort(category, "category")).toEqual({
+      key: "category",
+      direction: "descending",
+    });
+    expect(
+      cycleMoveSort(cycleMoveSort(category, "category"), "category"),
+    ).toBeNull();
+    const power = cycleMoveSort(null, "power");
+    expect(power).toEqual({ key: "power", direction: "descending" });
+    expect(cycleMoveSort(power, "power")).toEqual({
+      key: "power",
+      direction: "ascending",
+    });
+    expect(cycleMoveSort(cycleMoveSort(power, "power"), "power")).toBeNull();
+    expect(cycleMoveSort(first, "power")).toEqual({
+      key: "power",
+      direction: "descending",
+    });
   });
 });

@@ -130,12 +130,35 @@ html:has([data-pokedex-root]) {
   z-index: 7;
   width: 100%;
   min-height: 3rem;
-  padding: 0.65rem 0.85rem;
+  padding: 0.65rem 3rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
   background: var(--color-canvas);
   color: var(--color-text);
   font: inherit;
+}
+.search-input-wrap {
+  position: relative;
+}
+.search-shortcut-hint {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 0.8rem;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+.search kbd,
+.shortcut-dialog kbd {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.3rem;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  box-shadow: 0 1px 0 var(--color-border);
 }
 .search:focus-within {
   z-index: 20;
@@ -182,6 +205,16 @@ html:has([data-pokedex-root]) {
 .suggestions button.is-active {
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
+}
+.suggestions button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.suggestion-enter-hint {
+  flex: none;
+  pointer-events: none;
 }
 .suggestions__empty {
   padding: 0.5rem 0.75rem;
@@ -799,6 +832,21 @@ html:has([data-pokedex-root]) {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+.shortcut-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+.shortcut-list > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.8fr) 1.5fr;
+  align-items: center;
+  gap: 1rem;
+}
+.shortcut-list dt,
+.shortcut-list dd {
+  margin: 0;
 }
 .info-dialog::backdrop {
   background: rgb(15 23 42 / 60%);

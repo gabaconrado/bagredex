@@ -1,7 +1,9 @@
+import type { RefObject } from "preact";
 import { memo } from "preact/compat";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -82,12 +84,14 @@ function Search({
   onFilter,
   onRemove,
   onSelect,
+  inputRef,
 }: {
   index: PokedexIndex;
   filters: Filter[];
   onFilter: (filter: Filter) => void;
   onRemove: (filter: Filter) => void;
   onSelect: (id: string) => void;
+  inputRef: RefObject<HTMLInputElement>;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -107,6 +111,13 @@ function Search({
       values: choices.filter((choice) => choice.kind === kind),
     }))
     .filter((group) => group.values.length);
+  const groupStarts = groups.map((group) => choices.indexOf(group.values[0]!));
+  useEffect(() => {
+    if (active < 0) return;
+    document
+      .getElementById(`suggestion-${active}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active]);
   const labels = {
     pokemon: "Pokémon",
     move: "Moves",
@@ -118,45 +129,87 @@ function Search({
       <label for="pokedex-search">
         Search Pokémon, moves, abilities, or types
       </label>
-      <input
-        id="pokedex-search"
-        type="search"
-        value={query}
-        autocomplete="off"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open && Boolean(query)}
-        aria-controls={open && query ? listId : undefined}
-        aria-activedescendant={active >= 0 ? `suggestion-${active}` : undefined}
-        onInput={(event) => {
-          setQuery(event.currentTarget.value);
-          setOpen(true);
-          setActive(-1);
-        }}
-        onFocus={() => query && setOpen(true)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
+      <div class="search-input-wrap">
+        <input
+          ref={inputRef}
+          id="pokedex-search"
+          type="search"
+          value={query}
+          autocomplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open && Boolean(query)}
+          aria-controls={open && query ? listId : undefined}
+          aria-activedescendant={
+            active >= 0 ? `suggestion-${active}` : undefined
+          }
+          onInput={(event) => {
+            setQuery(event.currentTarget.value);
+            setOpen(true);
             setActive(-1);
-            return;
-          }
-          if (!choices.length) return;
-          if (event.key === "ArrowDown") {
-            event.preventDefault();
-            setOpen(true);
-            setActive((active + 1) % choices.length);
-          }
-          if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setOpen(true);
-            setActive(active <= 0 ? choices.length - 1 : active - 1);
-          }
-          if (event.key === "Enter" && open && active >= 0) {
-            event.preventDefault();
-            activate(choices[active]!);
-          }
-        }}
-      />
+          }}
+          onFocus={() => query && setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setOpen(false);
+              setActive(-1);
+              event.currentTarget.blur();
+              return;
+            }
+            if (!choices.length) return;
+            if (
+              event.altKey &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              (event.key === "ArrowDown" || event.key === "ArrowUp")
+            ) {
+              event.preventDefault();
+              setOpen(true);
+              const currentGroup = groupStarts.findIndex((start, index) => {
+                const next = groupStarts[index + 1] ?? choices.length;
+                return active >= start && active < next;
+              });
+              const delta = event.key === "ArrowDown" ? 1 : -1;
+              const base =
+                currentGroup < 0 ? (delta > 0 ? -1 : 0) : currentGroup;
+              const next =
+                (base + delta + groupStarts.length) % groupStarts.length;
+              setActive(groupStarts[next]!);
+              return;
+            }
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (event.key === "Tab" && open) {
+              event.preventDefault();
+              setActive(
+                event.shiftKey
+                  ? active <= 0
+                    ? choices.length - 1
+                    : active - 1
+                  : (active + 1) % choices.length,
+              );
+              return;
+            }
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setOpen(true);
+              setActive((active + 1) % choices.length);
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+              setActive(active <= 0 ? choices.length - 1 : active - 1);
+            }
+            if (event.key === "Enter" && open) {
+              event.preventDefault();
+              activate(choices[active >= 0 ? active : 0]!);
+            }
+          }}
+        />
+        <kbd class="search-shortcut-hint" aria-hidden="true">
+          /
+        </kbd>
+      </div>
       <span class="visually-hidden" role="status" aria-live="polite">
         {open && query
           ? choices.length
@@ -188,7 +241,10 @@ function Search({
                     onClick={() => activate(choice)}
                     key={`${choice.kind}-${choice.id}`}
                   >
-                    {choice.name}
+                    <span>{choice.name}</span>
+                    <kbd class="suggestion-enter-hint" aria-hidden="true">
+                      Enter
+                    </kbd>
                   </button>
                 );
               })}
@@ -597,6 +653,7 @@ function RefinedDetailPane({
   onCloseModal,
   onSelect,
   onRetry,
+  detailRef,
 }: {
   selected: string | null;
   detailsState: "idle" | "loading" | "ready" | "error";
@@ -611,19 +668,24 @@ function RefinedDetailPane({
   onCloseModal: () => void;
   onSelect: (id: string) => void;
   onRetry: () => void;
+  detailRef: RefObject<HTMLElement>;
 }) {
   const [moveSort, setMoveSort] = useState<MoveSort>(null);
   useEffect(() => setMoveSort(null), [selected]);
   if (!selected)
     return (
-      <aside class="detail-pane detail-pane--empty">
+      <aside ref={detailRef} class="detail-pane detail-pane--empty">
         <h2>Choose a Pokémon</h2>
         <p>Select a row or search result to see its full details.</p>
       </aside>
     );
   if (detailsState === "error")
     return (
-      <aside class="detail-pane state-panel state-card--error" role="alert">
+      <aside
+        ref={detailRef}
+        class="detail-pane state-panel state-card--error"
+        role="alert"
+      >
         <h2>Details unavailable</h2>
         <p>{error}</p>
         <button type="button" class="button button--primary" onClick={onRetry}>
@@ -634,6 +696,7 @@ function RefinedDetailPane({
   if (detailsState === "idle" || detailsState === "loading")
     return (
       <aside
+        ref={detailRef}
         class="detail-pane detail-skeleton"
         aria-live="polite"
         aria-label="Loading Pokémon details"
@@ -647,7 +710,11 @@ function RefinedDetailPane({
     );
   if (!maps)
     return (
-      <aside class="detail-pane state-card state-card--error" role="alert">
+      <aside
+        ref={detailRef}
+        class="detail-pane state-card state-card--error"
+        role="alert"
+      >
         <h2>Details unavailable</h2>
         <p>{error}</p>
         <button type="button" class="button button--primary" onClick={onRetry}>
@@ -658,7 +725,11 @@ function RefinedDetailPane({
   const form = maps.forms.get(selected);
   if (!form)
     return (
-      <aside class="detail-pane state-card state-card--error" role="alert">
+      <aside
+        ref={detailRef}
+        class="detail-pane state-card state-card--error"
+        role="alert"
+      >
         <h2>Pokémon unavailable</h2>
         <p>This form is missing from the loaded details.</p>
       </aside>
@@ -676,7 +747,7 @@ function RefinedDetailPane({
     ? [form]
     : form.mega_ids.map((id) => maps.forms.get(id)!);
   return (
-    <aside class="detail-pane" aria-labelledby="detail-title">
+    <aside ref={detailRef} class="detail-pane" aria-labelledby="detail-title">
       <header class="detail-header">
         <div>
           <p class="eyebrow">Selected Pokémon</p>
@@ -857,6 +928,90 @@ function RefinedDetailPane({
   );
 }
 
+const textEntrySelector = "input, textarea, select, [contenteditable]";
+const slashExcludedSelector = `${textEntrySelector}, button, a[href]`;
+export const shortcutTargetExcluded = (
+  target: EventTarget | null,
+  shortcut: "/" | "?",
+) =>
+  target instanceof Element &&
+  Boolean(
+    target.closest(
+      shortcut === "/" ? slashExcludedSelector : textEntrySelector,
+    ),
+  );
+
+function ShortcutDialog({
+  invoker,
+  onClose,
+}: {
+  invoker: HTMLElement | null;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const close = () => {
+    dialog.current?.close();
+    onClose();
+    queueMicrotask(() => invoker?.isConnected && invoker.focus());
+  };
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (typeof element.showModal === "function") element.showModal();
+    if (!element.open) element.setAttribute("open", "");
+    element.querySelector<HTMLElement>("button")?.focus();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      class="info-dialog shortcut-dialog"
+      aria-labelledby="shortcut-dialog-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={(event) => event.target === event.currentTarget && close()}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        event.preventDefault();
+        dialog.current?.querySelector<HTMLElement>("button")?.focus();
+      }}
+    >
+      <div class="info-dialog__surface">
+        <header>
+          <h2 id="shortcut-dialog-title">Pokédex keyboard shortcuts</h2>
+          <button
+            type="button"
+            class="dialog-close"
+            onClick={close}
+            aria-label="Close shortcuts"
+          >
+            ×
+          </button>
+        </header>
+        <dl class="shortcut-list">
+          {[
+            ["/", "Focus search"],
+            ["?", "Open this shortcut guide"],
+            ["Tab / Shift+Tab", "Move through suggestions"],
+            ["↑ / ↓", "Move through suggestions"],
+            ["Alt+↓ / Alt+↑", "Move between suggestion categories"],
+            ["Enter", "Choose the highlighted suggestion"],
+            ["Escape", "Close suggestions or a dialog"],
+          ].map(([keys, label]) => (
+            <div key={keys}>
+              <dt>
+                <kbd>{keys}</kbd>
+              </dt>
+              <dd>{label}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </dialog>
+  );
+}
+
 export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const [index, setIndex] = useState<PokedexIndex | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -876,6 +1031,54 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const [shiny, setShiny] = useState(false);
   const [modal, setModal] = useState<ModalInfo>(null);
   const [modalInvoker, setModalInvoker] = useState<HTMLElement | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutInvoker, setShortcutInvoker] = useState<HTMLElement | null>(
+    null,
+  );
+  const searchRef = useRef<HTMLInputElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (loadState !== "ready") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (
+        event.key === "/" &&
+        !event.shiftKey &&
+        !shortcutTargetExcluded(event.target, "/") &&
+        searchRef.current
+      ) {
+        event.preventDefault();
+        searchRef.current.focus();
+        return;
+      }
+      if (
+        (event.key === "?" || (event.key === "/" && event.shiftKey)) &&
+        !shortcutTargetExcluded(event.target, "?") &&
+        !shortcutsOpen
+      ) {
+        event.preventDefault();
+        const activeElement =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+        const restoreTarget =
+          activeElement?.closest("dialog") && modalInvoker?.isConnected
+            ? modalInvoker
+            : activeElement;
+        setModal(null);
+        setModalInvoker(null);
+        setShortcutInvoker(restoreTarget);
+        setShortcutsOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [loadState, modalInvoker, shortcutsOpen]);
+
+  useLayoutEffect(() => {
+    if (selectionRevision && detailRef.current) detailRef.current.scrollTop = 0;
+  }, [selectionRevision]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -952,6 +1155,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   const select = useCallback(
     (id: string) => {
       if (id === selected) return;
+      if (detailRef.current) detailRef.current.scrollTop = 0;
       setSelected(id);
       setSelectionRevision((value) => value + 1);
       setModal(null);
@@ -1070,6 +1274,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
         <Search
           index={index}
           filters={filters}
+          inputRef={searchRef}
           onSelect={select}
           onFilter={(filter) =>
             setFilters((current) => addFilter(current, filter))
@@ -1109,6 +1314,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
         )}
       </section>
       <RefinedDetailPane
+        detailRef={detailRef}
         selected={selected}
         detailsState={detailsState}
         maps={details}
@@ -1133,6 +1339,15 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           setDetailsRetry((value) => value + 1);
         }}
       />
+      {shortcutsOpen && (
+        <ShortcutDialog
+          invoker={shortcutInvoker}
+          onClose={() => {
+            setShortcutsOpen(false);
+            setShortcutInvoker(null);
+          }}
+        />
+      )}
     </div>
   );
 }
