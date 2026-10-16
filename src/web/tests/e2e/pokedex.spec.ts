@@ -797,6 +797,33 @@ test("navigates Mega forms in both directions and replaces detail information", 
     );
     await assertMoveIndicatorContained();
   }
+  const firstMoveAction = moveTable.locator(".move-row__action").first();
+  await firstMoveAction.click();
+  const moveDialog = page.getByRole("dialog");
+  await expect(moveDialog.locator(".info-description")).toHaveCount(1);
+  await expect(moveDialog.getByText("Power:", { exact: true })).toBeVisible();
+  await expect(
+    moveDialog.getByText("Accuracy:", { exact: true }),
+  ).toBeVisible();
+  await expect(moveDialog.getByText("PP:", { exact: true })).toBeVisible();
+  await expect(
+    moveDialog.getByText("Priority:", { exact: true }),
+  ).toBeVisible();
+  await expect(moveDialog.getByText("Target:", { exact: true })).toBeVisible();
+  await expect(moveDialog.getByText("Flags:", { exact: true })).toBeVisible();
+  const targetPill = moveDialog.locator(".info-grid .info-pill");
+  await expect(targetPill).toHaveCount(1);
+  await expect(targetPill).toHaveText(/^[A-Z][A-Za-z]*(?: [A-Z]+[A-Za-z]*)*$/);
+  const flagPills = moveDialog.locator(".info-flags .info-pill");
+  expect(await flagPills.count()).toBeGreaterThan(0);
+  for (const pill of await moveDialog.locator(".info-pill").all()) {
+    await expect(pill).toHaveJSProperty("tagName", "SPAN");
+    await expect(pill).not.toHaveAttribute("tabindex");
+  }
+  await expect(
+    moveDialog.locator(".info-flags button, .info-flags a"),
+  ).toHaveCount(0);
+  await moveDialog.getByRole("button", { name: "Close details" }).click();
   await testInfo.attach("corrected-icons-and-detail", {
     body: await page.screenshot(),
     contentType: "image/png",
@@ -871,6 +898,9 @@ test("navigates Mega forms in both directions and replaces detail information", 
     .click();
   await page.getByRole("button", { name: "Blaze", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(
+    page.getByRole("dialog").locator(".info-description"),
+  ).toHaveCount(1);
   await page.keyboard.press("Tab");
   expect(
     await page

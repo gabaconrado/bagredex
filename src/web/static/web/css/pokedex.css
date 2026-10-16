@@ -196,7 +196,8 @@ html:has([data-pokedex-root]) {
   margin-top: 0.75rem;
 }
 .filter-token,
-.chip-list button {
+.chip-list button,
+.info-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -208,6 +209,21 @@ html:has([data-pokedex-root]) {
   color: var(--color-accent-strong);
   font: inherit;
   font-weight: 700;
+}
+.info-pill {
+  min-height: auto;
+  padding: 0.2rem 0.55rem;
+}
+.info-flags,
+.info-pill-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.info-flags {
+  display: flex;
+  margin: 1rem 0;
 }
 .clear-filters {
   min-height: 2.75rem;

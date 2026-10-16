@@ -7,7 +7,7 @@ import {
 } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App, PokemonRow } from "./app";
+import { App, formatMoveTarget, PokemonRow } from "./app";
 import type { Bootstrap, BulkDetails, PokedexIndex } from "./contracts";
 
 const bootstrap: Bootstrap = {
@@ -107,6 +107,15 @@ const response = (value: unknown, ok = true) =>
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+describe("move target presentation", () => {
+  it.each([
+    ["adjacentFoe", "Adjacent Foe"],
+    ["userOrNPC", "User Or NPC"],
+    ["normal", "Normal"],
+  ])("humanizes %s without changing identifiers", (target, expected) => {
+    expect(formatMoveTarget(target)).toBe(expected);
+  });
 });
 describe("Pokédex app", () => {
   it("dispatches exactly one row selection for cells, Enter, and Space", async () => {
@@ -373,6 +382,95 @@ describe("Pokédex app", () => {
     );
     fireEvent.click(await screen.findByRole("dialog"));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("renders exactly one full description for unequal and equal modal fields", async () => {
+    const modalDetails: BulkDetails = {
+      ...detail,
+      forms: [
+        {
+          ...detail.forms[0]!,
+          ability_slots: [
+            { id: "blaze", slot: "0" },
+            { id: "toughclaws", slot: "1" },
+          ],
+          move_ids: ["flamethrower", "protect"],
+        },
+      ],
+      abilities: [
+        ...detail.abilities,
+        {
+          id: "toughclaws",
+          name: "Tough Claws",
+          short_description: "Boosts contact moves.",
+          description: "Boosts contact moves.",
+        },
+      ],
+      moves: [
+        { ...detail.moves[0]!, flags: ["protect", "mirrorFlag", "Sound"] },
+        {
+          ...detail.moves[0]!,
+          id: "protect",
+          name: "Protect",
+          category: "Status",
+          base_power: 0,
+          short_description: "Protects the user.",
+          description: "Protects the user.",
+          flags: [],
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(index) : response(modalDetails),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    await user.click(screen.getByRole("button", { name: "Charizard" }));
+    await screen.findByRole("heading", { name: "Charizard" });
+
+    const cases = [
+      {
+        button: "Blaze",
+        full: "Powers up Fire moves when weakened.",
+        shortOnly: "Powers up Fire moves.",
+      },
+      { button: "Tough Claws", full: "Boosts contact moves." },
+      {
+        button: /Flamethrower.*Fire/,
+        full: "May burn the target.",
+        shortOnly: "May burn.",
+      },
+      { button: /Protect.*Fire/, full: "Protects the user." },
+    ] as const;
+    for (const modalCase of cases) {
+      await user.click(screen.getByRole("button", { name: modalCase.button }));
+      const dialog = await screen.findByRole("dialog");
+      const descriptions = dialog.querySelectorAll(".info-description");
+      expect(descriptions).toHaveLength(1);
+      expect(descriptions[0]?.textContent).toBe(modalCase.full);
+      if ("shortOnly" in modalCase)
+        expect(dialog.textContent).not.toContain(modalCase.shortOnly);
+      if (typeof modalCase.button !== "string") {
+        const target = dialog.querySelector(".info-grid .info-pill");
+        expect(target?.textContent).toBe("Normal");
+        const flagPills = [
+          ...dialog.querySelectorAll<HTMLElement>(".info-flags .info-pill"),
+        ].map((pill) => pill.textContent);
+        if (modalCase.full === "May burn the target.")
+          expect(flagPills).toEqual(["protect", "mirrorFlag", "Sound"]);
+        else {
+          expect(flagPills).toEqual([]);
+          expect(dialog.querySelector(".info-flags")?.textContent).toContain(
+            "None",
+          );
+        }
+      }
+      await user.click(screen.getByRole("button", { name: "Close details" }));
+    }
   });
   it("shows stale-version recovery", async () => {
     vi.stubGlobal(

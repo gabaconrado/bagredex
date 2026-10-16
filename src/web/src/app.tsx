@@ -380,6 +380,13 @@ function PokemonTable({
   );
 }
 
+export function formatMoveTarget(target: string) {
+  const spaced = target
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 function MoveInfo({ move }: { move: MoveDetail }) {
   return (
     <div>
@@ -399,14 +406,25 @@ function MoveInfo({ move }: { move: MoveDetail }) {
           <b>Priority:</b> {move.priority}
         </span>
         <span>
-          <b>Target:</b> {move.target}
+          <b>Target:</b>{" "}
+          <span class="info-pill">{formatMoveTarget(move.target)}</span>
         </span>
       </div>
-      <p>{move.short_description}</p>
-      {move.description !== move.short_description && <p>{move.description}</p>}
-      <p>
-        <b>Flags:</b> {move.flags.length ? move.flags.join(", ") : "None"}
-      </p>
+      <p class="info-description">{move.description}</p>
+      <div class="info-flags">
+        <b>Flags:</b>
+        {move.flags.length ? (
+          <span class="info-pill-list">
+            {move.flags.map((flag) => (
+              <span class="info-pill" key={flag}>
+                {flag}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span>None</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -488,13 +506,7 @@ function InformationDialog({
         {info.kind === "move" ? (
           <MoveInfo move={value as MoveDetail} />
         ) : (
-          <>
-            <p>{(value as BulkAbility).short_description}</p>
-            {(value as BulkAbility).description !==
-              (value as BulkAbility).short_description && (
-              <p>{(value as BulkAbility).description}</p>
-            )}
-          </>
+          <p class="info-description">{(value as BulkAbility).description}</p>
         )}
       </div>
     </dialog>
