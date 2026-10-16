@@ -233,6 +233,18 @@ html:has([data-pokedex-root]) {
   min-width: 3.5rem;
   text-align: center !important;
 }
+.pokemon-col--sprite {
+  width: 3.5rem;
+}
+.pokemon-col--name {
+  width: 24%;
+}
+.pokemon-col--types {
+  width: 16%;
+}
+.pokemon-col--stat {
+  width: calc((60% - 3.5rem) / 7);
+}
 .pokemon-table__sprite img {
   display: block;
   width: 3rem;
@@ -248,6 +260,9 @@ html:has([data-pokedex-root]) {
   table-layout: fixed;
 }
 .pokemon-table thead {
+  background: var(--color-surface);
+}
+.pokemon-table thead th {
   position: sticky;
   z-index: 2;
   top: 0;
@@ -261,6 +276,20 @@ html:has([data-pokedex-root]) {
   text-align: right;
   white-space: nowrap;
 }
+.pokemon-table thead th {
+  min-width: 0;
+  overflow: hidden;
+}
+.pokemon-table thead .pokemon-table__stat-header {
+  height: 2.75rem;
+  padding: 0;
+}
+.pokemon-table__stat-header-inner {
+  position: relative;
+  display: block;
+  height: 2.75rem;
+  overflow: hidden;
+}
 .pokemon-table th:first-child,
 .pokemon-table th:nth-child(2),
 .pokemon-table th:nth-child(3),
@@ -270,6 +299,9 @@ html:has([data-pokedex-root]) {
 .pokemon-table tbody tr:hover,
 .pokemon-table tbody tr.is-selected {
   background: var(--color-accent-soft);
+}
+.pokemon-table tbody tr {
+  cursor: pointer;
 }
 .pokemon-table tbody th button {
   width: 100%;
@@ -283,9 +315,36 @@ html:has([data-pokedex-root]) {
   text-align: left;
   cursor: pointer;
 }
+.pokemon-table__name,
+.pokemon-table__name button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pokemon-table__types {
+  min-width: 0;
+  overflow: hidden;
+}
+.pokemon-table__types .type-list {
+  max-width: 100%;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
 .sort {
+  position: static;
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.1rem;
+  width: 2.75rem;
+  max-width: 2.75rem;
+  min-width: 0;
   min-height: 2.75rem;
+  margin-inline: 0.25rem;
   padding: 0.25rem;
+  overflow: hidden;
   border: 0;
   background: transparent;
   color: var(--color-text-muted);
@@ -296,9 +355,13 @@ html:has([data-pokedex-root]) {
 .sort.is-active {
   color: var(--color-accent);
 }
+.sort:focus-visible {
+  outline: 0.125rem solid var(--color-accent);
+  outline-offset: -0.2rem;
+}
 .type-list {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem;
 }
 .type-badge {
@@ -472,23 +535,42 @@ html:has([data-pokedex-root]) {
   margin-block: 1.5rem 0.5rem;
 }
 .info-button {
+  display: grid;
+  place-items: center;
   width: 2.75rem;
   min-height: 2.75rem;
   margin-top: 1rem;
-  border: 1px solid var(--color-border);
+  padding: 0;
+  border: 0;
   border-radius: 999px;
-  background: var(--color-canvas);
+  background: transparent;
   color: var(--color-accent-strong);
   cursor: pointer;
   font: inherit;
   font-weight: 900;
+}
+.info-mark {
+  display: grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-canvas);
+  font-size: 0.82rem;
+  line-height: 1;
+  place-items: center;
+}
+.info-button:focus-visible {
+  outline: 0.18rem solid var(--color-accent);
+  outline-offset: -0.2rem;
 }
 .stats-tooltip {
   position: absolute;
   z-index: 6;
   top: calc(100% - 0.25rem);
   left: 0;
-  width: min(20rem, calc(100vw - 3rem));
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 3rem));
   padding: 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-medium);
@@ -627,7 +709,11 @@ html:has([data-pokedex-root]) {
 .move-category {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: center;
+  min-width: 1.35rem;
+}
+.sort-indicator.is-inactive {
+  visibility: hidden;
 }
 .info-dialog {
   width: min(calc(100% - 2rem), 36rem);
@@ -754,6 +840,9 @@ html:has([data-pokedex-root]) {
   .pokemon-table td {
     padding-inline: 0.3rem;
   }
+  .pokemon-table {
+    min-width: 43.75rem;
+  }
   .move-list {
     grid-template-columns: 1fr;
   }
@@ -798,14 +887,52 @@ html:has([data-pokedex-root]) {
   }
   .table-scroll {
     max-height: none;
-    overflow-x: clip;
+    overflow-x: auto;
   }
-  .pokemon-table thead {
+  .pokemon-table {
+    width: 41.5rem;
+    min-width: 41.5rem;
+    max-width: none;
+    table-layout: fixed;
+  }
+  .pokemon-table thead th {
     position: static;
+    top: auto;
+    z-index: auto;
   }
   .pokemon-table thead th:nth-child(3),
   .pokemon-table tbody td:nth-child(3) {
-    display: none;
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  .pokemon-col--name {
+    width: 10rem;
+  }
+  .pokemon-col--types {
+    width: 0;
+  }
+  .pokemon-col--stat {
+    width: 4rem;
+  }
+  .pokemon-table th:first-child,
+  .pokemon-table td:first-child {
+    width: 3.5rem;
+    min-width: 3.5rem;
+    max-width: 3.5rem;
+  }
+  .pokemon-table th:nth-child(2),
+  .pokemon-table td:nth-child(2) {
+    width: 10rem;
+    min-width: 10rem;
+    max-width: 10rem;
+  }
+  .pokemon-table th:nth-child(n + 4),
+  .pokemon-table td:nth-child(n + 4) {
+    width: 4rem;
+    min-width: 4rem;
+    max-width: 4rem;
   }
   .pokemon-table th,
   .pokemon-table td {
@@ -813,6 +940,9 @@ html:has([data-pokedex-root]) {
     font-size: 0.78rem;
   }
   .sort {
+    width: 3rem;
+    max-width: 3rem;
+    margin-inline: 0.5rem;
     font-size: 0.68rem;
   }
   .pokedex-list,

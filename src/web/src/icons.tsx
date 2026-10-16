@@ -20,17 +20,23 @@ const Icon = ({
 
 export const ShinyIcon = ({ title }: IconProps) => (
   <Icon title={title}>
-    <path d="m12 2 1.25 3.75L17 7l-3.75 1.25L12 12l-1.25-3.75L7 7l3.75-1.25L12 2ZM5 12l.85 2.15L8 15l-2.15.85L5 18l-.85-2.15L2 15l2.15-.85L5 12Zm13 2 .85 2.15L21 17l-2.15.85L18 20l-.85-2.15L15 17l2.15-.85L18 14Z" />
+    <path d="m12.5 1.5 1.45 4.55L18.5 7.5l-4.55 1.45-1.45 4.55-1.45-4.55L6.5 7.5l4.55-1.45L12.5 1.5ZM5 12l.8 2.2L8 15l-2.2.8L5 18l-.8-2.2L2 15l2.2-.8L5 12Zm13.5 2 .7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
   </Icon>
 );
 
 export const MegaIcon = ({ title }: IconProps) => (
   <Icon title={title}>
     <path
-      d="M7 3c7 3 3 15 10 18M17 3C10 6 14 18 7 21M8.6 6h6.8M8 11h8m-7.4 5h6.8"
+      d="M12 2.2c5.2 0 9.3 3.8 9.3 8.8 0 5.4-4.8 10.8-9.3 10.8S2.7 16.4 2.7 11c0-5 4.1-8.8 9.3-8.8Z"
       fill="none"
       stroke="currentColor"
-      stroke-width="2"
+      stroke-width="1.7"
+    />
+    <path
+      d="M8 5.5c6 2.6 2 10.4 8 13M16 5.5C10 8.1 14 15.9 8 18.5M9.3 8h5.4m-6 4h6.6m-6 4h5.4"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
       stroke-linecap="round"
     />
   </Icon>
@@ -43,17 +49,18 @@ export const CategoryIcon = ({
 }) => (
   <Icon>
     {category === "Physical" && (
-      <path d="m12 2 1.8 6L19 5l-3 5.2 6 .8-5.5 2.4 4.1 4.4-6-1.5L14 22l-3.2-4.8L7 21l1-5.8-6-1.1 5.4-2.5L3.2 7l6.1 1.7L12 2Z" />
+      <path d="m3 13 5.2-2.1-2.6-4.5 5 2.2L12.4 3l2 5.1 5-2.7-2.1 5.2L22 12l-4.8 2.1 2.2 5-5-2.5L12 22l-1.7-5-5.5 2 2.8-4.6L3 13Z" />
     )}
     {category === "Special" && (
-      <path
-        d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"
-        fill-rule="evenodd"
-      />
+      <g fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="2.3" fill="currentColor" />
+        <circle cx="12" cy="12" r="5.6" />
+        <path d="M12 1.7v2.5M12 19.8v2.5M1.7 12h2.5M19.8 12h2.5M4.7 4.7l1.8 1.8m11 11 1.8 1.8m0-15.6-1.8 1.8m-11 11-1.8 1.8" />
+      </g>
     )}
     {category === "Status" && (
       <path
-        d="M5 4h14v4H5V4Zm2 6h10v10H7V10Zm3 3v4h4v-4h-4Z"
+        d="M12 2.5 15 8l6 .8-4.3 4.3 1 6-5.7-2.8-5.7 2.8 1-6L3 8.8 9 8l3-5.5Zm0 5.1-1.2 2.5-2.8.4 2 2-.5 2.8 2.5-1.4 2.5 1.4-.5-2.8 2-2-2.8-.4L12 7.6Z"
         fill-rule="evenodd"
       />
     )}

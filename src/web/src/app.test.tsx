@@ -7,7 +7,7 @@ import {
 } from "@testing-library/preact";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { App } from "./app";
+import { App, PokemonRow } from "./app";
 import type { Bootstrap, BulkDetails, PokedexIndex } from "./contracts";
 
 const bootstrap: Bootstrap = {
@@ -109,6 +109,47 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("Pokédex app", () => {
+  it("dispatches exactly one row selection for cells, Enter, and Space", async () => {
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    const first = index.forms[0]!;
+    const second = { ...first, id: "charizard-two", name: "Charizard Two" };
+    render(
+      <table>
+        <tbody>
+          <PokemonRow
+            form={first}
+            selected={false}
+            onSelect={onSelect}
+            spriteTemplate={bootstrap.sprite_url_template}
+          />
+          <PokemonRow
+            form={second}
+            selected={false}
+            onSelect={onSelect}
+            spriteTemplate={bootstrap.sprite_url_template}
+          />
+        </tbody>
+      </table>,
+    );
+    const rows = screen.getAllByRole("row");
+    fireEvent.click(rows[0]!.querySelector(".pokemon-table__sprite")!);
+    expect(onSelect).toHaveBeenNthCalledWith(1, first.id);
+    fireEvent.click(rows[1]!.querySelector(".pokemon-table__types")!);
+    expect(onSelect).toHaveBeenNthCalledWith(2, second.id);
+    fireEvent.click(rows[0]!.querySelector("[data-label=HP]")!);
+    expect(onSelect).toHaveBeenNthCalledWith(3, first.id);
+    const firstButton = screen.getByRole("button", { name: first.name });
+    firstButton.focus();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenNthCalledWith(4, first.id);
+    const secondButton = screen.getByRole("button", { name: second.name });
+    secondButton.focus();
+    await user.keyboard(" ");
+    expect(onSelect).toHaveBeenNthCalledWith(5, second.id);
+    expect(onSelect).toHaveBeenCalledTimes(5);
+  });
+
   it("restores pointer sort origin but preserves the keyboard viewport", async () => {
     vi.stubGlobal(
       "fetch",
@@ -120,17 +161,12 @@ describe("Pokédex app", () => {
     await screen.findByText("1 of 1 Pokémon");
     const scroll = container.querySelector<HTMLElement>(".table-scroll")!;
     const bst = screen.getByRole("button", { name: "BST" });
-    const header = bst.parentElement!;
-    scroll.scrollLeft = 4;
-    fireEvent.scroll(scroll);
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
+    const header = bst.closest("th")!;
     for (const direction of ["ascending", "descending", "none"]) {
       scroll.scrollLeft = 9;
       fireEvent.pointerDown(bst);
       fireEvent.click(bst, { detail: 1 });
-      expect(scroll.scrollLeft).toBe(4);
+      expect(scroll.scrollLeft).toBe(9);
       expect(header.getAttribute("aria-sort")).toBe(direction);
     }
     scroll.scrollLeft = 7;
@@ -139,6 +175,57 @@ describe("Pokédex app", () => {
       expect(scroll.scrollLeft).toBe(7);
       expect(header.getAttribute("aria-sort")).toBe(direction);
     }
+  });
+
+  it("keeps names, types, and quiet sort indicators in explicit table columns", async () => {
+    const longName = "Tauros-Paldea-Blaze-Bagredex-Long-Form";
+    const tableIndex = {
+      ...index,
+      forms: [
+        {
+          ...index.forms[0]!,
+          name: longName,
+          types: [
+            { id: "fire", name: "Fire" },
+            { id: "water", name: "Water" },
+          ],
+        },
+      ],
+    };
+    const fetch = vi.fn((url: string) =>
+      url === "/index" ? response(tableIndex) : response(detail),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const { container } = render(<App bootstrap={bootstrap} />);
+    await screen.findByText("1 of 1 Pokémon");
+    expect(container.querySelectorAll(".pokemon-table col")).toHaveLength(10);
+    const name = screen.getByRole("button", { name: longName });
+    expect(name.getAttribute("title")).toBe(longName);
+    expect(name.closest("th")?.classList.contains("pokemon-table__name")).toBe(
+      true,
+    );
+    expect(
+      name.closest("tr")?.querySelector(".pokemon-table__types .type-list"),
+    ).toBeTruthy();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    fireEvent.click(name.closest("tr")!.querySelector("[data-label=HP]")!);
+    expect(name.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(name.closest("tr")!.querySelector("td")!);
+    fireEvent.click(
+      name.closest("tr")!.querySelector(".pokemon-table__types")!,
+    );
+    fireEvent.keyDown(name, { key: "Enter" });
+    fireEvent.click(name, { detail: 0 });
+    expect(name.getAttribute("aria-pressed")).toBe("true");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const hp = screen.getByRole("button", { name: "HP" });
+    const indicator = hp.querySelector(".sort-indicator")!;
+    expect(indicator.classList.contains("is-inactive")).toBe(true);
+    fireEvent.click(hp);
+    expect(indicator.classList.contains("is-inactive")).toBe(false);
+    fireEvent.click(hp);
+    fireEvent.click(hp);
+    expect(indicator.classList.contains("is-inactive")).toBe(true);
   });
 
   it("paints the index before one bulk request and resolves the latest pending selection", async () => {
@@ -422,6 +509,11 @@ describe("Pokédex app", () => {
     expect(
       screen.getByRole("button", { name: "Switch to Charizard-Mega" }),
     ).toBeTruthy();
+    expect(
+      [...document.querySelectorAll(".mega-marker")].map(
+        (marker) => marker.textContent,
+      ),
+    ).toEqual(["X", "Y"]);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Show level-50 stat calculation information",
@@ -478,6 +570,13 @@ describe("Pokédex app", () => {
     expect(
       screen.queryByRole("button", { name: /Charizard-Mega-Y/ }),
     ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Return to base form Charizard" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Switch to Charizard-Mega" }),
+    );
+    expect(document.querySelector(".mega-marker")).toBeNull();
   });
 
   it("renders status power as an em dash and physical numeric zero exactly", async () => {
@@ -513,6 +612,15 @@ describe("Pokédex app", () => {
       name: /Status Move.*Status.*—/,
     });
     expect(statusRow.textContent).toContain("—");
+    expect(
+      screen.getByRole("button", { name: "Sort moves by category" })
+        .textContent,
+    ).toContain("Category");
+    const categoryCell = statusRow.querySelector(".move-category")!;
+    expect(categoryCell.querySelector("svg")).toBeTruthy();
+    expect(categoryCell.querySelector(".visually-hidden")?.textContent).toBe(
+      "Status",
+    );
     const zeroRow = screen.getByRole("row", { name: /Zero Move.*Physical.*0/ });
     expect(zeroRow.textContent).toMatch(/0$/);
     const powerButton = screen.getByRole("button", {
@@ -554,6 +662,7 @@ describe("Pokédex app", () => {
     const info = await screen.findByRole("button", {
       name: "Show level-50 stat calculation information",
     });
+    expect(info.querySelector(".info-mark")?.textContent).toBe("i");
     expect(screen.getByRole("heading", { name: "Stats" })).toBeTruthy();
     await user.hover(info);
     expect(screen.getByRole("tooltip").textContent).toBe(

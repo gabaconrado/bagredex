@@ -14,6 +14,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop-light",
+      grepInvert: /@mid-width/,
       use: {
         ...devices["Desktop Chrome"],
         colorScheme: "light",
@@ -22,6 +23,7 @@ export default defineConfig({
     },
     {
       name: "tablet-dark-reduced",
+      grepInvert: /@mid-width/,
       use: {
         ...devices["iPad (gen 7)"],
         colorScheme: "dark",
@@ -29,7 +31,18 @@ export default defineConfig({
       },
     },
     {
+      name: "mid-width-light",
+      grep: /@mid-width/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 900, height: 900 },
+        colorScheme: "light",
+        reducedMotion: "no-preference",
+      },
+    },
+    {
       name: "phone-light",
+      grepInvert: /@mid-width/,
       use: {
         ...devices["Pixel 7"],
         colorScheme: "light",
@@ -38,6 +51,7 @@ export default defineConfig({
     },
     {
       name: "firefox-desktop-light",
+      grepInvert: /@mid-width/,
       use: {
         ...devices["Desktop Firefox"],
         colorScheme: "light",
@@ -46,6 +60,7 @@ export default defineConfig({
     },
     {
       name: "firefox-tablet-dark-reduced",
+      grepInvert: /@mid-width/,
       use: {
         browserName: "firefox",
         viewport: { width: 820, height: 1180 },

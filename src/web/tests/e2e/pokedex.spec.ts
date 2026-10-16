@@ -37,6 +37,60 @@ async function settleFrames(page: Page) {
   );
 }
 
+async function revealInTable(page: Page, target: Locator) {
+  const before = await target.evaluate((element) => {
+    const scroll = element.closest<HTMLElement>(".table-scroll")!;
+    for (let pass = 0; pass < 2; pass += 1) {
+      const targetBox = element.getBoundingClientRect();
+      const scrollBox = scroll.getBoundingClientRect();
+      scroll.scrollLeft +=
+        targetBox.left +
+        targetBox.width / 2 -
+        (scrollBox.left + scrollBox.width / 2);
+      if (targetBox.top < scrollBox.top)
+        scroll.scrollTop += targetBox.top - scrollBox.top;
+      else if (targetBox.bottom > scrollBox.bottom)
+        scroll.scrollTop += targetBox.bottom - scrollBox.bottom;
+    }
+    return { scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop };
+  });
+  await settleFrames(page);
+  const result = await target.evaluate((element, initial) => {
+    const targetBox = element.getBoundingClientRect();
+    const scroll = element.closest<HTMLElement>(".table-scroll")!;
+    const scrollBox = scroll.getBoundingClientRect();
+    const x = targetBox.left + targetBox.width / 2;
+    const y = targetBox.top + targetBox.height / 2;
+    const owner = document.elementFromPoint(x, y);
+    const sides = {
+      left: targetBox.left >= scrollBox.left,
+      right: targetBox.right <= scrollBox.right,
+      top: targetBox.top >= scrollBox.top,
+      bottom: targetBox.bottom <= scrollBox.bottom,
+    };
+    return {
+      ok:
+        Object.values(sides).every(Boolean) &&
+        owner !== null &&
+        (owner === element || element.contains(owner)),
+      initial,
+      target: targetBox.toJSON(),
+      scroll: scrollBox.toJSON(),
+      scrollLeft: scroll.scrollLeft,
+      maxScrollLeft: scroll.scrollWidth - scroll.clientWidth,
+      sides,
+      owner: owner
+        ? {
+            tag: owner.tagName,
+            className: (owner as HTMLElement).className,
+            text: owner.textContent?.trim().slice(0, 80),
+          }
+        : null,
+    };
+  }, before);
+  expect(result.ok, JSON.stringify(result)).toBe(true);
+}
+
 async function expectNoOuterShiftSince(page: Page, startTime: number) {
   await settleFrames(page);
   const shifts = await page.evaluate(
@@ -227,23 +281,147 @@ test("combines move, ability, and type filters and cycles sorting", async ({
     .getByRole("button", { name: "Remove Water type filter" })
     .click();
   const hp = page.getByRole("button", { name: "HP" });
+  await revealInTable(page, hp);
   await hp.click();
-  await expect(hp.locator("xpath=..")).toHaveAttribute(
+  await expect(hp.locator("xpath=ancestor::th")).toHaveAttribute(
     "aria-sort",
     "ascending",
   );
   await hp.click();
-  await expect(hp.locator("xpath=..")).toHaveAttribute(
+  await expect(hp.locator("xpath=ancestor::th")).toHaveAttribute(
     "aria-sort",
     "descending",
   );
   await hp.click();
-  await expect(hp.locator("xpath=..")).toHaveAttribute("aria-sort", "none");
+  await expect(hp.locator("xpath=ancestor::th")).toHaveAttribute(
+    "aria-sort",
+    "none",
+  );
+});
+
+test("keeps mid-width stat controls accessible and contained @mid-width", async ({
+  page,
+}) => {
+  const scroll = page.locator(".table-scroll");
+  const table = page.locator(".pokemon-table");
+  const buttons = page.locator(".pokemon-table thead .sort");
+  await expect(buttons).toHaveCount(7);
+  expect(
+    await table.evaluate((element) => element.scrollWidth),
+  ).toBeGreaterThan(await scroll.evaluate((element) => element.clientWidth));
+
+  for (const button of await buttons.all()) {
+    await revealInTable(page, button);
+    const header = button.locator("xpath=ancestor::th");
+    const [buttonBox, headerBox] = await Promise.all([
+      button.boundingBox(),
+      header.boundingBox(),
+    ]);
+    expect(buttonBox?.width).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.height).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.x ?? 0).toBeGreaterThanOrEqual((headerBox?.x ?? 0) - 1);
+    expect((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0)).toBeLessThanOrEqual(
+      (headerBox?.x ?? 0) + (headerBox?.width ?? 0) + 1,
+    );
+    await button.focus();
+    await expect(button).toBeFocused();
+    await expect(button).toHaveCSS("outline-style", "solid");
+    expect(
+      Number.parseFloat(
+        await button.evaluate(
+          (element) => getComputedStyle(element).outlineOffset,
+        ),
+      ),
+    ).toBeLessThanOrEqual(0);
+    const origin = await scroll.evaluate((element) => element.scrollLeft);
+    await button.click();
+    await expect(header).toHaveAttribute("aria-sort", "ascending");
+    expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(origin);
+    expectStableBoxes(
+      [headerBox],
+      [await header.boundingBox()],
+      ["stat header"],
+      `${await button.textContent()} mid-width click`,
+    );
+    await button.click();
+    await button.click();
+    await expect(header).toHaveAttribute("aria-sort", "none");
+  }
+});
+
+test("selects an entire data row exactly once by pointer, touch, and keyboard", async ({
+  page,
+}, testInfo) => {
+  const root = page.locator(".pokedex-app");
+  const rows = page.locator(".pokemon-table tbody tr");
+  await expect(rows.nth(4)).toBeVisible();
+  const hpSort = page.getByRole("button", { name: "HP", exact: true });
+  const expectSelection = async (rowIndex: number, revision: number) => {
+    const button = rows.nth(rowIndex).getByRole("button");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(root).toHaveAttribute(
+      "data-selection-revision",
+      String(revision),
+    );
+    await expect(hpSort.locator("xpath=ancestor::th")).toHaveAttribute(
+      "aria-sort",
+      "none",
+    );
+  };
+  const activate = async (target: Locator) => {
+    await revealInTable(page, target);
+    const box = await target.boundingBox();
+    const position = {
+      x: (box?.width ?? 16) / 2,
+      y: (box?.height ?? 16) / 2,
+    };
+    if (testInfo.project.use.hasTouch) await target.tap({ position });
+    else await target.click({ position });
+  };
+  const firstRow = rows.nth(0);
+  await expect(firstRow).toHaveCSS("cursor", "pointer");
+  if (!testInfo.project.use.hasTouch) {
+    const before = await firstRow.evaluate(
+      (row) => getComputedStyle(row).backgroundColor,
+    );
+    await firstRow.hover();
+    const after = await firstRow.evaluate(
+      (row) => getComputedStyle(row).backgroundColor,
+    );
+    expect(after).not.toBe(before);
+  }
+  await activate(firstRow.locator(".pokemon-table__sprite"));
+  await expectSelection(0, 1);
+  const selectedBackground = await firstRow.evaluate(
+    (row) => getComputedStyle(row).backgroundColor,
+  );
+  expect(selectedBackground).not.toBe("rgba(0, 0, 0, 0)");
+
+  let revision = 2;
+  if ((page.viewportSize()?.width ?? 1000) > 640) {
+    await activate(rows.nth(1).locator(".pokemon-table__types"));
+    await expectSelection(1, revision);
+    revision += 1;
+  } else {
+    await expect(rows.nth(1).locator(".pokemon-table__types")).toBeHidden();
+  }
+  await activate(rows.nth(2).locator("[data-label=HP]"));
+  await expectSelection(2, revision);
+  revision += 1;
+  const enterButton = rows.nth(3).getByRole("button");
+  await enterButton.focus();
+  await enterButton.press("Enter");
+  await expectSelection(3, revision);
+  revision += 1;
+  const spaceButton = rows.nth(4).getByRole("button");
+  await spaceButton.focus();
+  await spaceButton.press("Space");
+  await expectSelection(4, revision);
 });
 
 test("navigates Mega forms in both directions and replaces detail information", async ({
   page,
-}) => {
+}, testInfo) => {
   const search = page.getByLabel(/Search Pokémon/);
   await search.fill("charizard");
   await page.getByRole("option", { name: "Charizard", exact: true }).click();
@@ -281,27 +459,63 @@ test("navigates Mega forms in both directions and replaces detail information", 
   await expect(
     moveTable.getByRole("button", { name: "Sort moves by category" }),
   ).toBeVisible();
+  await expect(
+    moveTable.getByRole("button", { name: "Sort moves by category" }),
+  ).toContainText("Category");
+  const categoryCell = moveTable.locator(".move-category").first();
+  await expect(categoryCell.locator("svg")).toBeVisible();
+  await expect(categoryCell.locator(".visually-hidden")).toHaveCSS(
+    "position",
+    "absolute",
+  );
+  const inactiveMoveIndicator = moveTable
+    .getByRole("button", { name: "Sort moves by category" })
+    .locator(".sort-indicator");
+  await expect(inactiveMoveIndicator).toHaveCSS("visibility", "hidden");
   const statsInfo = page.getByRole("button", {
     name: "Show level-50 stat calculation information",
   });
+  const [infoBox, markBox] = await Promise.all([
+    statsInfo.boundingBox(),
+    statsInfo.locator(".info-mark").boundingBox(),
+  ]);
+  // Firefox can report exact CSS-pixel boundaries a few millionths off.
+  expect(infoBox?.width).toBeGreaterThanOrEqual(43.99);
+  expect(infoBox?.height).toBeGreaterThanOrEqual(43.99);
+  expect(markBox?.width).toBeGreaterThanOrEqual(20);
+  expect(markBox?.width).toBeLessThanOrEqual(24);
   await statsInfo.click();
-  await expect(page.getByRole("tooltip")).toHaveText(
+  const statsTooltip = page.getByRole("tooltip");
+  await expect(statsTooltip).toHaveText(
     "Real: 0 SP, neutral nature. Min: 0 SP, hindering nature. Max: 32 SP, increasing nature.",
   );
+  expect((await statsTooltip.boundingBox())?.width).toBeLessThanOrEqual(320.01);
   await statsInfo.click();
   await expect(page.getByRole("tooltip")).toHaveCount(0);
   for (const key of ["type", "category", "power"]) {
     const button = moveTable.getByRole("button", {
       name: new RegExp(`Sort moves by ${key}`),
     });
-    const header = button.locator("xpath=..");
+    const header = button.locator("xpath=ancestor::*[@aria-sort]");
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "ascending");
+    await expect(button.locator(".sort-indicator")).toHaveCSS(
+      "visibility",
+      "visible",
+    );
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "descending");
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "none");
+    await expect(button.locator(".sort-indicator")).toHaveCSS(
+      "visibility",
+      "hidden",
+    );
   }
+  await testInfo.attach("corrected-icons-and-detail", {
+    body: await page.screenshot(),
+    contentType: "image/png",
+  });
   const mega = page
     .getByRole("button", { name: /Switch to Charizard-Mega/ })
     .first();
@@ -356,6 +570,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
 test("keeps responsive shell, sort columns, and delayed detail geometry stable", async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   const firstRow = page.locator(".pokemon-table tbody tr").first();
   await expect(firstRow.getByRole("button")).toBeVisible();
   if ((page.viewportSize()?.width ?? 1000) <= 640) {
@@ -431,6 +646,58 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     ["root", "app", "list", "detail", "toolbar", "heading", "picker"],
     "server shell to loaded index",
   );
+  const longestName = await page
+    .locator(".pokemon-table tbody th button")
+    .evaluateAll(
+      (buttons) =>
+        buttons
+          .map((button) => button.textContent?.trim() ?? "")
+          .sort((left, right) => right.length - left.length)[0],
+    );
+  const longestNameButton = page.getByRole("button", {
+    name: longestName,
+    exact: true,
+  });
+  await expect(longestNameButton).toHaveAttribute("title", longestName);
+  expect(
+    await longestNameButton.evaluate((button) => {
+      const style = getComputedStyle(button);
+      return {
+        overflow: style.overflow,
+        textOverflow: style.textOverflow,
+        whiteSpace: style.whiteSpace,
+      };
+    }),
+  ).toEqual({
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  });
+  const longestRow = longestNameButton.locator("xpath=../..");
+  const rowCells = longestRow.locator("th, td");
+  const nameBox = await rowCells.nth(1).boundingBox();
+  const typesBox = await rowCells.nth(2).boundingBox();
+  const hpBox = await rowCells.nth(3).boundingBox();
+  if ((page.viewportSize()?.width ?? 1000) > 640) {
+    expect((nameBox?.x ?? 0) + (nameBox?.width ?? 0)).toBeLessThanOrEqual(
+      (typesBox?.x ?? 0) + 1,
+    );
+    expect((typesBox?.x ?? 0) + (typesBox?.width ?? 0)).toBeLessThanOrEqual(
+      (hpBox?.x ?? 0) + 1,
+    );
+    const badges = longestRow.locator(".pokemon-table__types .type-badge");
+    for (
+      let badgeIndex = 0;
+      badgeIndex < (await badges.count());
+      badgeIndex += 1
+    ) {
+      const badgeBox = await badges.nth(badgeIndex).boundingBox();
+      expect(badgeBox?.x ?? 0).toBeGreaterThanOrEqual((typesBox?.x ?? 0) - 1);
+      expect((badgeBox?.x ?? 0) + (badgeBox?.width ?? 0)).toBeLessThanOrEqual(
+        (typesBox?.x ?? 0) + (typesBox?.width ?? 0) + 1,
+      );
+    }
+  }
   await page.waitForFunction(() => {
     const viewport = document
       .querySelector(".table-scroll")!
@@ -470,11 +737,82 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     "table",
     "header row",
   ];
-  const baselineSortBoxes = await boxes(measuredLayout);
   const baselineColumnBoxes = await boxes(await columns.all());
-  const baselineScrollLeft = await scroll.evaluate(
-    (element) => element.scrollLeft,
-  );
+  if ((page.viewportSize()?.width ?? 1000) <= 640) {
+    const firstRowCells = await boxes(
+      await page
+        .locator(".pokemon-table tbody tr")
+        .first()
+        .locator("th, td")
+        .all(),
+    );
+    for (const [kind, cellBoxes] of [
+      ["header", baselineColumnBoxes],
+      ["row", firstRowCells],
+    ] as const) {
+      const stats = cellBoxes.slice(3);
+      stats.forEach((box, index) => {
+        expect(
+          box?.width,
+          `${kind} stat ${index} width`,
+        ).toBeGreaterThanOrEqual(63);
+        expect(box?.width, `${kind} stat ${index} width`).toBeLessThanOrEqual(
+          65,
+        );
+        if (index > 0)
+          expect(
+            box?.x ?? 0,
+            `${kind} stat ${index} does not overlap its predecessor`,
+          ).toBeGreaterThanOrEqual(
+            (stats[index - 1]?.x ?? 0) + (stats[index - 1]?.width ?? 0) - 1,
+          );
+      });
+    }
+  }
+  const statHeaderButtons = page.locator(".pokemon-table thead .sort");
+  const statHeaderButtonBoxes = await boxes(await statHeaderButtons.all());
+  for (
+    let buttonIndex = 0;
+    buttonIndex < (await statHeaderButtons.count());
+    buttonIndex += 1
+  ) {
+    const button = statHeaderButtons.nth(buttonIndex);
+    const [buttonBox, headerBox] = await Promise.all([
+      button.boundingBox(),
+      button.locator("xpath=ancestor::th").boundingBox(),
+    ]);
+    expect(buttonBox?.x ?? 0).toBeGreaterThanOrEqual((headerBox?.x ?? 0) - 1);
+    expect((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0)).toBeLessThanOrEqual(
+      (headerBox?.x ?? 0) + (headerBox?.width ?? 0) + 1,
+    );
+    if (buttonIndex > 0)
+      expect(buttonBox?.x ?? 0).toBeGreaterThanOrEqual(
+        (statHeaderButtonBoxes[buttonIndex - 1]?.x ?? 0) +
+          (statHeaderButtonBoxes[buttonIndex - 1]?.width ?? 0) -
+          1,
+      );
+    const ownsVisibleCenter = await button.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const viewport = element
+        .closest(".table-scroll")!
+        .getBoundingClientRect();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      if (
+        x < viewport.left ||
+        x > viewport.right ||
+        y < viewport.top ||
+        y > viewport.bottom
+      )
+        return true;
+      const owner = document.elementFromPoint(x, y);
+      return owner === element || element.contains(owner);
+    });
+    expect(ownsVisibleCenter).toBe(true);
+  }
+  await expect(
+    page.locator(".pokemon-table thead .sort-indicator").first(),
+  ).toHaveCSS("visibility", "hidden");
   const identityRow = page.locator(".pokemon-table tbody tr").first();
   const identityName = await identityRow.getByRole("button").textContent();
   await identityRow.evaluate((row) =>
@@ -503,20 +841,39 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   ]) {
     const button = page.getByRole("button", { name: label, exact: true });
     for (const direction of ["ascending", "descending", "none"]) {
+      await revealInTable(page, button);
+      const pointerOrigin = await scroll.evaluate(
+        (element) => element.scrollLeft,
+      );
+      const interactionBoxes = await boxes(measuredLayout);
+      const interactionColumnBoxes = await boxes(await columns.all());
+      const ownsCenter = await button.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const owner = document.elementFromPoint(
+          box.x + box.width / 2,
+          box.y + box.height / 2,
+        );
+        return owner === element || element.contains(owner);
+      });
+      expect(ownsCenter).toBe(true);
       const shiftStart = await page.evaluate(() => performance.now());
       await button.click();
-      await expect(button.locator("xpath=..")).toHaveAttribute(
+      await expect(button.locator("xpath=ancestor::th")).toHaveAttribute(
         "aria-sort",
         direction,
       );
+      await expect(button.locator(".sort-indicator")).toHaveCSS(
+        "visibility",
+        direction === "none" ? "hidden" : "visible",
+      );
       expectStableBoxes(
-        baselineSortBoxes,
+        interactionBoxes,
         await boxes(measuredLayout),
         measuredLayoutLabels,
         `${label} ${direction}`,
       );
       expectStableBoxes(
-        baselineColumnBoxes,
+        interactionColumnBoxes,
         await boxes(await columns.all()),
         [
           "sprite",
@@ -534,19 +891,22 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       );
       await expect(scroll).toHaveCSS("scrollbar-gutter", /stable/);
       expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(
-        baselineScrollLeft,
+        pointerOrigin,
       );
       await expectNoOuterShiftSince(page, shiftStart);
     }
   }
   const keyboardSort = page.getByRole("button", { name: "HP", exact: true });
   await keyboardSort.focus();
+  await settleFrames(page);
   const keyboardScrollLeft = await scroll.evaluate(
     (element) => element.scrollLeft,
   );
+  const keyboardSortBoxes = await boxes(measuredLayout);
+  const keyboardColumnBoxes = await boxes(await columns.all());
   for (const direction of ["ascending", "descending", "none"]) {
     await keyboardSort.press("Enter");
-    await expect(keyboardSort.locator("xpath=..")).toHaveAttribute(
+    await expect(keyboardSort.locator("xpath=ancestor::th")).toHaveAttribute(
       "aria-sort",
       direction,
     );
@@ -554,13 +914,13 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       keyboardScrollLeft,
     );
     expectStableBoxes(
-      baselineSortBoxes,
+      keyboardSortBoxes,
       await boxes(measuredLayout),
       measuredLayoutLabels,
       `HP keyboard ${direction}`,
     );
     expectStableBoxes(
-      baselineColumnBoxes,
+      keyboardColumnBoxes,
       await boxes(await columns.all()),
       [
         "sprite",
@@ -611,7 +971,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   });
   const emptyBoxes = await boxes([app, list, detail, toolbar, searchToolbar]);
   const selectionShiftStart = await page.evaluate(() => performance.now());
-  await firstRow.getByRole("button").click();
+  await firstRow.locator("[data-label=HP]").click({ position: { x: 2, y: 2 } });
+  await expect(firstRow.getByRole("button")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(page.getByLabel("Loading Pokémon details")).toBeVisible();
   expectStableBoxes(
     emptyBoxes,

@@ -209,7 +209,9 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
     await mutation;
     durations[key] = performance.now() - start;
     expect(firstMove()).toBe(expected);
-    expect(button.parentElement?.getAttribute("aria-sort")).toBe("ascending");
+    expect(button.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(
+      "ascending",
+    );
     fireEvent.click(button);
     fireEvent.click(button);
   }
@@ -247,7 +249,9 @@ it("records M-C-scale synthetic render and enforces local selector timing", asyn
   const sortStart = performance.now();
   const speed = screen.getByRole("button", { name: "Speed" });
   fireEvent.click(speed);
-  expect(speed.parentElement?.getAttribute("aria-sort")).toBe("ascending");
+  expect(speed.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(
+    "ascending",
+  );
   const sortRenderMs = performance.now() - sortStart;
   const search = screen.getByLabelText(/Search Pokémon/);
   fireEvent.input(search, { target: { value: "fire" } });
