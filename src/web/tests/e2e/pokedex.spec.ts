@@ -202,6 +202,234 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await expect(page.locator(".site-header__brand small")).toHaveText(
     "development",
   );
+  const brand = page.locator(".site-header__brand");
+  const brandGeometry = await brand.evaluate((link) => {
+    const name = link.querySelector<HTMLElement>(".site-header__brand-name")!;
+    const version = link.querySelector<HTMLElement>(".site-header__version")!;
+    const header = link.closest<HTMLElement>(".site-header")!;
+    const account = header.querySelector<HTMLElement>(".site-header__account")!;
+    const box = (element: HTMLElement) => {
+      const value = element.getBoundingClientRect();
+      return {
+        top: value.top,
+        right: value.right,
+        bottom: value.bottom,
+        left: value.left,
+        width: value.width,
+        height: value.height,
+      };
+    };
+    const linkStyle = getComputedStyle(link);
+    const nameStyle = getComputedStyle(name);
+    const versionStyle = getComputedStyle(version);
+    return {
+      display: linkStyle.display,
+      authoredDisplay: [...document.styleSheets]
+        .flatMap((sheet) => {
+          try {
+            return [...sheet.cssRules];
+          } catch {
+            return [];
+          }
+        })
+        .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule)
+        .find((rule) => rule.selectorText === ".site-header__brand")?.style
+        .display,
+      direction: linkStyle.flexDirection,
+      alignment: linkStyle.alignItems,
+      link: box(link),
+      name: box(name),
+      version: box(version),
+      header: box(header),
+      account: box(account),
+      nameFontSize: Number.parseFloat(nameStyle.fontSize),
+      nameWeight: Number.parseFloat(nameStyle.fontWeight),
+      nameColor: nameStyle.color,
+      versionFontSize: Number.parseFloat(versionStyle.fontSize),
+      versionWeight: Number.parseFloat(versionStyle.fontWeight),
+      versionColor: versionStyle.color,
+    };
+  });
+  expect(brandGeometry.authoredDisplay).toBe("inline-flex");
+  expect(brandGeometry.display).toBe("flex");
+  expect(brandGeometry.direction).toBe("column");
+  expect(brandGeometry.alignment).toBe("flex-start");
+  expect(
+    brandGeometry.version.top - brandGeometry.name.bottom,
+  ).toBeGreaterThanOrEqual(1);
+  expect(
+    brandGeometry.version.top - brandGeometry.name.bottom,
+  ).toBeLessThanOrEqual(4);
+  expect(
+    Math.abs(brandGeometry.version.left - brandGeometry.name.left),
+  ).toBeLessThanOrEqual(1);
+  expect(brandGeometry.versionFontSize).toBeLessThan(
+    brandGeometry.nameFontSize,
+  );
+  expect(brandGeometry.versionWeight).toBeLessThan(brandGeometry.nameWeight);
+  expect(brandGeometry.versionColor).not.toBe(brandGeometry.nameColor);
+  const viewportScreenshot = await page.screenshot();
+  const sampledColors = await page.evaluate(
+    async ({ source, sampleX, sampleY }) => {
+      const toRgb = (value: string) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext("2d")!;
+        context.fillStyle = value;
+        context.fillRect(0, 0, 1, 1);
+        return [...context.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+      };
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d")!;
+      context.drawImage(image, 0, 0);
+      const scaleX = image.naturalWidth / innerWidth;
+      const scaleY = image.naturalHeight / innerHeight;
+      const background = [
+        ...context
+          .getImageData(
+            Math.round(sampleX * scaleX),
+            Math.round(sampleY * scaleY),
+            1,
+            1,
+          )
+          .data.slice(0, 3),
+      ];
+      return {
+        background,
+        foreground: toRgb(
+          getComputedStyle(document.querySelector(".site-header__version")!)
+            .color,
+        ),
+      };
+    },
+    {
+      source: `data:image/png;base64,${viewportScreenshot.toString("base64")}`,
+      sampleX: brandGeometry.version.right + 6,
+      sampleY: brandGeometry.version.top + brandGeometry.version.height / 2,
+    },
+  );
+  const luminance = (rgb: number[]) => {
+    const values = rgb.map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * values[0]! + 0.7152 * values[1]! + 0.0722 * values[2]!;
+  };
+  const [bright, dark] = [
+    luminance(sampledColors.foreground),
+    luminance(sampledColors.background),
+  ].sort((left, right) => right - left);
+  expect((bright! + 0.05) / (dark! + 0.05)).toBeGreaterThanOrEqual(4.5);
+  for (const child of [brandGeometry.name, brandGeometry.version]) {
+    expect(child.left).toBeGreaterThanOrEqual(brandGeometry.link.left - 1);
+    expect(child.right).toBeLessThanOrEqual(brandGeometry.link.right + 1);
+    expect(child.top).toBeGreaterThanOrEqual(brandGeometry.link.top - 1);
+    expect(child.bottom).toBeLessThanOrEqual(brandGeometry.link.bottom + 1);
+  }
+  expect(brandGeometry.link.left).toBeGreaterThanOrEqual(
+    brandGeometry.header.left,
+  );
+  expect(brandGeometry.link.right).toBeLessThanOrEqual(
+    brandGeometry.account.left,
+  );
+  await brand.focus();
+  await expect(brand).toBeFocused();
+  await expect(brand).toHaveAccessibleName("Bagredex development");
+  const focusStyle = await brand.evaluate((link) => {
+    const style = getComputedStyle(link);
+    const linkBox = link.getBoundingClientRect();
+    const headerBox = link
+      .closest<HTMLElement>(".site-header")!
+      .getBoundingClientRect();
+    const extent =
+      Number.parseFloat(style.outlineWidth) +
+      Number.parseFloat(style.outlineOffset);
+    return {
+      outlineStyle: style.outlineStyle,
+      outlineWidth: Number.parseFloat(style.outlineWidth),
+      outlineOffset: Number.parseFloat(style.outlineOffset),
+      expanded: {
+        left: linkBox.left - extent,
+        top: linkBox.top - extent,
+        right: linkBox.right + extent,
+        bottom: linkBox.bottom + extent,
+      },
+      header: {
+        left: headerBox.left,
+        top: headerBox.top,
+        right: headerBox.right,
+        bottom: headerBox.bottom,
+      },
+    };
+  });
+  expect(focusStyle.outlineStyle).toBe("solid");
+  expect(focusStyle.outlineWidth).toBeGreaterThan(0);
+  expect(focusStyle.outlineOffset).toBeGreaterThanOrEqual(0);
+  expect(focusStyle.expanded.left).toBeGreaterThanOrEqual(
+    focusStyle.header.left,
+  );
+  expect(focusStyle.expanded.top).toBeGreaterThanOrEqual(focusStyle.header.top);
+  expect(focusStyle.expanded.right).toBeLessThanOrEqual(
+    focusStyle.header.right,
+  );
+  expect(focusStyle.expanded.bottom).toBeLessThanOrEqual(
+    focusStyle.header.bottom,
+  );
+  expect(focusStyle.expanded.left).toBeGreaterThanOrEqual(0);
+  expect(focusStyle.expanded.right).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  await expect(brand).toHaveAttribute("href", "/");
+  await expect(brand.locator("span, small")).toHaveCount(2);
+  await expect(page.locator("a.site-header__brand")).toHaveCount(1);
+  const identity = page.locator(".site-header__identity");
+  const originalIdentity = await identity.textContent();
+  await identity.evaluate((element) => {
+    element.textContent = "VeryLongAuthenticatedTrainerIdentityWithoutSpaces";
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  const responsiveHeader = await page.locator(".site-header").boundingBox();
+  const responsiveBrand = await brand.boundingBox();
+  const responsiveAccount = await page
+    .locator(".site-header__account")
+    .boundingBox();
+  const responsiveIdentity = await identity.boundingBox();
+  const logout = await page
+    .getByRole("button", { name: "Log out" })
+    .boundingBox();
+  for (const box of [
+    responsiveBrand,
+    responsiveAccount,
+    responsiveIdentity,
+    logout,
+  ]) {
+    expect(box!.x).toBeGreaterThanOrEqual(responsiveHeader!.x - 1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(
+      responsiveHeader!.x + responsiveHeader!.width + 1,
+    );
+    expect(box!.y).toBeGreaterThanOrEqual(responsiveHeader!.y - 1);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(
+      responsiveHeader!.y + responsiveHeader!.height + 1,
+    );
+  }
+  expect(responsiveBrand!.x + responsiveBrand!.width).toBeLessThanOrEqual(
+    responsiveAccount!.x + 1,
+  );
+  await identity.evaluate((element, value) => {
+    element.textContent = value;
+  }, originalIdentity ?? "");
   const reminder = page.locator(".shortcut-reminder");
   await expect(reminder).toHaveText("Press ? for keyboard shortcuts");
   await expect(reminder.locator("kbd")).toHaveCount(1);
@@ -1217,8 +1445,18 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   const toolbar = page.locator(".pokedex-title");
   const resultMeta = page.locator(".result-meta");
   const shortcutReminder = page.locator(".shortcut-reminder");
+  const siteHeader = page.locator(".site-header");
+  const brand = page.locator(".site-header__brand");
+  const brandName = page.locator(".site-header__brand-name");
+  const version = page.locator(".site-header__version");
+  const account = page.locator(".site-header__account");
   await expect(heading).toBeVisible();
   const shellBoxes = await boxes([
+    siteHeader,
+    brand,
+    brandName,
+    version,
+    account,
     root,
     app,
     list,
@@ -1237,6 +1475,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
   expectStableBoxes(
     shellBoxes,
     await boxes([
+      siteHeader,
+      brand,
+      brandName,
+      version,
+      account,
       root,
       app,
       list,
@@ -1248,6 +1491,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       shortcutReminder,
     ]),
     [
+      "site header",
+      "brand link",
+      "brand name",
+      "version label",
+      "account controls",
       "root",
       "app",
       "list",
