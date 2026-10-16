@@ -131,6 +131,16 @@ teardown() {
   [ "$(find "${REPOSITORY_ROOT}/src/data/releases/showdown-3a766f2c-s1-i1-923ba416555c/sprites" -type f -name '*.webp' | wc -l)" -eq 706 ]
 }
 
+@test "application data is normalized read-only and verified as the runtime user" {
+  local containerfile="${REPOSITORY_ROOT}/deploy/Containerfile"
+
+  [ "$(grep -Fc 'RUN chmod -R a=rX,u+w /app/src/data' "${containerfile}")" -eq 2 ]
+  grep -Fq 'USER 10001:10001' "${containerfile}"
+  grep -Fq 'for manifest in /app/src/data/releases/*/manifest.json' "${containerfile}"
+  grep -Fq 'test -r "${manifest}"' "${containerfile}"
+  grep -Fq 'test -r "${release_dir}/sprites/normal/abomasnow.webp"' "${containerfile}"
+}
+
 @test "deployment pins one approved Pokemon data bundle" {
   grep -Fxq \
     'BAGREDEX_POKEMON_DATA_VERSION=showdown-3a766f2c-s1-i1-923ba416555c' \

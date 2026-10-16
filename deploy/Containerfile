@@ -33,6 +33,7 @@ COPY src/data/importer/ /app/src/data/importer/
 COPY src/data/overrides/ /app/src/data/overrides/
 COPY src/data/releases/ /app/src/data/releases/
 COPY src/data/schema/ /app/src/data/schema/
+RUN chmod -R a=rX,u+w /app/src/data
 COPY src/web/ /app/src/web/
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 
@@ -49,9 +50,19 @@ COPY src/data/importer/ /app/src/data/importer/
 COPY src/data/overrides/ /app/src/data/overrides/
 COPY src/data/releases/ /app/src/data/releases/
 COPY src/data/schema/ /app/src/data/schema/
+RUN chmod -R a=rX,u+w /app/src/data
 COPY src/web/ /app/src/web/
 COPY --from=frontend-build /app/src/web/static/web/dist/ /app/src/web/static/web/dist/
 USER 10001:10001
+RUN test -x /app/src/data/importer \
+    && test -x /app/src/data/overrides \
+    && test -x /app/src/data/releases \
+    && test -x /app/src/data/schema \
+    && for manifest in /app/src/data/releases/*/manifest.json; do \
+         test -r "${manifest}" \
+         && release_dir="${manifest%/manifest.json}" \
+         && test -r "${release_dir}/sprites/normal/abomasnow.webp"; \
+       done
 EXPOSE 8000
 CMD ["gunicorn", "--bind=0.0.0.0:8000", "--workers=1", "--threads=4", "bagredex.wsgi:application"]
 
