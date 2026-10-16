@@ -60,6 +60,10 @@ requires no registry at runtime.
 - Six Chromium end-to-end flows passed at desktop and phone viewports against the local stack,
   covering both regulations, keyboard selection, combined filters, sorting, Mega navigation,
   shiny sprites, and detail replacement.
+- After installing the project-pinned Playwright WebKit 26.5 revision 2336, all three
+  `tablet-dark-reduced` flows passed against the loaded and active local stack in 7.6 seconds:
+  regulation navigation and keyboard selection in 2.7 seconds, filters and sorting in 2.0 seconds,
+  and Mega navigation and detail replacement in 2.1 seconds.
 - The M-C index is 411,860 bytes raw and 50,808 bytes gzip. Serialization used eight database
   queries and took 131.75 ms; initial visible rendering took 454.61 ms.
 - Corrected synchronous in-page interaction measurements remained within one animation frame:
@@ -72,10 +76,9 @@ and sort median 26.45 ms and maximum 41.50 ms. That signal is phase- and schedul
 no no-op or dropped-frame baseline, so it is not evidence that synchronous control work missed the
 target. It remains useful comparison data if future profiling shows visible frame loss.
 
-WebKit tablet execution was unavailable because its browser binary was not installed. No browser
-download was authorized or performed. Tablet behavior is covered by responsive implementation,
-component tests, and Chromium inspection, but cross-engine tablet automation remains an explicit
-environmental gap.
+The WebKit follow-up reused existing local images with pulling disabled and no image build. Its
+ephemeral account, browser output, and test artifacts were removed afterward; the validation made
+no source changes.
 
 ## Deferred work
 
