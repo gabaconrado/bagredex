@@ -217,6 +217,15 @@ function Search({
 }
 
 const rowKeys: SortKey[] = ["hp", "atk", "def", "spa", "spd", "spe", "bst"];
+const shortStatLabels: Record<SortKey, string> = {
+  hp: "HP",
+  atk: "Atk",
+  def: "Def",
+  spa: "SpA",
+  spd: "SpD",
+  spe: "Spe",
+  bst: "BST",
+};
 
 export const PokemonRow = memo(function PokemonRow({
   form,
@@ -258,7 +267,9 @@ export const PokemonRow = memo(function PokemonRow({
       </td>
       {rowKeys.map((key) => (
         <td data-label={statLabels[key]} key={key}>
-          {key === "bst" ? form.bst : form.stats[key]}
+          <span class="stat-value">
+            {key === "bst" ? form.bst : form.stats[key]}
+          </span>
         </td>
       ))}
     </tr>
@@ -318,22 +329,34 @@ function PokemonTable({
                   <button
                     type="button"
                     class={sort?.key === key ? "sort is-active" : "sort"}
+                    title={`Sort by ${statLabels[key]}`}
+                    aria-label={`Sort by ${statLabels[key]}${sort?.key === key ? `, ${sort.direction}` : ""}`}
                     onPointerDown={() => {
                       pointerScrollLeft.current =
                         scroll.current?.scrollLeft ?? 0;
                     }}
                     onClick={(event) => activateSort(key, event.detail > 0)}
                   >
-                    {statLabels[key]}
-                    <span
-                      class={`sort-indicator${sort?.key === key ? "" : " is-inactive"}`}
-                      aria-hidden="true"
-                    >
-                      {sort?.key === key
-                        ? sort.direction === "ascending"
-                          ? " ↑"
-                          : " ↓"
-                        : " ↑"}
+                    <span class="sort-content">
+                      <span class="sort-label sort-label--full">
+                        {statLabels[key]}
+                      </span>
+                      <span
+                        class="sort-label sort-label--short"
+                        aria-hidden="true"
+                      >
+                        {shortStatLabels[key]}
+                      </span>
+                      <span
+                        class={`sort-indicator${sort?.key === key ? "" : " is-inactive"}`}
+                        aria-hidden="true"
+                      >
+                        {sort?.key === key
+                          ? sort.direction === "ascending"
+                            ? "↑"
+                            : "↓"
+                          : "↑"}
+                      </span>
                     </span>
                   </button>
                 </span>
@@ -649,52 +672,58 @@ function RefinedDetailPane({
           <Types values={form.types} />
         </div>
       </header>
-      <img
-        class="pokemon-sprite"
-        src={spriteUrl(spriteTemplate, form.id, shiny ? "shiny" : "normal")}
-        width="384"
-        height="384"
-        alt={`${shiny ? "Shiny " : ""}${form.name}`}
-      />
-      <div class="form-toggles" aria-label="Sprite and form controls">
-        <button
-          type="button"
-          class={shiny ? "icon-toggle is-active" : "icon-toggle"}
-          aria-pressed={shiny}
-          title={shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`}
-          aria-label={
-            shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
-          }
-          onClick={onShiny}
-        >
-          <ShinyIcon />
-        </button>
-        {megaChoices.map((mega) => (
+      <div class="sprite-stage">
+        <div class="sprite-frame">
+          <img
+            class="pokemon-sprite"
+            src={spriteUrl(spriteTemplate, form.id, shiny ? "shiny" : "normal")}
+            width="384"
+            height="384"
+            alt={`${shiny ? "Shiny " : ""}${form.name}`}
+          />
+        </div>
+        <div class="form-toggles" aria-label="Sprite and form controls">
           <button
             type="button"
-            key={mega.id}
-            class={form.is_mega ? "icon-toggle is-active" : "icon-toggle"}
-            aria-pressed={form.is_mega}
+            class={shiny ? "icon-toggle is-active" : "icon-toggle"}
+            aria-pressed={shiny}
             title={
-              form.is_mega
-                ? `Return to base form ${base.name}`
-                : `Switch to ${mega.name}`
+              shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
             }
             aria-label={
-              form.is_mega
-                ? `Return to base form ${base.name}`
-                : `Switch to ${mega.name}`
+              shiny ? `Show normal ${form.name}` : `Show shiny ${form.name}`
             }
-            onClick={() => onSelect(form.is_mega ? base.id : mega.id)}
+            onClick={onShiny}
           >
-            <MegaIcon />
-            {/[XYZ]$/.exec(mega.form_label)?.[0] && (
-              <span class="mega-marker">
-                {/[XYZ]$/.exec(mega.form_label)![0]}
-              </span>
-            )}
+            <ShinyIcon />
           </button>
-        ))}
+          {megaChoices.map((mega) => (
+            <button
+              type="button"
+              key={mega.id}
+              class={form.is_mega ? "icon-toggle is-active" : "icon-toggle"}
+              aria-pressed={form.is_mega}
+              title={
+                form.is_mega
+                  ? `Return to base form ${base.name}`
+                  : `Switch to ${mega.name}`
+              }
+              aria-label={
+                form.is_mega
+                  ? `Return to base form ${base.name}`
+                  : `Switch to ${mega.name}`
+              }
+              onClick={() => onSelect(form.is_mega ? base.id : mega.id)}
+            >
+              <MegaIcon />
+              {/[XYZ]$/.exec(mega.form_label)?.[0] && (
+                <span class="mega-marker">
+                  {/[XYZ]$/.exec(mega.form_label)![0]}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
       <section>
         <StatsHeading key={form.id} />
@@ -754,7 +783,9 @@ function RefinedDetailPane({
                     setMoveSort((value) => cycleMoveSort(value, key))
                   }
                 >
-                  {key[0]!.toUpperCase() + key.slice(1)}
+                  <span class="move-sort__label">
+                    {key[0]!.toUpperCase() + key.slice(1)}
+                  </span>
                   <span
                     class={`sort-indicator${moveSort?.key === key ? "" : " is-inactive"}`}
                     aria-hidden="true"

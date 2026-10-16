@@ -254,7 +254,10 @@ html:has([data-pokedex-root]) {
   object-fit: contain;
 }
 .pokemon-table {
+  --stat-inline-inset: 0.45rem;
+
   width: 100%;
+  min-width: 66rem;
   border-collapse: collapse;
   font-variant-numeric: tabular-nums;
   table-layout: fixed;
@@ -271,7 +274,7 @@ html:has([data-pokedex-root]) {
 }
 .pokemon-table th,
 .pokemon-table td {
-  padding: 0.55rem 0.45rem;
+  padding: 0.55rem var(--stat-inline-inset);
   border-bottom: 1px solid var(--color-border);
   text-align: right;
   white-space: nowrap;
@@ -287,6 +290,7 @@ html:has([data-pokedex-root]) {
 .pokemon-table__stat-header-inner {
   position: relative;
   display: block;
+  width: 100%;
   height: 2.75rem;
   overflow: hidden;
 }
@@ -332,18 +336,17 @@ html:has([data-pokedex-root]) {
   overflow: hidden;
 }
 .sort {
-  position: static;
+  position: relative;
   display: flex;
   box-sizing: border-box;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.1rem;
-  width: 2.75rem;
-  max-width: 2.75rem;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   min-height: 2.75rem;
-  margin-inline: 0.25rem;
-  padding: 0.25rem;
+  margin: 0;
+  padding: 0.25rem var(--stat-inline-inset);
   overflow: hidden;
   border: 0;
   background: transparent;
@@ -351,6 +354,20 @@ html:has([data-pokedex-root]) {
   font: inherit;
   font-size: 0.78rem;
   font-weight: 800;
+}
+.sort-content {
+  display: inline-flex;
+  box-sizing: border-box;
+  max-width: 100%;
+  align-items: center;
+  padding-right: calc(1em + 0.1rem);
+  white-space: nowrap;
+}
+.stat-value {
+  display: inline-block;
+}
+.sort-label--short {
+  display: none;
 }
 .sort.is-active {
   color: var(--color-accent);
@@ -463,23 +480,28 @@ html:has([data-pokedex-root]) {
   height: 1.25rem;
   accent-color: var(--color-accent);
 }
+.sprite-stage {
+  width: min(100%, 20rem);
+  margin: 0 auto;
+}
+.sprite-frame {
+  width: 100%;
+  aspect-ratio: 1;
+}
 .pokemon-sprite {
   display: block;
-  width: min(100%, 20rem);
-  height: auto;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   image-rendering: auto;
 }
 .form-toggles {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.4rem;
-}
-.pokemon-sprite + .form-toggles {
-  justify-content: center;
-  margin: -0.5rem auto 0;
+  width: 100%;
+  margin-top: -0.5rem;
 }
 .icon-toggle {
   display: inline-flex;
@@ -657,14 +679,22 @@ html:has([data-pokedex-root]) {
   font-size: 0.75rem;
   font-weight: 800;
 }
+.move-table__header > [role="columnheader"] {
+  min-width: 0;
+  overflow: hidden;
+}
 .move-sort {
   display: inline-flex;
+  box-sizing: border-box;
   align-items: center;
   justify-content: space-between;
   gap: 0.2rem;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 2.75rem;
   padding: 0.2rem;
+  overflow: hidden;
   border: 0;
   background: transparent;
   color: inherit;
@@ -672,14 +702,32 @@ html:has([data-pokedex-root]) {
   font: inherit;
   font-weight: inherit;
 }
+.move-sort__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.move-sort:focus-visible {
+  outline: 0.18rem solid var(--color-accent);
+  outline-offset: -0.2rem;
+}
 .move-sort .icon {
   width: 1.35rem;
   height: 1.35rem;
 }
 .sort-indicator {
   display: inline-block;
+  flex: none;
   width: 1em;
-  text-align: center;
+  margin: 0;
+  text-align: right;
+}
+.pokemon-table .sort-indicator {
+  position: absolute;
+  top: 50%;
+  right: var(--stat-inline-inset);
+  transform: translateY(-50%);
 }
 .move-row {
   position: relative;
@@ -836,12 +884,25 @@ html:has([data-pokedex-root]) {
   .pokedex-app {
     grid-template-columns: minmax(34rem, 1.25fr) minmax(19rem, 0.75fr);
   }
-  .pokemon-table th,
-  .pokemon-table td {
-    padding-inline: 0.3rem;
-  }
   .pokemon-table {
+    --stat-inline-inset: 0.3rem;
+
     min-width: 43.75rem;
+  }
+  .sort-label--full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+  .sort-label--short {
+    display: inline;
   }
   .move-list {
     grid-template-columns: 1fr;
@@ -890,6 +951,8 @@ html:has([data-pokedex-root]) {
     overflow-x: auto;
   }
   .pokemon-table {
+    --stat-inline-inset: 0.2rem;
+
     width: 41.5rem;
     min-width: 41.5rem;
     max-width: none;
@@ -940,9 +1003,6 @@ html:has([data-pokedex-root]) {
     font-size: 0.78rem;
   }
   .sort {
-    width: 3rem;
-    max-width: 3rem;
-    margin-inline: 0.5rem;
     font-size: 0.68rem;
   }
   .pokedex-list,

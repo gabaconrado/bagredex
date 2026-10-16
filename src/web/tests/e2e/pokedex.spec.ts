@@ -11,6 +11,17 @@ type ShiftEvidence = {
 const boxes = (locators: Locator[]) =>
   Promise.all(locators.map((locator) => locator.boundingBox()));
 
+const textRangeBox = (locator: Locator) =>
+  locator.evaluate((element) => {
+    const text = [...element.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+    );
+    if (!text) return null;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    return range.getBoundingClientRect().toJSON();
+  });
+
 function expectStableBoxes(
   baseline: (Box | null)[],
   current: (Box | null)[],
@@ -280,7 +291,7 @@ test("combines move, ability, and type filters and cycles sorting", async ({
   await filters
     .getByRole("button", { name: "Remove Water type filter" })
     .click();
-  const hp = page.getByRole("button", { name: "HP" });
+  const hp = page.locator('button.sort[title="Sort by HP"]');
   await revealInTable(page, hp);
   await hp.click();
   await expect(hp.locator("xpath=ancestor::th")).toHaveAttribute(
@@ -355,7 +366,7 @@ test("selects an entire data row exactly once by pointer, touch, and keyboard", 
   const root = page.locator(".pokedex-app");
   const rows = page.locator(".pokemon-table tbody tr");
   await expect(rows.nth(4)).toBeVisible();
-  const hpSort = page.getByRole("button", { name: "HP", exact: true });
+  const hpSort = page.locator('button.sort[title="Sort by HP"]');
   const expectSelection = async (rowIndex: number, revision: number) => {
     const button = rows.nth(rowIndex).getByRole("button");
     await expect(button).toHaveAttribute("aria-pressed", "true");
@@ -435,24 +446,39 @@ test("navigates Mega forms in both directions and replaces detail information", 
   const shinyToggle = page.getByRole("button", {
     name: "Show shiny Charizard",
   });
-  expect(
-    await shinyToggle.evaluate((button) => {
-      const icon = button.querySelector("svg")!;
-      return getComputedStyle(icon).fill === getComputedStyle(button).color;
-    }),
-  ).toBe(true);
+  const spriteFrame = page.locator(".sprite-frame");
+  const toggleRow = page.locator(".form-toggles");
+  const stableSpriteControls = async () => {
+    await spriteFrame.evaluate((frame) => {
+      const detail = frame.closest<HTMLElement>(".detail-pane");
+      if (detail) detail.scrollTop = 0;
+      frame.scrollIntoView({ block: "start", inline: "nearest" });
+    });
+    await settleFrames(page);
+    const [frame, row, first] = await Promise.all([
+      spriteFrame.boundingBox(),
+      toggleRow.boundingBox(),
+      toggleRow.locator("button").first().boundingBox(),
+    ]);
+    return [frame, row, first] as const;
+  };
+  const spriteControlBaseline = await stableSpriteControls();
+  expect(spriteControlBaseline[1]?.x).toBe(spriteControlBaseline[0]?.x);
+  expect(spriteControlBaseline[2]?.x).toBe(spriteControlBaseline[0]?.x);
+  await expect(shinyToggle.locator('img.icon[alt=""]')).toHaveAttribute(
+    "src",
+    /shiny-[A-Za-z0-9_-]+\.svg$/,
+  );
   await shinyToggle.click();
-  expect(
-    await page
-      .getByRole("button", { name: "Show normal Charizard" })
-      .evaluate((button) => {
-        const icon = button.querySelector("svg")!;
-        return getComputedStyle(icon).fill === getComputedStyle(button).color;
-      }),
-  ).toBe(true);
   await expect(
     page.getByRole("img", { name: "Shiny Charizard" }),
   ).toBeVisible();
+  expectStableBoxes(
+    [...spriteControlBaseline],
+    [...(await stableSpriteControls())],
+    ["sprite frame", "toggle row", "first toggle"],
+    "shiny sprite controls",
+  );
   await expect(rowSprite).toHaveAttribute("src", normalRowSource!);
   const moveTable = page.getByLabel("Legal moves");
   await expect(moveTable.getByText("Name", { exact: true })).toBeVisible();
@@ -463,7 +489,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
     moveTable.getByRole("button", { name: "Sort moves by category" }),
   ).toContainText("Category");
   const categoryCell = moveTable.locator(".move-category").first();
-  await expect(categoryCell.locator("svg")).toBeVisible();
+  await expect(categoryCell.locator('img.icon[alt=""]')).toBeVisible();
   await expect(categoryCell.locator(".visually-hidden")).toHaveCSS(
     "position",
     "absolute",
@@ -497,20 +523,56 @@ test("navigates Mega forms in both directions and replaces detail information", 
       name: new RegExp(`Sort moves by ${key}`),
     });
     const header = button.locator("xpath=ancestor::*[@aria-sort]");
+    const assertMoveIndicatorContained = async () => {
+      const [buttonBox, headerBox, indicatorBox] = await Promise.all([
+        button.boundingBox(),
+        header.boundingBox(),
+        button.locator(".sort-indicator").boundingBox(),
+      ]);
+      for (const container of [buttonBox, headerBox]) {
+        expect(indicatorBox?.x ?? 0).toBeGreaterThanOrEqual(
+          (container?.x ?? 0) - 1,
+        );
+        expect(
+          (indicatorBox?.x ?? 0) + (indicatorBox?.width ?? 0),
+        ).toBeLessThanOrEqual(
+          (container?.x ?? 0) + (container?.width ?? 0) + 1,
+        );
+      }
+    };
+    await assertMoveIndicatorContained();
+    await button.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(button).toBeFocused();
+    const focusMetrics = await button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        offset: Number.parseFloat(style.outlineOffset),
+        style: style.outlineStyle,
+        width: Number.parseFloat(style.outlineWidth),
+      };
+    });
+    expect(focusMetrics.style).toBe("solid");
+    expect(focusMetrics.width).toBeGreaterThanOrEqual(2);
+    expect(focusMetrics.offset + focusMetrics.width).toBeLessThanOrEqual(0);
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "ascending");
     await expect(button.locator(".sort-indicator")).toHaveCSS(
       "visibility",
       "visible",
     );
+    await assertMoveIndicatorContained();
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "descending");
+    await assertMoveIndicatorContained();
     await button.click();
     await expect(header).toHaveAttribute("aria-sort", "none");
     await expect(button.locator(".sort-indicator")).toHaveCSS(
       "visibility",
       "hidden",
     );
+    await assertMoveIndicatorContained();
   }
   await testInfo.attach("corrected-icons-and-detail", {
     body: await page.screenshot(),
@@ -521,11 +583,68 @@ test("navigates Mega forms in both directions and replaces detail information", 
     .first();
   await expect(mega).toBeVisible();
   await mega.click();
+  expectStableBoxes(
+    [...spriteControlBaseline],
+    [...(await stableSpriteControls())],
+    ["sprite frame", "toggle row", "first toggle"],
+    "Mega sprite controls",
+  );
+  await page.waitForFunction(() => {
+    const icons = [
+      ...document.querySelectorAll<HTMLImageElement>(".detail-pane img.icon"),
+    ];
+    return (
+      icons.length >= 3 &&
+      icons.every((icon) => icon.complete && icon.naturalWidth > 0)
+    );
+  });
+  const iconLoads = await page
+    .locator(".detail-pane img.icon")
+    .evaluateAll((images) =>
+      images.map((image) => {
+        const value = image as HTMLImageElement;
+        return {
+          alt: value.alt,
+          complete: value.complete,
+          width: value.naturalWidth,
+          url: value.currentSrc || value.src,
+        };
+      }),
+    );
+  expect(iconLoads.length).toBeGreaterThanOrEqual(3);
+  iconLoads.forEach((icon) => {
+    expect(icon.alt).toBe("");
+    expect(icon.complete).toBe(true);
+    expect(icon.width).toBeGreaterThan(0);
+    expect(new URL(icon.url).origin).toBe(new URL(page.url()).origin);
+    expect(new URL(icon.url).pathname).toMatch(/\.svg$/);
+  });
   await expect(
     page.getByRole("button", { name: /^Return to base form Charizard$/ }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: /^Return to base form Charizard$/ })
+    .click();
+  const differentRow = page
+    .locator(".pokemon-table tbody tr")
+    .filter({ hasNotText: "Charizard" })
+    .first();
+  const differentForm = (await differentRow.getByRole("button").textContent())!;
+  await differentRow.getByRole("button").click();
+  await expect(
+    page.getByRole("heading", { name: differentForm, exact: true }),
+  ).toBeVisible();
+  expectStableBoxes(
+    [...spriteControlBaseline],
+    [...(await stableSpriteControls())],
+    ["sprite frame", "toggle row", "first toggle"],
+    `${differentForm} sprite controls`,
+  );
+  await page
+    .locator(".pokemon-table tbody tr")
+    .filter({ hasText: /^Charizard/ })
+    .first()
+    .getByRole("button", { name: "Charizard", exact: true })
     .click();
   await page.getByRole("button", { name: "Blaze", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -781,6 +900,8 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       button.boundingBox(),
       button.locator("xpath=ancestor::th").boundingBox(),
     ]);
+    expect(buttonBox?.width).toBeGreaterThanOrEqual(43.99);
+    expect(buttonBox?.height).toBeGreaterThanOrEqual(43.99);
     expect(buttonBox?.x ?? 0).toBeGreaterThanOrEqual((headerBox?.x ?? 0) - 1);
     expect((buttonBox?.x ?? 0) + (buttonBox?.width ?? 0)).toBeLessThanOrEqual(
       (headerBox?.x ?? 0) + (headerBox?.width ?? 0) + 1,
@@ -809,6 +930,50 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       return owner === element || element.contains(owner);
     });
     expect(ownsVisibleCenter).toBe(true);
+    const visibleLabel = button.locator(
+      (page.viewportSize()?.width ?? 1000) <= 1152
+        ? ".sort-label--short"
+        : ".sort-label--full",
+    );
+    const [labelBox, indicatorBox] = await Promise.all([
+      textRangeBox(visibleLabel),
+      textRangeBox(button.locator(".sort-indicator")),
+    ]);
+    expect(labelBox?.x ?? 0).toBeGreaterThanOrEqual((buttonBox?.x ?? 0) - 1);
+    expect((labelBox?.x ?? 0) + (labelBox?.width ?? 0)).toBeLessThanOrEqual(
+      (buttonBox?.x ?? 0) + (buttonBox?.width ?? 0) + 1,
+    );
+    expect(
+      (labelBox?.x ?? 0) + (labelBox?.width ?? 0),
+      `stat ${buttonIndex} label does not overlap its arrow slot`,
+    ).toBeLessThanOrEqual((indicatorBox?.x ?? 0) + 1);
+    await expect(button).toHaveAttribute("title", /Sort by /);
+    const value = page
+      .locator(".pokemon-table tbody tr")
+      .first()
+      .locator("th, td")
+      .nth(buttonIndex + 3)
+      .locator(".stat-value");
+    const [valueBox, valueTextBox] = await Promise.all([
+      value.locator("xpath=..").boundingBox(),
+      textRangeBox(value),
+    ]);
+    expect(
+      Math.abs(
+        (headerBox?.x ?? 0) +
+          (headerBox?.width ?? 0) -
+          ((valueBox?.x ?? 0) + (valueBox?.width ?? 0)),
+      ),
+      `stat ${buttonIndex} header and value right edges`,
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(
+        (indicatorBox?.x ?? 0) +
+          (indicatorBox?.width ?? 0) -
+          ((valueTextBox?.x ?? 0) + (valueTextBox?.width ?? 0)),
+      ),
+      `stat ${buttonIndex} arrow and numeric text right anchors`,
+    ).toBeLessThanOrEqual(1);
   }
   await expect(
     page.locator(".pokemon-table thead .sort-indicator").first(),
@@ -839,7 +1004,7 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     "Speed",
     "BST",
   ]) {
-    const button = page.getByRole("button", { name: label, exact: true });
+    const button = page.locator(`button.sort[title="Sort by ${label}"]`);
     for (const direction of ["ascending", "descending", "none"]) {
       await revealInTable(page, button);
       const pointerOrigin = await scroll.evaluate(
@@ -861,6 +1026,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       await expect(button.locator("xpath=ancestor::th")).toHaveAttribute(
         "aria-sort",
         direction,
+      );
+      await expect(button).toHaveAccessibleName(
+        direction === "none"
+          ? `Sort by ${label}`
+          : `Sort by ${label}, ${direction}`,
       );
       await expect(button.locator(".sort-indicator")).toHaveCSS(
         "visibility",
@@ -896,7 +1066,7 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
       await expectNoOuterShiftSince(page, shiftStart);
     }
   }
-  const keyboardSort = page.getByRole("button", { name: "HP", exact: true });
+  const keyboardSort = page.locator('button.sort[title="Sort by HP"]');
   await keyboardSort.focus();
   await settleFrames(page);
   const keyboardScrollLeft = await scroll.evaluate(
@@ -909,6 +1079,9 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     await expect(keyboardSort.locator("xpath=ancestor::th")).toHaveAttribute(
       "aria-sort",
       direction,
+    );
+    await expect(keyboardSort).toHaveAccessibleName(
+      direction === "none" ? "Sort by HP" : `Sort by HP, ${direction}`,
     );
     expect(await scroll.evaluate((element) => element.scrollLeft)).toBe(
       keyboardScrollLeft,

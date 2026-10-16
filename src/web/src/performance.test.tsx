@@ -247,7 +247,7 @@ it("records M-C-scale synthetic render and enforces local selector timing", asyn
   await screen.findByText("351 of 351 Pokémon");
   const renderMs = performance.now() - renderStart;
   const sortStart = performance.now();
-  const speed = screen.getByRole("button", { name: "Speed" });
+  const speed = screen.getByRole("button", { name: "Sort by Speed" });
   fireEvent.click(speed);
   expect(speed.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(
     "ascending",

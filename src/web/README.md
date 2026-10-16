@@ -9,6 +9,11 @@ directory are generated: do not edit them manually. Django resolves both the Jav
 its extracted stylesheet through the manifest. Production packaging must run the locked build and
 include the complete generated directory in static collection.
 
+The build public base is `/static/web/dist/`. Imported assets, including the five supplied
+Pokédex icons, therefore resolve through the same static-server prefix as the entry bundle and
+stylesheet. The icon imports opt out of inlining individually; unrelated assets retain Vite's
+default asset behavior.
+
 Django reads the manifest path from `settings.VITE_MANIFEST_PATH`. Its local default is
 `src/web/static/web/dist/.vite/manifest.json`; production may set
 `BAGREDEX_VITE_MANIFEST_PATH` to a manifest-only path in the application image. The template tags

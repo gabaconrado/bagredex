@@ -160,7 +160,7 @@ describe("Pokédex app", () => {
     const { container } = render(<App bootstrap={bootstrap} />);
     await screen.findByText("1 of 1 Pokémon");
     const scroll = container.querySelector<HTMLElement>(".table-scroll")!;
-    const bst = screen.getByRole("button", { name: "BST" });
+    const bst = screen.getByRole("button", { name: "Sort by BST" });
     const header = bst.closest("th")!;
     for (const direction of ["ascending", "descending", "none"]) {
       scroll.scrollLeft = 9;
@@ -218,13 +218,21 @@ describe("Pokédex app", () => {
     fireEvent.click(name, { detail: 0 });
     expect(name.getAttribute("aria-pressed")).toBe("true");
     expect(fetch).toHaveBeenCalledTimes(2);
-    const hp = screen.getByRole("button", { name: "HP" });
+    const hp = screen.getByRole("button", { name: "Sort by HP" });
+    expect(hp.getAttribute("title")).toBe("Sort by HP");
+    expect(hp.querySelector(".sort-label--full")?.textContent).toBe("HP");
+    const attack = screen.getByRole("button", { name: "Sort by Attack" });
+    expect(attack.getAttribute("title")).toBe("Sort by Attack");
+    expect(attack.querySelector(".sort-label--short")?.textContent).toBe("Atk");
     const indicator = hp.querySelector(".sort-indicator")!;
     expect(indicator.classList.contains("is-inactive")).toBe(true);
     fireEvent.click(hp);
+    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, ascending");
     expect(indicator.classList.contains("is-inactive")).toBe(false);
     fireEvent.click(hp);
+    expect(hp.getAttribute("aria-label")).toBe("Sort by HP, descending");
     fireEvent.click(hp);
+    expect(hp.getAttribute("aria-label")).toBe("Sort by HP");
     expect(indicator.classList.contains("is-inactive")).toBe(true);
   });
 
@@ -334,8 +342,9 @@ describe("Pokédex app", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Shiny")).toBeNull();
     expect(
-      [...document.querySelectorAll<SVGElement>(".icon")].every(
-        (icon) => icon.getAttribute("fill") === "currentColor",
+      [...document.querySelectorAll<HTMLImageElement>("img.icon")].every(
+        (icon) =>
+          icon.alt === "" && icon.getAttribute("aria-hidden") === "true",
       ),
     ).toBe(true);
     await user.click(
@@ -617,7 +626,7 @@ describe("Pokédex app", () => {
         .textContent,
     ).toContain("Category");
     const categoryCell = statusRow.querySelector(".move-category")!;
-    expect(categoryCell.querySelector("svg")).toBeTruthy();
+    expect(categoryCell.querySelector('img.icon[alt=""]')).toBeTruthy();
     expect(categoryCell.querySelector(".visually-hidden")?.textContent).toBe(
       "Status",
     );
