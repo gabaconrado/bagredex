@@ -38,6 +38,57 @@ Apply migrations without starting the web server when needed:
 the development container against PostgreSQL. uv uses the ignored repository-root `.cache/uv`
 directory configured in the backend project. The scripts never install missing host tools.
 
+## Local review
+
+Run a complete browser-review environment with the bundle pinned by `deploy/pokemon-data.env`:
+
+```bash
+./bagredex.sh review
+```
+
+The command builds the frontend and development image, starts PostgreSQL, migrates, loads and
+explicitly activates the pinned bundle, and creates or updates this local-only superuser:
+
+```text
+URL:      http://127.0.0.1:8000/
+Username: admin
+Password: bagredex-local
+```
+
+These known credentials are safe only for the loopback-bound local review environment. Override
+the port or credentials for one invocation when needed:
+
+```bash
+BAGREDEX_PORT=8080 \
+BAGREDEX_REVIEW_USERNAME=reviewer \
+BAGREDEX_REVIEW_PASSWORD='choose-a-local-password' \
+./bagredex.sh review
+```
+
+Credential overrides must be nonempty and cannot contain control characters such as tabs or
+newlines because the command prints them after the server is ready.
+
+The pinned bundle is explicitly selected even when the retained database previously used another
+version. Press `Ctrl+C` to remove the local containers. The named `bagredex-local-database` volume,
+loaded data, and local accounts remain for the next run.
+
+When Bagredex runs inside an Incus container, its loopback is separate from the host. On the Incus
+host, add a loopback-only proxy whose container port matches `BAGREDEX_PORT`. This example exposes
+container `bagredex-dev` port 8000 on host port 8080:
+
+```bash
+incus config device add bagredex-dev bagredex-review proxy \
+  listen=tcp:127.0.0.1:8080 connect=tcp:127.0.0.1:8000
+```
+
+Remove the proxy after reviewing:
+
+```bash
+incus config device remove bagredex-dev bagredex-review
+```
+
+The review command does not invoke Incus, change firewall rules, or bind Bagredex beyond loopback.
+
 ## Publish images
 
 Publishing requires a clean `main` checkout, Podman, a Docker Hub login, and a stable semantic

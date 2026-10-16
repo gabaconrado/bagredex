@@ -6,6 +6,7 @@ readonly script_dir
 readonly compose_project="bagredex-local"
 readonly base_compose="${script_dir}/deploy/compose.yaml"
 readonly local_compose="${script_dir}/deploy/compose.local.yaml"
+readonly pokemon_data_env="${script_dir}/deploy/pokemon-data.env"
 
 require_tools() {
   local tool
@@ -91,6 +92,122 @@ run_local() {
   cleanup 0
 }
 
+review_data_version() {
+  local -a versions=()
+  [[ -f "${pokemon_data_env}" ]] || {
+    printf 'Review data pin is unavailable: %s\n' "${pokemon_data_env}" >&2
+    return 2
+  }
+  mapfile -t versions < <(
+    sed -n 's/^BAGREDEX_POKEMON_DATA_VERSION=//p' "${pokemon_data_env}"
+  )
+  [[ "${#versions[@]}" -eq 1 && "${versions[0]}" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    printf 'Review data pin must contain one valid BAGREDEX_POKEMON_DATA_VERSION.\n' >&2
+    return 2
+  }
+  printf '%s\n' "${versions[0]}"
+}
+
+wait_for_review_database() {
+  # The variables belong to the database container, not this host shell.
+  # shellcheck disable=SC2016
+  compose_local exec -T database sh -c \
+    'attempt=0; until pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
+       attempt=$((attempt + 1)); [ "$attempt" -lt 30 ] || exit 1; sleep 1
+     done' || {
+    printf 'Local review database did not become ready within 30 seconds.\n' >&2
+    return 1
+  }
+}
+
+wait_for_review_server() {
+  local port="${1:?review port required}" attempt
+  for ((attempt = 1; attempt <= 30; attempt++)); do
+    if curl --fail --silent --output /dev/null \
+      "http://127.0.0.1:${port}/health/ready"; then
+      return 0
+    fi
+    sleep 1
+  done
+  printf 'Local review server did not become ready within 30 seconds.\n' >&2
+  return 1
+}
+
+review_local() {
+  require_tools podman npm node sed curl
+  local review_port="${BAGREDEX_PORT-8000}"
+  local review_username="${BAGREDEX_REVIEW_USERNAME-admin}"
+  local review_password="${BAGREDEX_REVIEW_PASSWORD-bagredex-local}"
+  local data_version account_python
+  [[ "${review_port}" =~ ^[0-9]+$ && "${review_port}" -ge 1 && \
+    "${review_port}" -le 65535 ]] || {
+    printf 'BAGREDEX_PORT must be an integer from 1 through 65535.\n' >&2
+    return 2
+  }
+  [[ -n "${review_username}" ]] || {
+    printf 'BAGREDEX_REVIEW_USERNAME must not be empty.\n' >&2
+    return 2
+  }
+  [[ -n "${review_password}" ]] || {
+    printf 'BAGREDEX_REVIEW_PASSWORD must not be empty.\n' >&2
+    return 2
+  }
+  [[ ! "${review_username}" =~ [[:cntrl:]] && \
+    ! "${review_password}" =~ [[:cntrl:]] ]] || {
+    printf 'Review credentials must not contain control characters.\n' >&2
+    return 2
+  }
+  data_version="$(review_data_version)" || return $?
+
+  cleanup() {
+    local status="${1:-$?}"
+    trap - EXIT INT TERM
+    compose_local down >/dev/null
+    return "${status}"
+  }
+  trap 'cleanup "$?"' EXIT
+  trap 'cleanup 130; exit 130' INT
+  trap 'cleanup 143; exit 143' TERM
+
+  install_frontend
+  build_frontend
+  compose_local build server
+  compose_local up -d database
+  wait_for_review_database
+  compose_local run --rm server python manage.py migrate --noinput
+  compose_local run --rm server python manage.py load_pokemon_data \
+    "/app/src/data/releases/${data_version}"
+  compose_local run --rm server python manage.py activate_pokemon_data "${data_version}"
+
+  account_python='import sys
+from django.contrib.auth import get_user_model
+from django.db import transaction
+
+username, password, terminator = sys.stdin.buffer.read().split(b"\0")
+if terminator:
+    raise ValueError("invalid review credential input")
+with transaction.atomic():
+    user, _ = get_user_model().objects.update_or_create(
+        username=username.decode(),
+        defaults={"is_active": True, "is_staff": True, "is_superuser": True},
+    )
+    user.set_password(password.decode())
+    user.save(update_fields=["password"])'
+  printf '%s\0%s\0' "${review_username}" "${review_password}" | \
+    compose_local run --rm -T server python manage.py shell -c "${account_python}"
+
+  compose_local up -d server
+  wait_for_review_server "${review_port}"
+  printf '\nBagredex review is ready.\n'
+  printf 'URL:      http://127.0.0.1:%s/\n' "${review_port}"
+  printf 'Username: %s\n' "${review_username}"
+  printf 'Password: %s\n' "${review_password}"
+  printf 'Active data: %s\n' "${data_version}"
+  printf 'Press Ctrl+C to stop the containers; the database volume is preserved.\n\n'
+  compose_local up server
+  cleanup 0
+}
+
 migrate_local() {
   require_tools podman
   compose_local build server
@@ -111,6 +228,7 @@ usage() {
     '  test                  Run backend tests' \
     '  check-deploy          Run documentation, shell, and deployment tests' \
     '  run                   Build and run the local stack in the foreground' \
+    '  review                Initialize and run a complete local review stack' \
     '  migrate               Apply local database migrations' \
     '  publish VERSION       Validate, build, tag, and push production images' \
     '  deploy VERSION [--dry-run]  Deploy a published release'
@@ -129,6 +247,7 @@ main() {
     test) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; test_backend ;;
     check-deploy) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_deploy ;;
     run) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; run_local ;;
+    review) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; review_local ;;
     migrate) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; migrate_local ;;
     publish) exec "${script_dir}/deploy/scripts/publish.sh" "$@" ;;
     deploy) exec "${script_dir}/deploy/scripts/deploy.sh" "$@" ;;
