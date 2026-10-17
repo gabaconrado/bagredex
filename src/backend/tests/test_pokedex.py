@@ -90,7 +90,11 @@ def pokedex_data(tmp_path: Path, settings: Any) -> dict[str, Any]:
             ruleset=[],
             mechanics_profile=mechanics,
         )
-        for identifier, name in (("m-c", "Regulation M-C"), ("m-b", "Regulation M-B"))
+        for identifier, name in (
+            ("m-c", "Regulation M-C"),
+            ("m-b", "Regulation M-B"),
+            ("m-a", "Regulation M-A"),
+        )
     }
     fire = Type.objects.create(version=version, canonical_id="fire", name="Fire")
     flying = Type.objects.create(version=version, canonical_id="flying", name="Flying")
@@ -335,6 +339,7 @@ def test_home_bootstrap_and_regulation_validation(
         "choices": [
             {"id": "m-c", "label": "Regulation M-C", "url": "/?regulation=m-c"},
             {"id": "m-b", "label": "Regulation M-B", "url": "/?regulation=m-b"},
+            {"id": "m-a", "label": "Regulation M-A", "url": "/?regulation=m-a"},
         ],
         "preserved_query": [],
     }
@@ -354,17 +359,6 @@ def test_home_bootstrap_and_regulation_validation(
             "regulation": [choice["id"]],
         }
 
-    version = pokedex_data["version"]
-    mechanics = Regulation.objects.get(version=version, canonical_id="m-c").mechanics_profile
-    Regulation.objects.create(
-        version=version,
-        canonical_id="m-a",
-        name="Regulation M-A",
-        showdown_format_id="m-a",
-        mod="championsregma",
-        ruleset=[],
-        mechanics_profile=mechanics,
-    )
     ma_response = authenticated_client.get("/?view=grid&regulation=m-a")
     assert ma_response.status_code == 200
     assert ma_response.context["pokedex_bootstrap"]["regulation"]["id"] == "m-a"
