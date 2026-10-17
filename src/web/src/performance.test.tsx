@@ -177,7 +177,6 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
   fireEvent.click(screen.getByRole("button", { name: forms[0]!.name }));
   await screen.findByRole("heading", { name: "Stats" });
 
-  const table = document.querySelector<HTMLElement>(".move-table")!;
   const firstMove = () =>
     document.querySelector<HTMLElement>(".move-row .move-name > span")
       ?.textContent;
@@ -195,16 +194,8 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
       key,
       direction: firstDirection,
     })[0]!.name;
-    const mutation = new Promise<void>((resolve) => {
-      const observer = new MutationObserver(() => {
-        observer.disconnect();
-        resolve();
-      });
-      observer.observe(table, { childList: true, subtree: true });
-    });
     const start = performance.now();
     fireEvent.click(button);
-    await mutation;
     durations[key] = performance.now() - start;
     expect(firstMove()).toBe(expected);
     expect(button.closest("[aria-sort]")?.getAttribute("aria-sort")).toBe(

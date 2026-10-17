@@ -16,13 +16,17 @@ from .models import (
     ActiveDataVersion,
     DataActivation,
     DataVersion,
+    Item,
+    ItemProfile,
     LearnsetEntry,
     MechanicsProfile,
+    MegaItemRelation,
     MegaRelation,
     Move,
     MoveFlag,
     MoveFlagRelation,
     MoveProfile,
+    Nature,
     PokemonForm,
     PokemonProfile,
     PokemonProfileAbility,
@@ -129,6 +133,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             level=_integer(record, "level"),
             sp_minimum=_integer(record, "sp_minimum"),
             sp_maximum=_integer(record, "sp_maximum"),
+            sp_total_max=record.get("sp_total_max"),
             hp_formula=_string(record, "hp_formula"),
             other_formula=_string(record, "other_formula"),
             nature_percentages=record["nature_percentages"],
@@ -166,7 +171,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
     PokemonForm.objects.bulk_create(forms.values())
 
     def named_identities(
-        model: type[Ability] | type[Move] | type[Type], name: str
+        model: type[Ability] | type[Item] | type[Move] | type[Type], name: str
     ) -> dict[str, Any]:
         values = {
             _string(record, "id"): model(
@@ -182,6 +187,22 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
     types: dict[str, Type] = named_identities(Type, "types.json")
     abilities: dict[str, Ability] = named_identities(Ability, "abilities.json")
     moves: dict[str, Move] = named_identities(Move, "moves.json")
+    items: dict[str, Item] = (
+        named_identities(Item, "items.json") if "items.json" in bundle.records else {}
+    )
+    if "natures.json" in bundle.records:
+        Nature.objects.bulk_create(
+            [
+                Nature(
+                    version=version,
+                    canonical_id=_string(record, "id"),
+                    name=_string(record, "name"),
+                    increased_stat=record["increased_stat"],
+                    decreased_stat=record["decreased_stat"],
+                )
+                for record in bundle.records["natures.json"]
+            ]
+        )
     flags = {
         _string(record, "id"): MoveFlag(version=version, canonical_id=_string(record, "id"))
         for record in bundle.records["move_flags.json"]
@@ -198,6 +219,16 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
         for record in bundle.records["ability_profiles.json"]
     }
     AbilityProfile.objects.bulk_create(ability_profiles.values())
+    item_profiles = {
+        (_string(record, "regulation_id"), _string(record, "id")): ItemProfile(
+            version=version,
+            regulation=regulations[_string(record, "regulation_id")],
+            item=items[_string(record, "id")],
+            source_status=_string(record, "source_status"),
+        )
+        for record in bundle.records.get("item_profiles.json", [])
+    }
+    ItemProfile.objects.bulk_create(item_profiles.values())
     move_profiles: dict[tuple[str, str], MoveProfile] = {}
     for record in bundle.records["move_profiles.json"]:
         regulation_id = _string(record, "regulation_id")
@@ -287,6 +318,20 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
                 mega_form=forms[_string(record, "mega_form_id")],
             )
             for record in bundle.records["mega_relations.json"]
+        ]
+    )
+    MegaItemRelation.objects.bulk_create(
+        [
+            MegaItemRelation(
+                version=version,
+                regulation=regulations[_string(record, "regulation_id")],
+                item_profile=item_profiles[
+                    (_string(record, "regulation_id"), _string(record, "item_id"))
+                ],
+                base_form=forms[_string(record, "base_form_id")],
+                mega_form=forms[_string(record, "mega_form_id")],
+            )
+            for record in bundle.records.get("mega_item_relations.json", [])
         ]
     )
     LearnsetEntry.objects.bulk_create(

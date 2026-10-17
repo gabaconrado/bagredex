@@ -38,7 +38,11 @@ from bagredex.pokemon_data.models import (
     ActiveDataVersion,
     DataActivation,
     DataVersion,
+    Item,
+    ItemProfile,
     MechanicsProfile,
+    MegaItemRelation,
+    Nature,
     PokemonForm,
     PokemonProfile,
     PokemonProfileType,
@@ -75,6 +79,36 @@ def test_level_50_stat_uses_exact_integer_arithmetic(
 def test_level_50_stat_rejects_out_of_range_sp(sp: int) -> None:
     with pytest.raises(ValueError, match="SP must be between 0 and 32"):
         level_50_stat(base=100, sp=sp, hp=False)
+
+
+def test_team_builder_bundle_exposes_immutable_legality_contract() -> None:
+    releases = Path(settings.POKEMON_DATA_RELEASES_ROOT)
+    paths = sorted(releases.glob("showdown-multi-s3-i4-*"))
+    assert paths
+
+    bundle = read_bundle(paths[-1], require_pinned=False)
+    mechanics = bundle.records["mechanics_profiles.json"][0]
+    assert mechanics["sp_total_max"] == 66
+    neutral_natures = {
+        record["id"]
+        for record in bundle.records["natures.json"]
+        if record["increased_stat"] is None
+    }
+    assert neutral_natures == {"serious"}
+    assert {record["regulation_id"] for record in bundle.records["item_profiles.json"]} == {
+        "m-a",
+        "m-b",
+        "m-c",
+    }
+    charizard = [
+        record
+        for record in bundle.records["mega_item_relations.json"]
+        if record["base_form_id"] == "charizard" and record["regulation_id"] == "m-c"
+    ]
+    assert {(record["item_id"], record["mega_form_id"]) for record in charizard} == {
+        ("charizarditex", "charizardmegax"),
+        ("charizarditey", "charizardmegay"),
+    }
 
 
 def test_semantic_diff_reports_stable_record_keys() -> None:
@@ -810,16 +844,58 @@ def test_committed_releases_load_and_support_audited_rollback_and_reactivation(
 ) -> None:
     releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
     multi_path = releases / "showdown-multi-s2-i3-fc85b358deaa"
+    team_builder_path = releases / "showdown-multi-s3-i4-5073b2ab1402"
     current_path = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
     preceding_path = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
-    if not multi_path.is_dir() or not current_path.is_dir() or not preceding_path.is_dir():
-        pytest.skip("all three reviewed releases are required")
+    if not all(
+        path.is_dir() for path in (team_builder_path, multi_path, current_path, preceding_path)
+    ):
+        pytest.skip("all four reviewed releases are required")
     settings.POKEMON_DATA_RELEASES_ROOT = releases
 
+    team_builder = load_pokemon_data(team_builder_path).version
+    repeated_team_builder = load_pokemon_data(team_builder_path)
     multi = load_pokemon_data(multi_path).version
     repeated_multi = load_pokemon_data(multi_path)
     current = load_pokemon_data(current_path).version
     preceding = load_pokemon_data(preceding_path).version
+    assert repeated_team_builder.created is False
+    assert repeated_team_builder.version == team_builder
+    assert Item.objects.filter(version=team_builder).count() == 166
+    assert ItemProfile.objects.filter(version=team_builder).count() == 431
+    assert Nature.objects.filter(version=team_builder).count() == 21
+    assert MegaItemRelation.objects.filter(version=team_builder).count() == 214
+    assert MechanicsProfile.objects.get(version=team_builder).sp_total_max == 66
+    ma_regulation = Regulation.objects.get(version=team_builder, canonical_id="m-a")
+    mc_stone = ItemProfile.objects.get(
+        version=team_builder,
+        regulation__canonical_id="m-c",
+        item__canonical_id="charizarditex",
+    )
+    ma_stone = ItemProfile.objects.get(
+        version=team_builder,
+        regulation=ma_regulation,
+        item__canonical_id="charizarditex",
+    )
+    base_form = PokemonForm.objects.get(version=team_builder, canonical_id="charizard")
+    mega_form = PokemonForm.objects.get(version=team_builder, canonical_id="charizardmegax")
+    with pytest.raises(DatabaseError), transaction.atomic():
+        MegaItemRelation.objects.create(
+            version=team_builder,
+            regulation=ma_regulation,
+            item_profile=mc_stone,
+            base_form=base_form,
+            mega_form=mega_form,
+        )
+    old_base_form = PokemonForm.objects.get(version=multi, canonical_id="charizard")
+    with pytest.raises(DatabaseError), transaction.atomic():
+        MegaItemRelation.objects.create(
+            version=team_builder,
+            regulation=ma_regulation,
+            item_profile=ma_stone,
+            base_form=old_base_form,
+            mega_form=mega_form,
+        )
     activate_pokemon_data(multi.pk)
     assert Regulation.objects.filter(version=multi, canonical_id="m-a").exists()
     ma_charizard = PokemonProfile.objects.get(

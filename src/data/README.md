@@ -6,7 +6,7 @@ these files are reviewed inputs for loading immutable database versions.
 
 ## Build inputs
 
-The v2 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
+The v3 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
 checkout must be at `3a766f2cfb5e51c1e428cfe87d0dba91a8f01640` and its local object database must contain
 historical commit `b555f4d8ce7250e72939fe0c12cc5b303741d203`. PokeAPI sprites revision
 `ba403973fdf9d0ac59175813861e6a1f8ed5020c`, and PokeAPI mapping revision
@@ -36,22 +36,23 @@ A form is a regulation member only when its effective Showdown formats entry has
 including unknown future markers, is excluded by default. Profiles required by base-to-Mega
 relations remain separate from selectable regulation membership.
 
-Importer version 3 and schema 2 introduce the multi-revision source contract. Validation continues
-to accept both retained schema-1 releases only with their exact identifiers, hashes, and legality
-semantics. No source tree is checked out or mutated, and the build never fetches missing objects.
+Importer version 4 and schema 3 add team-builder item, nature, Mega-stone, and total-SP facts to the
+multi-revision source contract. Validation continues to accept the retained schema-1 and schema-2
+releases with their original semantics. No source tree is checked out or mutated, and the build
+never fetches missing objects.
 
 Rebuilding identical inputs returns the existing bundle without rewriting it. Output files use
 canonical UTF-8 JSON with sorted keys, compact separators, stable record order, and a final newline.
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:
 
 ```text
-showdown-multi-s2-i3-<bundle-hash-prefix>
+showdown-multi-s3-i4-<bundle-hash-prefix>
 ```
 
 ## Bundle contract
 
-`manifest.json` is the authoritative interchange contract. Schema 2 keeps the same record files as
-schema 1 and replaces the single `showdown` source with ordered `showdown_sources`. Each source
+`manifest.json` is the authoritative interchange contract. Schema 3 retains schema 2's ordered
+`showdown_sources` and adds the normalized team-builder records below. Each source
 contains its exact revision, commit date, and regulation IDs; `provenance.json` additionally stores
 source counts for that tree. The portable files are:
 
@@ -60,6 +61,10 @@ source counts for that tree. The portable files are:
 - `regulations.json`: stable regulation identity, exact Showdown format identity, mod, rules, and
   mechanics profile.
 - `types.json`, `abilities.json`, `moves.json`, and `move_flags.json`: stable identities.
+- `items.json` and `item_profiles.json`: stable item identities and regulation-effective legal held
+  items, including their normalized upstream status.
+- `natures.json`: the stat-changing nature directions plus Serious as the only approved neutral
+  nature.
 - `regulation_memberships.json`: forms that appear in each regulation's legal Pokédex list.
 - `profiles.json`: regulation-effective facts for every included form, including non-list
   counterparts needed for base/Mega toggles, with ordered types, base stats, BST, and slotted
@@ -69,11 +74,13 @@ source counts for that tree. The portable files are:
 - `learnsets.json`: regulation/form/move legality with orthogonal form-resolution, exact source
   form, source mod, and target-relative source-kind provenance.
 - `mega_relations.json`: base-to-Mega edges; reverse traversal is the same relation by base key.
+- `mega_item_relations.json`: regulation-scoped stone and non-Mega form mappings to one exact Mega
+  target, including bases with multiple possible Mega forms.
 - `sprite_mappings.json`: the exact reviewed form-to-PokeAPI identity mapping, bound by a pinned
   canonical hash.
 - `sprites.json`: form/variant logical paths, PokeAPI identities, complete source PNG properties,
   exact encoder provenance, output WebP properties, and content hashes.
-- `mechanics_profiles.json`: exact level, SP range, and integer stat formulas.
+- `mechanics_profiles.json`: exact level, per-stat and total SP limits, and integer stat formulas.
 - `validation.json`: deterministic counts, coverage, ignored categories, warnings, and errors.
 - `provenance.json` and `POKEMON-SHOWDOWN-LICENSE.txt`: separate code and sprite provenance.
 

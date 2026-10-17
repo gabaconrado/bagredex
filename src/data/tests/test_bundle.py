@@ -392,6 +392,31 @@ class SchemaArtifactTests(unittest.TestCase):
 
 
 class LocalSnapshotIntegrationTests(unittest.TestCase):
+    def test_standard_item_status_truth_table_fails_closed(self) -> None:
+        legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
+        cases = [
+            [{}, True],
+            [{"isNonstandard": None}, True],
+            [{"isNonstandard": False}, True],
+            [{"isNonstandard": "Past"}, False],
+            [{"isNonstandard": "Future"}, False],
+            [{"isNonstandard": "Unknown category"}, False],
+            [{"isNonstandard": ""}, False],
+        ]
+        script = (
+            f"import {{hasStandardStatus}} from {json.dumps(legality)};"
+            f"const cases={json.dumps(cases)};"
+            "process.stdout.write(JSON.stringify(cases.map(([entry]) => "
+            "hasStandardStatus(entry))));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(json.loads(result.stdout), [expected for _, expected in cases])
+
     def test_standard_formats_entry_truth_table_fails_closed(self) -> None:
         legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
         cases = [
@@ -619,6 +644,80 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
 
 
 class PublishedBundleMutationTests(unittest.TestCase):
+    @property
+    def team_builder_bundle(self) -> Path:
+        return (
+            Path(__file__).parents[1]
+            / "releases"
+            / "showdown-multi-s3-i4-5073b2ab1402"
+        )
+
+    def test_team_builder_release_item_nature_and_mega_goldens(self) -> None:
+        summary = validate_bundle(self.team_builder_bundle)
+        self.assertEqual(
+            {key: summary["counts"][key] for key in (
+                "items", "item_profiles", "natures", "mega_item_relations"
+            )},
+            {"items": 166, "item_profiles": 431, "natures": 21, "mega_item_relations": 214},
+        )
+        profiles = json.loads(
+            (self.team_builder_bundle / "item_profiles.json").read_text(encoding="utf-8")
+        )
+        by_regulation = {
+            regulation_id: {record["id"] for record in profiles if record["regulation_id"] == regulation_id}
+            for regulation_id in ("m-a", "m-b", "m-c")
+        }
+        self.assertTrue(all("leftovers" in values for values in by_regulation.values()))
+        self.assertNotIn("airballoon", by_regulation["m-a"])
+        self.assertIn("airballoon", by_regulation["m-c"])
+
+        natures = json.loads(
+            (self.team_builder_bundle / "natures.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            {(record["increased_stat"], record["decreased_stat"]) for record in natures},
+            {(plus, minus) for plus in ("atk", "def", "spa", "spd", "spe")
+             for minus in ("atk", "def", "spa", "spd", "spe") if plus != minus}
+            | {(None, None)},
+        )
+
+        relations = json.loads(
+            (self.team_builder_bundle / "mega_item_relations.json").read_text(encoding="utf-8")
+        )
+        charizard = {
+            (record["item_id"], record["mega_form_id"])
+            for record in relations
+            if record["regulation_id"] == "m-c" and record["base_form_id"] == "charizard"
+        }
+        self.assertEqual(
+            charizard,
+            {("charizarditex", "charizardmegax"), ("charizarditey", "charizardmegay")},
+        )
+
+    def test_team_builder_release_rejects_invalid_nature_and_mega_relations(self) -> None:
+        mutations = (
+            ("natures.json", lambda values: values[0].update(decreased_stat=None)),
+            ("mega_item_relations.json", lambda values: values.pop()),
+            (
+                "mega_item_relations.json",
+                lambda values: values[0].update(mega_form_id="charizardmegax"),
+            ),
+            (
+                "mega_item_relations.json",
+                lambda values: values[0].update(regulation_id="m-z"),
+            ),
+        )
+        for filename, mutate in mutations:
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as name:
+                bundle = Path(name) / self.team_builder_bundle.name
+                shutil.copytree(self.team_builder_bundle, bundle)
+                path = bundle / filename
+                values = json.loads(path.read_text(encoding="utf-8"))
+                mutate(values)
+                path.write_bytes(_canonical_bytes(values))
+                with self.assertRaises(BundleError):
+                    validate_bundle(bundle, verify_manifest=False)
+
     def test_multi_revision_release_goldens_and_semantic_diff(self) -> None:
         releases = Path(__file__).parents[1] / "releases"
         old = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"

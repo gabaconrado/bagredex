@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
+import {hasStandardStatus, isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
 import {resolveLearnset} from './learnset-resolution.mjs';
 
 const root = path.resolve(process.argv[2] || '');
@@ -46,11 +46,13 @@ const exactFormat = (formats, name, mod) => {
   return {name, showdown_format_id: toID(name), mod, ruleset: [...format.ruleset]};
 };
 
-const [pokedex, baseMoves, baseAbilities, baseLearnsets, movesText, abilitiesText, formats,
-  championsFormats, championsMovesDelta, championsAbilitiesDelta, championsLearnsetsDelta] = await Promise.all([
+const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, movesText, abilitiesText, formats,
+  championsFormats, championsMovesDelta, championsAbilitiesDelta, championsItemsDelta, championsLearnsetsDelta] = await Promise.all([
   load('data/pokedex.ts', 'Pokedex'),
   load('data/moves.ts', 'Moves'),
   load('data/abilities.ts', 'Abilities'),
+  load('data/items.ts', 'Items'),
+  load('data/natures.ts', 'Natures'),
   load('data/learnsets.ts', 'Learnsets'),
   load('data/text/moves.ts', 'MovesText'),
   load('data/text/abilities.ts', 'AbilitiesText'),
@@ -58,36 +60,40 @@ const [pokedex, baseMoves, baseAbilities, baseLearnsets, movesText, abilitiesTex
   load('data/mods/champions/formats-data.ts', 'FormatsData'),
   load('data/mods/champions/moves.ts', 'Moves'),
   load('data/mods/champions/abilities.ts', 'Abilities'),
+  load('data/mods/champions/items.ts', 'Items'),
   load('data/mods/champions/learnsets.ts', 'Learnsets'),
 ]);
 
-const [mbFormats, mbMovesDelta, mbLearnsetsDelta] = requested === 'current'
+const [mbFormats, mbMovesDelta, mbItemsDelta, mbLearnsetsDelta] = requested === 'current'
   ? await Promise.all([
     load('data/mods/championsregmb/formats-data.ts', 'FormatsData'),
     load('data/mods/championsregmb/moves.ts', 'Moves'),
+    load('data/mods/championsregmb/items.ts', 'Items'),
     load('data/mods/championsregmb/learnsets.ts', 'Learnsets'),
-  ]) : [{}, {}, {}];
+  ]) : [{}, {}, {}, {}];
 
 const championsMoves = mergeTable(baseMoves, championsMovesDelta);
 const championsAbilities = mergeTable(baseAbilities, championsAbilitiesDelta);
+const championsItems = mergeTable(baseItems, championsItemsDelta);
 const championsLearnsets = mergeTable(baseLearnsets, championsLearnsetsDelta);
 const mbMoves = mergeTable(championsMoves, mbMovesDelta);
+const mbItems = mergeTable(championsItems, mbItemsDelta);
 const mbLearnsets = mergeTable(championsLearnsets, mbLearnsetsDelta);
 const configurations = requested === 'm-a' ? [
   {
     id: 'm-a', mod: 'champions', formats: championsFormats, moves: championsMoves,
-    abilities: championsAbilities, learnsets: championsLearnsets,
+    abilities: championsAbilities, items: championsItems, learnsets: championsLearnsets,
     format: exactFormat(formats, '[Gen 9 Champions] VGC 2026 Reg M-A', 'champions'),
   },
 ] : [
   {
     id: 'm-c', mod: 'champions', formats: championsFormats, moves: championsMoves,
-    abilities: championsAbilities, learnsets: championsLearnsets,
+    abilities: championsAbilities, items: championsItems, learnsets: championsLearnsets,
     format: exactFormat(formats, '[Gen 9 Champions] VGC 2026 Reg M-C', 'champions'),
   },
   {
     id: 'm-b', mod: 'championsregmb', formats: mbFormats, moves: mbMoves,
-    abilities: championsAbilities, learnsets: mbLearnsets,
+    abilities: championsAbilities, items: mbItems, learnsets: mbLearnsets,
     format: exactFormat(formats, '[Gen 9 Champions] VGC 2026 Reg M-B', 'championsregmb'),
   },
 ];
@@ -139,13 +145,26 @@ const output = {
     champions_format_entries: Object.keys(championsFormats).length,
     championsregmb_format_entries: Object.keys(mbFormats).length,
   },
-  formats: configurations.map(value => ({id: value.id, ...value.format})), forms, regulations: {},
+  formats: configurations.map(value => ({id: value.id, ...value.format})), forms,
+  natures: Object.entries(natures).filter(([id, value]) => id === 'serious' || (value.plus && value.minus))
+    .map(([id, value]) => ({
+      id, name: value.name, increased_stat: value.plus || null, decreased_stat: value.minus || null,
+    })).sort((a, b) => compareText(a.id, b.id)),
+  regulations: {},
 };
 for (const config of configurations) {
   const profiles = [];
   const learnsets = [];
   const abilityIDs = new Set();
   const moveIDs = new Set();
+  const items = Object.entries(config.items)
+    .filter(([id, value]) => hasStandardStatus(value, `${config.mod} item ${id}`))
+    .map(([id, value]) => ({
+      id, name: value.name, source_status: 'standard',
+      mega_stone: value.megaStone ? Object.entries(value.megaStone).map(([base, mega]) => ({
+        base_form_id: toID(base), mega_form_id: toID(mega),
+      })).sort((a, b) => compareText(a.base_form_id, b.base_form_id)) : [],
+    })).sort((a, b) => compareText(a.id, b.id));
   const memberships = legalIDs(config).map(form_id => ({form_id}));
   for (const id of [...selected].sort()) {
     const species = pokedex[id];
@@ -186,7 +205,7 @@ for (const config of configurations) {
       flags: Object.keys(value.flags || {}).filter(flag => value.flags[flag]).sort(),
     };
   });
-  output.regulations[config.id] = {memberships, profiles, abilities, moves, learnsets};
+  output.regulations[config.id] = {memberships, profiles, abilities, moves, items, learnsets};
 }
 
 output.mega_relations = forms.filter(value => value.is_mega).map(value => ({

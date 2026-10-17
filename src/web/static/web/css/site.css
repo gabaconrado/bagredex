@@ -128,6 +128,27 @@ body {
   min-width: 0;
 }
 
+.site-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.site-header__nav a {
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-medium);
+  color: var(--color-text-muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-header__nav a:hover,
+.site-header__nav a:focus-visible {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
 .site-header__regulation {
   display: flex;
   align-items: center;
@@ -236,6 +257,26 @@ h1 {
 .button--secondary:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
+}
+
+.button--danger {
+  border-color: var(--color-error);
+  background: transparent;
+  color: var(--color-error);
+}
+
+@media (max-width: 760px) {
+  .site-header {
+    flex-wrap: wrap;
+  }
+  .site-header__nav {
+    order: 3;
+    width: 100%;
+  }
+  .site-header__regulation {
+    margin-left: auto;
+    margin-right: 0;
+  }
 }
 
 .login-card {

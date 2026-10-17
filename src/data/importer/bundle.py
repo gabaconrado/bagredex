@@ -19,10 +19,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "2"
-IMPORTER_VERSION = "3"
+SCHEMA_VERSION = "3"
+IMPORTER_VERSION = "4"
 LEGACY_IMPORTER_VERSION = "1"
-SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-2"
+SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-3"
 EXPECTED_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_COMMIT_DATE = "2026-10-13"
 HISTORICAL_REVISION = "b555f4d8ce7250e72939fe0c12cc5b303741d203"
@@ -76,6 +76,7 @@ MECHANICS_PROFILE = {
     "level": 50,
     "sp_minimum": 0,
     "sp_maximum": 32,
+    "sp_total_max": 66,
     "hp_formula": "base + sp + 75",
     "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
     "nature_percentages": {"hindering": 90, "neutral": 100, "increasing": 110},
@@ -87,6 +88,9 @@ DATA_FILES = (
     "types.json",
     "abilities.json",
     "moves.json",
+    "items.json",
+    "item_profiles.json",
+    "natures.json",
     "move_flags.json",
     "regulation_memberships.json",
     "profiles.json",
@@ -94,9 +98,14 @@ DATA_FILES = (
     "move_profiles.json",
     "move_flag_relations.json",
     "mega_relations.json",
+    "mega_item_relations.json",
     "learnsets.json",
     "sprite_mappings.json",
     "sprites.json",
+)
+LEGACY_DATA_FILES = tuple(
+    name for name in DATA_FILES
+    if name not in {"items.json", "item_profiles.json", "natures.json", "mega_item_relations.json"}
 )
 FILE_KEYS = {
     "mechanics_profiles.json": ("id",),
@@ -105,6 +114,9 @@ FILE_KEYS = {
     "types.json": ("id",),
     "abilities.json": ("id",),
     "moves.json": ("id",),
+    "items.json": ("id",),
+    "item_profiles.json": ("regulation_id", "id"),
+    "natures.json": ("id",),
     "move_flags.json": ("id",),
     "regulation_memberships.json": ("regulation_id", "form_id"),
     "profiles.json": ("regulation_id", "form_id"),
@@ -112,6 +124,7 @@ FILE_KEYS = {
     "move_profiles.json": ("regulation_id", "id"),
     "move_flag_relations.json": ("regulation_id", "move_id", "flag_id"),
     "mega_relations.json": ("mega_form_id",),
+    "mega_item_relations.json": ("regulation_id", "item_id", "base_form_id"),
     "learnsets.json": ("regulation_id", "form_id", "move_id"),
     "sprite_mappings.json": ("form_id",),
     "sprites.json": ("form_id", "variant"),
@@ -144,6 +157,13 @@ MULTI_PINNED_COUNTS = {
     "abilities": 216, "ability_profiles": 645, "moves": 511, "move_profiles": 1513,
     "move_flags": 37, "move_flag_relations": 5833, "learnsets": 64935,
     "mega_relations": 82, "sprites": 700, "sprite_mappings": 350,
+}
+TEAM_PINNED_COUNTS = {
+    **MULTI_PINNED_COUNTS,
+    "items": 166,
+    "item_profiles": 431,
+    "natures": 21,
+    "mega_item_relations": 214,
 }
 
 
@@ -192,11 +212,12 @@ def _verify_showdown(showdown: Path) -> None:
     _verify_repository(showdown, EXPECTED_REVISION, "Pokémon Showdown")
     required = (
         "config/formats.ts", "data/pokedex.ts", "data/moves.ts", "data/abilities.ts",
-        "data/learnsets.ts", "data/text/moves.ts", "data/text/abilities.ts",
+        "data/items.ts", "data/natures.ts", "data/learnsets.ts", "data/text/moves.ts", "data/text/abilities.ts",
         "data/mods/champions/formats-data.ts",
         "data/mods/champions/moves.ts", "data/mods/champions/abilities.ts",
         "data/mods/champions/learnsets.ts", "data/mods/championsregmb/formats-data.ts",
-        "data/mods/championsregmb/moves.ts", "data/mods/championsregmb/learnsets.ts",
+        "data/mods/champions/items.ts", "data/mods/championsregmb/moves.ts",
+        "data/mods/championsregmb/items.ts", "data/mods/championsregmb/learnsets.ts",
     )
     missing = [item for item in required if not (showdown / item).is_file()]
     if missing:
@@ -218,10 +239,11 @@ def _extract(
 
 
 HISTORICAL_PATHS = (
-    "config/formats.ts", "data/pokedex.ts", "data/moves.ts", "data/abilities.ts",
+    "config/formats.ts", "data/pokedex.ts", "data/moves.ts", "data/abilities.ts", "data/items.ts", "data/natures.ts",
     "data/learnsets.ts", "data/text/moves.ts", "data/text/abilities.ts",
     "data/mods/champions/formats-data.ts", "data/mods/champions/moves.ts",
-    "data/mods/champions/abilities.ts", "data/mods/champions/learnsets.ts", "LICENSE",
+    "data/mods/champions/abilities.ts", "data/mods/champions/items.ts",
+    "data/mods/champions/learnsets.ts", "LICENSE",
 )
 
 
@@ -263,6 +285,8 @@ def _combine_extractions(current: dict[str, Any], historical: dict[str, Any]) ->
         raise BundleError("historical extraction did not produce exactly Regulation M-A")
     if {item["id"] for item in current["formats"]} != {"m-b", "m-c"}:
         raise BundleError("current extraction did not produce Regulations M-B and M-C")
+    if "natures" in historical and "natures" in current and historical["natures"] != current["natures"]:
+        raise BundleError("cross-revision nature definitions conflict")
     forms: dict[str, dict[str, Any]] = {}
     for source in (historical, current):
         for form in source["forms"]:
@@ -279,6 +303,7 @@ def _combine_extractions(current: dict[str, Any], historical: dict[str, Any]) ->
         "formats": historical["formats"] + current["formats"],
         "forms": sorted(forms.values(), key=lambda item: item["id"]),
         "mega_relations": sorted(mega.values(), key=lambda item: item["mega_form_id"]),
+        "natures": current.get("natures", historical.get("natures", [])),
         "regulations": {**historical["regulations"], **current["regulations"]},
         "source_counts": {
             "m-a": historical["source_counts"],
@@ -294,6 +319,8 @@ def _records(extracted: dict[str, Any]) -> dict[str, Any]:
     ability_profiles = []
     move_profiles = []
     move_flag_relations = []
+    item_profiles = []
+    mega_item_relations = []
     learnsets = []
     for regulation in extracted["formats"]:
         regulation_id = regulation["id"]
@@ -314,6 +341,23 @@ def _records(extracted: dict[str, Any]) -> dict[str, Any]:
                 for flag in value["flags"]
             )
         learnsets.extend({"regulation_id": regulation_id, **value} for value in scoped["learnsets"])
+        for value in scoped["items"]:
+            item_profiles.append({
+                "regulation_id": regulation_id,
+                "id": value["id"],
+                "name": value["name"],
+                "source_status": value["source_status"],
+            })
+            mega_item_relations.extend(
+                {
+                    "regulation_id": regulation_id,
+                    "item_id": value["id"],
+                    **relation,
+                }
+                for relation in value["mega_stone"]
+                if relation["base_form_id"] in {form["id"] for form in extracted["forms"]}
+                and relation["mega_form_id"] in {form["id"] for form in extracted["forms"]}
+            )
     def identities(values: list[dict[str, Any]]) -> list[dict[str, str]]:
         by_id: dict[str, str] = {}
         for value in values:
@@ -331,6 +375,9 @@ def _records(extracted: dict[str, Any]) -> dict[str, Any]:
         "types.json": sorted(types, key=lambda item: item["id"]),
         "abilities.json": identities(ability_profiles),
         "moves.json": identities(move_profiles),
+        "items.json": identities(item_profiles),
+        "item_profiles.json": sorted(item_profiles, key=lambda item: (item["regulation_id"], item["id"])),
+        "natures.json": extracted["natures"],
         "move_flags.json": [{"id": value} for value in move_flags],
         "regulation_memberships.json": sorted(
             memberships, key=lambda item: (item["regulation_id"], item["form_id"])
@@ -342,6 +389,10 @@ def _records(extracted: dict[str, Any]) -> dict[str, Any]:
             move_flag_relations, key=lambda item: (item["regulation_id"], item["move_id"], item["flag_id"])
         ),
         "mega_relations.json": extracted["mega_relations"],
+        "mega_item_relations.json": sorted(
+            mega_item_relations,
+            key=lambda item: (item["regulation_id"], item["item_id"], item["base_form_id"]),
+        ),
         "learnsets.json": sorted(
             learnsets, key=lambda item: (item["regulation_id"], item["form_id"], item["move_id"])
         ),
@@ -678,7 +729,8 @@ def _typed(record: dict[str, Any], contract: dict[str, type | tuple[type, ...]],
 
 
 def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, Any]:
-    data = {name: _load_json(bundle, name) for name in DATA_FILES}
+    data_files = DATA_FILES if (bundle / "items.json").is_file() else LEGACY_DATA_FILES
+    data = {name: _load_json(bundle, name) for name in data_files}
     forms = data["forms.json"]
     regulations = data["regulations.json"]
     profiles = data["profiles.json"]
@@ -694,6 +746,10 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     sprites = data["sprites.json"]
     sprite_mappings = data["sprite_mappings.json"]
     mega_relations = data["mega_relations.json"]
+    items = data.get("items.json", [])
+    item_profiles = data.get("item_profiles.json", [])
+    natures = data.get("natures.json", [])
+    mega_item_relations = data.get("mega_item_relations.json", [])
     for name, value in data.items():
         if not isinstance(value, list):
             raise BundleError(f"{name}: root must be an array")
@@ -701,18 +757,28 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         "forms.json": {"id", "name", "national_dex_number", "base_form_id", "form_label", "is_mega", "sprite_id"},
         "regulations.json": {"id", "name", "showdown_format_id", "mod", "ruleset", "mechanics_profile_id"},
         "types.json": {"id", "name"}, "abilities.json": {"id", "name"}, "moves.json": {"id", "name"},
+        "items.json": {"id", "name"},
+        "item_profiles.json": {"regulation_id", "id", "name", "source_status"},
+        "natures.json": {"id", "name", "increased_stat", "decreased_stat"},
         "move_flags.json": {"id"}, "regulation_memberships.json": {"regulation_id", "form_id"},
         "profiles.json": {"regulation_id", "form_id", "stats", "bst", "types", "abilities"},
         "ability_profiles.json": {"regulation_id", "id", "name", "short_description", "description"},
         "move_profiles.json": {"regulation_id", "id", "name", "type", "category", "base_power", "accuracy", "pp", "priority", "target", "short_description", "description"},
         "move_flag_relations.json": {"regulation_id", "move_id", "flag_id"},
         "mega_relations.json": {"base_form_id", "mega_form_id"},
+        "mega_item_relations.json": {"regulation_id", "item_id", "base_form_id", "mega_form_id"},
         "learnsets.json": {"regulation_id", "form_id", "move_id", "form_resolution", "source_form_id", "source_mod", "source_kind"},
         "sprite_mappings.json": {"form_id", "pokeapi_pokemon_id", "pokeapi_identifier", "mapping_rule"},
         "sprites.json": {"form_id", "variant", "path", "pokeapi_pokemon_id", "pokeapi_identifier", "mapping_rule", "source_path", "source_sha256", "source_width", "source_height", "source_bit_depth", "source_color_type", "source_interlace", "cwebp_version", "cwebp_args", "width", "height", "has_alpha", "is_animated", "has_metadata", "sha256"},
-        "mechanics_profiles.json": set(MECHANICS_PROFILE),
+        "mechanics_profiles.json": set(
+            MECHANICS_PROFILE if items else {
+                key: value for key, value in MECHANICS_PROFILE.items() if key != "sp_total_max"
+            }
+        ),
     }
     for filename, expected_fields in field_contracts.items():
+        if filename not in data:
+            continue
         for index, record in enumerate(data[filename]):
             _fields(record, expected_fields, f"{filename}[{index}]")
     string_fields = {
@@ -720,14 +786,19 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         "regulations.json": ("id", "name", "showdown_format_id", "mod", "mechanics_profile_id"),
         "types.json": ("id", "name"), "abilities.json": ("id", "name"),
         "moves.json": ("id", "name"), "move_flags.json": ("id",),
+        "items.json": ("id", "name"),
+        "item_profiles.json": ("regulation_id", "id", "name", "source_status"),
         "regulation_memberships.json": ("regulation_id", "form_id"),
         "ability_profiles.json": ("regulation_id", "id", "name", "short_description", "description"),
         "move_flag_relations.json": ("regulation_id", "move_id", "flag_id"),
         "mega_relations.json": ("base_form_id", "mega_form_id"),
+        "mega_item_relations.json": ("regulation_id", "item_id", "base_form_id", "mega_form_id"),
         "learnsets.json": ("regulation_id", "form_id", "move_id", "form_resolution", "source_form_id", "source_mod", "source_kind"),
         "sprite_mappings.json": ("form_id", "pokeapi_identifier", "mapping_rule"),
     }
     for filename, fields in string_fields.items():
+        if filename not in data:
+            continue
         for index, record in enumerate(data[filename]):
             _typed(record, {field: str for field in fields}, f"{filename}[{index}]")
     for index, form in enumerate(forms):
@@ -767,6 +838,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         if not re.fullmatch(r"[0-9a-f]{64}", sprite["sha256"]):
             raise BundleError(f"sprites.json[{index}]: invalid output hash")
     for filename, fields in FILE_KEYS.items():
+        if filename not in data:
+            continue
         expected_order = sorted(data[filename], key=lambda record: tuple(str(record[field]) for field in fields))
         if data[filename] != expected_order:
             raise BundleError(f"{filename}: records are not in canonical key order")
@@ -785,6 +858,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     _unique(sprites, ("form_id", "variant"), "sprites.json")
     _unique(sprite_mappings, ("form_id",), "sprite_mappings.json")
     _unique(mega_relations, ("mega_form_id",), "mega_relations.json")
+    if items:
+        _unique(items, ("id",), "items.json")
+        _unique(item_profiles, ("regulation_id", "id"), "item_profiles.json")
+        _unique(natures, ("id",), "natures.json")
+        _unique(
+            mega_item_relations,
+            ("regulation_id", "item_id", "base_form_id"),
+            "mega_item_relations.json",
+        )
     form_ids = {value["id"] for value in forms}
     forms_by_id = {value["id"]: value for value in forms}
     regulation_ids = {value["id"] for value in regulations}
@@ -811,7 +893,10 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             raise BundleError(f"regulations.json: unexpected format metadata for {regulation['id']}")
         if regulation.get("mechanics_profile_id") != MECHANICS_PROFILE["id"]:
             raise BundleError(f"regulations.json: unexpected mechanics profile for {regulation['id']}")
-    if data["mechanics_profiles.json"] != [MECHANICS_PROFILE]:
+    expected_mechanics = MECHANICS_PROFILE if items else {
+        key: value for key, value in MECHANICS_PROFILE.items() if key != "sp_total_max"
+    }
+    if data["mechanics_profiles.json"] != [expected_mechanics]:
         raise BundleError("mechanics_profiles.json: exact Champions mechanics contract is required")
     for filename in ("types.json", "abilities.json", "moves.json"):
         for record in data[filename]:
@@ -845,6 +930,38 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         relation_mega_ids.add(mega_form_id)
     if relation_mega_ids != mega_ids:
         raise BundleError("mega_relations.json: every Mega form must have exactly one base relation")
+    if items:
+        item_ids = {value["id"] for value in items}
+        item_profile_ids = {(value["regulation_id"], value["id"]) for value in item_profiles}
+        if any(
+            value["id"] not in item_ids
+            or value["regulation_id"] not in regulation_ids
+            or value["source_status"] != "standard"
+            for value in item_profiles
+        ):
+            raise BundleError("item_profiles.json: dangling or nonstandard legal item")
+        neutral_natures = set()
+        for nature in natures:
+            directions = (nature["increased_stat"], nature["decreased_stat"])
+            if directions == (None, None):
+                neutral_natures.add(nature["id"])
+            elif any(value not in {"atk", "def", "spa", "spd", "spe"} for value in directions):
+                raise BundleError(f"natures.json: invalid stat direction for {nature['id']}")
+        if neutral_natures != {"serious"}:
+            raise BundleError("natures.json: Serious must be the only neutral nature")
+        for relation in mega_item_relations:
+            regulation_id = relation["regulation_id"]
+            base = forms_by_id.get(relation["base_form_id"])
+            mega = forms_by_id.get(relation["mega_form_id"])
+            if (
+                (regulation_id, relation["item_id"]) not in item_profile_ids
+                or base is None
+                or mega is None
+                or base["is_mega"]
+                or not mega["is_mega"]
+                or mega["base_form_id"] != base["base_form_id"]
+            ):
+                raise BundleError(f"mega_item_relations.json: incoherent relation {relation}")
     for profile in profiles:
         key = (profile["regulation_id"], profile["form_id"])
         if profile["regulation_id"] not in regulation_ids or profile["form_id"] not in form_ids:
@@ -1123,7 +1240,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "mega_relation_percent": 100, "normal_sprite_percent": 100, "shiny_sprite_percent": 100,
         },
     }
+    if items:
+        summary["counts"].update({
+            "items": len(items),
+            "item_profiles": len(item_profiles),
+            "natures": len(natures),
+            "mega_item_relations": len(mega_item_relations),
+        })
     expected_counts = (
+        TEAM_PINNED_COUNTS if items else
         MULTI_PINNED_COUNTS if multi_revision else
         LEGACY_PINNED_COUNTS if legacy_release else EXPECTED_PINNED_COUNTS
     )
@@ -1202,13 +1327,17 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "validation_sha256", "counts", "files",
         }
         _fields(manifest, expected_manifest_fields, "manifest.json")
-        expected_schema = SCHEMA_VERSION if multi_revision else "1"
+        expected_schema = SCHEMA_VERSION if items else ("2" if multi_revision else "1")
         if manifest["bundle_schema_version"] != expected_schema:
             raise BundleError("manifest.json: unsupported bundle schema version")
         importer_version = manifest["importer_version"]
-        if importer_version not in {LEGACY_IMPORTER_VERSION, "2", IMPORTER_VERSION}:
+        if importer_version not in {LEGACY_IMPORTER_VERSION, "2", "3", IMPORTER_VERSION}:
             raise BundleError("manifest.json: unsupported importer or source-shape version")
-        expected_shape = SOURCE_SHAPE_VERSION if multi_revision else "showdown-champions-1"
+        expected_shape = (
+            SOURCE_SHAPE_VERSION if items else
+            "showdown-champions-multi-revision-2" if multi_revision else
+            "showdown-champions-1"
+        )
         if manifest["source_shape_version"] != expected_shape:
             raise BundleError("manifest.json: unsupported importer or source-shape version")
         if importer_version == LEGACY_IMPORTER_VERSION and not legacy_release:
@@ -1259,7 +1388,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         if manifest.get("bundle_hash") != bundle_hash:
             raise BundleError("manifest.json: canonical bundle hash mismatch")
         expected_id = (
-            f"showdown-multi-s{SCHEMA_VERSION}-i{importer_version}-{bundle_hash[:12]}"
+            f"showdown-multi-s{expected_schema}-i{importer_version}-{bundle_hash[:12]}"
             if multi_revision else
             f"showdown-{EXPECTED_REVISION[:8]}-s1-i{importer_version}-{bundle_hash[:12]}"
         )
@@ -1390,8 +1519,8 @@ def compare_bundles(before: Path, after: Path) -> dict[str, Any]:
     validate_bundle(after)
     result: dict[str, Any] = {"before": before.name, "after": after.name, "files": {}}
     for name in DATA_FILES:
-        left = _load_json(before, name)
-        right = _load_json(after, name)
+        left = _load_json(before, name) if (before / name).is_file() else []
+        right = _load_json(after, name) if (after / name).is_file() else []
         fields = FILE_KEYS[name]
         left_by_key = {tuple(str(value[field]) for field in fields): value for value in left}
         right_by_key = {tuple(str(value[field]) for field in fields): value for value in right}

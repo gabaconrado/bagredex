@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/bundle-v3.schema.json",
+  "title": "Bagredex team-builder Pokémon bundle manifest",
+  "description": "Pinned schema-3 manifest contract with normalized items, natures, Mega stones, and total SP.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown_sources",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": {"const": "showdown-multi-s3-i4-5073b2ab1402"},
+    "bundle_hash": {"const": "5073b2ab1402a90ec951e0b4ccc123956998b40092d7d74c26b50e9736a61267"},
+    "bundle_schema_version": {"const": "3"},
+    "importer_version": {"const": "4"},
+    "source_shape_version": {"const": "showdown-champions-multi-revision-3"},
+    "showdown_sources": {"type": "array", "minItems": 2, "maxItems": 2},
+    "counts": {
+      "type": "object",
+      "required": ["items", "item_profiles", "natures", "mega_item_relations"],
+      "properties": {
+        "items": {"const": 166},
+        "item_profiles": {"const": 431},
+        "natures": {"const": 21},
+        "mega_item_relations": {"const": 214}
+      }
+    },
+    "files": {"type": "array", "minItems": 25}
+  },
+  "additionalProperties": true
+}

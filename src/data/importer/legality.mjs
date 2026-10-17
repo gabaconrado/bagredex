@@ -1,12 +1,13 @@
-export const isStandardFormatsEntry = (entry, context = 'FormatsData entry') => {
+export const hasStandardStatus = (entry, context = 'data entry') => {
   if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
     throw new TypeError(`${context}: expected an object`);
   }
-  return entry.tier !== 'Illegal' && (
-  entry.isNonstandard === undefined ||
-  entry.isNonstandard === null ||
-  entry.isNonstandard === false
-  );
+  return entry.isNonstandard === undefined || entry.isNonstandard === null ||
+    entry.isNonstandard === false;
+};
+
+export const isStandardFormatsEntry = (entry, context = 'FormatsData entry') => {
+  return hasStandardStatus(entry, context) && entry.tier !== 'Illegal';
 };
 
 const toID = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');

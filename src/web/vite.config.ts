@@ -8,10 +8,16 @@ export default defineConfig({
     outDir: "static/web/dist",
     emptyOutDir: true,
     manifest: true,
-    rollupOptions: { input: "src/pokedex.tsx" },
+    rollupOptions: {
+      input: {
+        pokedex: "src/pokedex.tsx",
+        "team-builder": "src/team-builder.tsx",
+      },
+    },
   },
   test: {
     environment: "happy-dom",
+    fileParallelism: false,
     setupFiles: ["src/test-setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
   },

@@ -5,9 +5,17 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from . import views
+from .teams import views as team_views
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("teams/", team_views.teams_page, name="teams-page"),
+    path(
+        "teams/data/<str:version>/<str:regulation>/",
+        team_views.teams_data,
+        name="teams-data",
+    ),
+    path("teams/<uuid:team_id>/", team_views.teams_detail, name="teams-detail"),
     path(
         "pokedex/data/<str:regulation>/index/",
         views.pokedex_index,

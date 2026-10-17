@@ -5,7 +5,15 @@ from typing import Any
 from django.contrib import admin
 from django.http import HttpRequest
 
-from .models import ActiveDataVersion, DataActivation, DataVersion
+from .models import (
+    ActiveDataVersion,
+    DataActivation,
+    DataVersion,
+    Item,
+    ItemProfile,
+    MegaItemRelation,
+    Nature,
+)
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
@@ -34,3 +42,6 @@ class DataActivationAdmin(ReadOnlyAdmin):
 @admin.register(ActiveDataVersion)
 class ActiveDataVersionAdmin(ReadOnlyAdmin):
     list_display = ("singleton_key", "version")
+
+
+admin.site.register((Item, ItemProfile, Nature, MegaItemRelation), ReadOnlyAdmin)

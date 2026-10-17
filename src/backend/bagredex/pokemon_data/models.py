@@ -116,6 +116,7 @@ class MechanicsProfile(VersionOwnedModel):
     level = models.PositiveSmallIntegerField()
     sp_minimum = models.PositiveSmallIntegerField()
     sp_maximum = models.PositiveSmallIntegerField()
+    sp_total_max = models.PositiveSmallIntegerField(null=True, blank=True)
     hp_formula = models.CharField(max_length=200)
     other_formula = models.CharField(max_length=200)
     nature_percentages = models.JSONField()
@@ -205,6 +206,38 @@ class Move(NamedIdentity):
         ]
 
 
+class Item(NamedIdentity):
+    """A stable held-item identity."""
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version", "canonical_id"), name="pokemon_data_unique_item"
+            )
+        ]
+
+
+class Nature(NamedIdentity):
+    """A Champions-approved nature and its exact stat direction."""
+
+    increased_stat = models.CharField(max_length=3, null=True, blank=True)  # noqa: DJ001
+    decreased_stat = models.CharField(max_length=3, null=True, blank=True)  # noqa: DJ001
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version", "canonical_id"), name="pokemon_data_unique_nature"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(increased_stat__isnull=True, decreased_stat__isnull=True)
+                    | Q(increased_stat__isnull=False, decreased_stat__isnull=False)
+                ),
+                name="pokemon_data_nature_directions_paired",
+            ),
+        ]
+
+
 class MoveFlag(VersionOwnedModel):
     """A stable Showdown move-flag identity."""
 
@@ -233,6 +266,21 @@ class AbilityProfile(VersionOwnedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=("regulation", "ability"), name="pokemon_data_unique_ability_profile"
+            )
+        ]
+
+
+class ItemProfile(VersionOwnedModel):
+    """A regulation-effective legal held item."""
+
+    regulation = models.ForeignKey(Regulation, on_delete=models.PROTECT)
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    source_status = models.CharField(max_length=32)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("regulation", "item"), name="pokemon_data_unique_item_profile"
             )
         ]
 
@@ -419,6 +467,27 @@ class MegaRelation(VersionOwnedModel):
                 condition=~Q(base_form=models.F("mega_form")),
                 name="pokemon_data_distinct_mega_forms",
             )
+        ]
+
+
+class MegaItemRelation(VersionOwnedModel):
+    """The exact Mega target enabled by one legal stone for one base form."""
+
+    regulation = models.ForeignKey(Regulation, on_delete=models.PROTECT)
+    item_profile = models.ForeignKey(ItemProfile, on_delete=models.PROTECT)
+    base_form = models.ForeignKey(PokemonForm, on_delete=models.PROTECT, related_name="+")
+    mega_form = models.ForeignKey(PokemonForm, on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("regulation", "item_profile", "base_form"),
+                name="pokemon_data_unique_mega_item_relation",
+            ),
+            models.CheckConstraint(
+                condition=~Q(base_form=models.F("mega_form")),
+                name="pokemon_data_distinct_mega_item_forms",
+            ),
         ]
 
 

@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "bagredex.accounts",
     "bagredex.pokemon_data",
+    "bagredex.teams",
 ]
 
 MIDDLEWARE = [

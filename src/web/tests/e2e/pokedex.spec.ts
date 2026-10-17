@@ -204,6 +204,10 @@ test("switches explicit regulations and supports keyboard selection", async ({
     "Regulation M-A",
   ]);
   await expect(page.locator(".pokedex-title select")).toHaveCount(0);
+  await expect(page.locator("[data-regulation-selector]")).toHaveAttribute(
+    "data-enhanced",
+    "",
+  );
   await picker.focus();
   await page.keyboard.press("ArrowDown");
   await expect(page).toHaveURL(/regulation=m-b/);
@@ -455,6 +459,8 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await expect(reminder.locator("kbd")).toHaveCount(1);
   await expect(reminder.locator("a, button, [tabindex]")).toHaveCount(0);
   const search = page.getByLabel(/Search Pokémon/);
+  await expect(search).toBeVisible();
+  await expect(search).toBeEnabled();
   const eligibleShortcutTarget = page.getByRole("heading", {
     name: "Pokédex",
   });

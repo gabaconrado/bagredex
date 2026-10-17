@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load vite %}
+
+{% block title %}Team Builder · Bagredex{% endblock %}
+
+{% block head %}
+  {% if team_builder_bootstrap %}{% vite_styles 'src/team-builder.tsx' %}{% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if team_builder_unavailable %}
+    <section class="state-card state-card--error" aria-labelledby="teams-unavailable-title">
+      <p class="eyebrow">Private Champions teams</p>
+      <h1 id="teams-unavailable-title">Team Builder unavailable</h1>
+      <p>{{ team_builder_unavailable }}</p>
+    </section>
+  {% else %}
+    {{ team_builder_bootstrap|json_script:"team-builder-bootstrap" }}
+    <form hidden aria-hidden="true">{% csrf_token %}</form>
+    <div data-team-builder-root>
+      <section class="team-state" aria-live="polite">
+        <h1>Team Builder</h1>
+        <p>Loading your teams…</p>
+      </section>
+    </div>
+    <noscript><p class="state-card state-card--error">JavaScript is required to build and save teams.</p></noscript>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {% if team_builder_bootstrap %}<script type="module" src="{% vite_asset 'src/team-builder.tsx' %}"></script>{% endif %}
+{% endblock %}

@@ -18,7 +18,11 @@ SUPPORTED_SOURCE_SHAPE_VERSION = "showdown-champions-1"
 MULTI_SCHEMA_VERSION = "2"
 MULTI_IMPORTER_VERSION = "3"
 MULTI_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-2"
-SUPPORTED_SCHEMA_VERSIONS = frozenset({SUPPORTED_SCHEMA_VERSION, MULTI_SCHEMA_VERSION})
+TEAM_SCHEMA_VERSION = "3"
+TEAM_IMPORTER_VERSION = "4"
+TEAM_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-3"
+MULTI_SCHEMA_VERSIONS = frozenset({MULTI_SCHEMA_VERSION, TEAM_SCHEMA_VERSION})
+SUPPORTED_SCHEMA_VERSIONS = frozenset({SUPPORTED_SCHEMA_VERSION, *MULTI_SCHEMA_VERSIONS})
 EXPECTED_SHOWDOWN_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_SPRITES_REVISION = "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
 EXPECTED_POKEAPI_REVISION = "81d20919845b6a445969b9265aab5cec6b04cece"
@@ -138,6 +142,13 @@ MULTI_PINNED_COUNTS = {
     "sprites": 700,
     "sprite_mappings": 350,
 }
+TEAM_PINNED_COUNTS = {
+    **MULTI_PINNED_COUNTS,
+    "items": 166,
+    "item_profiles": 431,
+    "natures": 21,
+    "mega_item_relations": 214,
+}
 MULTI_GROUP_COUNTS = {
     "legal_forms_by_regulation": {"m-a": 272, "m-b": 314, "m-c": 349},
     "learnsets_by_regulation": {"m-a": 21506, "m-b": 21715, "m-c": 21714},
@@ -158,6 +169,30 @@ MULTI_GROUP_COUNTS = {
     },
 }
 PINNED_RELEASE_CONTRACTS = {
+    "showdown-multi-s3-i4-5073b2ab1402": (
+        "5073b2ab1402a90ec951e0b4ccc123956998b40092d7d74c26b50e9736a61267",
+        TEAM_PINNED_COUNTS,
+        MULTI_GROUP_COUNTS,
+        EXPECTED_SPRITE_MAPPING_SHA256,
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
+    ),
     "showdown-3a766f2c-s1-i2-4bedbf1eb44d": (
         "4bedbf1eb44d797b319aa5f750698463fb5cca6a63de6ff725d5c0bb0bc115a9",
         EXPECTED_PINNED_COUNTS,
@@ -290,7 +325,15 @@ DATA_FILES = (
     "sprite_mappings.json",
     "sprites.json",
 )
-REQUIRED_FILES = frozenset((*DATA_FILES, "provenance.json", "validation.json"))
+TEAM_DATA_FILES = (
+    *DATA_FILES[:6],
+    "items.json",
+    "item_profiles.json",
+    "natures.json",
+    *DATA_FILES[6:13],
+    "mega_item_relations.json",
+    *DATA_FILES[13:],
+)
 FILE_KEYS: dict[str, tuple[str, ...]] = {
     "mechanics_profiles.json": ("id",),
     "regulations.json": ("id",),
@@ -308,6 +351,10 @@ FILE_KEYS: dict[str, tuple[str, ...]] = {
     "learnsets.json": ("regulation_id", "form_id", "move_id"),
     "sprite_mappings.json": ("form_id",),
     "sprites.json": ("form_id", "variant"),
+    "items.json": ("id",),
+    "item_profiles.json": ("regulation_id", "id"),
+    "natures.json": ("id",),
+    "mega_item_relations.json": ("regulation_id", "item_id", "base_form_id"),
 }
 
 
@@ -458,6 +505,8 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]]) -> None:
         "other_formula",
         "nature_percentages",
     }
+    if "items.json" in records:
+        mechanics_keys.add("sp_total_max")
     for index, record in enumerate(records["mechanics_profiles.json"]):
         label = f"mechanics_profiles.json[{index}]"
         _exact_keys(record, mechanics_keys, label)
@@ -508,6 +557,33 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]]) -> None:
             _exact_keys(record, {"id", "name"}, label)
             _identifier(record, "id", label)
             _text(record, "name", label, maximum=200)
+    if "items.json" in records:
+        for name in ("items.json", "natures.json"):
+            for index, record in enumerate(records[name]):
+                label = f"{name}[{index}]"
+                if name == "items.json":
+                    _exact_keys(record, {"id", "name"}, label)
+                else:
+                    _exact_keys(record, {"id", "name", "increased_stat", "decreased_stat"}, label)
+                    for field in ("increased_stat", "decreased_stat"):
+                        value = record[field]
+                        if value is not None and value not in {"atk", "def", "spa", "spd", "spe"}:
+                            raise BundleReadError(f"{label}: invalid {field}")
+                _identifier(record, "id", label)
+                _text(record, "name", label, maximum=200)
+        for index, record in enumerate(records["item_profiles.json"]):
+            label = f"item_profiles.json[{index}]"
+            _exact_keys(record, {"regulation_id", "id", "name", "source_status"}, label)
+            _identifier(record, "regulation_id", label)
+            _identifier(record, "id", label)
+            _text(record, "name", label, maximum=200)
+            if record.get("source_status") != "standard":
+                raise BundleReadError(f"{label}: item must be standard")
+        for index, record in enumerate(records["mega_item_relations.json"]):
+            label = f"mega_item_relations.json[{index}]"
+            _exact_keys(record, {"regulation_id", "item_id", "base_form_id", "mega_form_id"}, label)
+            for field in ("regulation_id", "item_id", "base_form_id", "mega_form_id"):
+                _identifier(record, field, label)
     for index, record in enumerate(records["move_flags.json"]):
         label = f"move_flags.json[{index}]"
         _exact_keys(record, {"id"}, label)
@@ -717,22 +793,23 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         for item in records["mechanics_profiles.json"]
     }
     expected_regulation_ids = (
-        {"m-a", "m-b", "m-c"} if schema_version == MULTI_SCHEMA_VERSION else {"m-b", "m-c"}
+        {"m-a", "m-b", "m-c"} if schema_version in MULTI_SCHEMA_VERSIONS else {"m-b", "m-c"}
     )
     if regulation_ids != expected_regulation_ids:
         required = ", ".join(sorted(expected_regulation_ids))
         raise BundleReadError(f"regulations.json: exactly {required} are required")
-    if records["mechanics_profiles.json"] != [
-        {
-            "id": "champions-level-50-v1",
-            "level": 50,
-            "sp_minimum": 0,
-            "sp_maximum": 32,
-            "hp_formula": "base + sp + 75",
-            "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
-            "nature_percentages": {"hindering": 90, "neutral": 100, "increasing": 110},
-        }
-    ]:
+    expected_mechanics: JsonObject = {
+        "id": "champions-level-50-v1",
+        "level": 50,
+        "sp_minimum": 0,
+        "sp_maximum": 32,
+        "hp_formula": "base + sp + 75",
+        "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
+        "nature_percentages": {"hindering": 90, "neutral": 100, "increasing": 110},
+    }
+    if schema_version == TEAM_SCHEMA_VERSION:
+        expected_mechanics["sp_total_max"] = 66
+    if records["mechanics_profiles.json"] != [expected_mechanics]:
         raise BundleReadError("mechanics_profiles.json: unsupported mechanics contract")
     regulations_by_id = {
         _string(item, "id", "regulations.json"): item for item in records["regulations.json"]
@@ -852,6 +929,42 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         raise BundleReadError(
             "regulation_memberships.json: membership without an effective profile"
         )
+    if schema_version == TEAM_SCHEMA_VERSION:
+        item_ids = {_string(item, "id", "items.json") for item in records["items.json"]}
+        item_profiles = {
+            (
+                _string(item, "regulation_id", "item_profiles.json"),
+                _string(item, "id", "item_profiles.json"),
+            )
+            for item in records["item_profiles.json"]
+        }
+        if any(
+            regulation_id not in regulation_ids or item_id not in item_ids
+            for regulation_id, item_id in item_profiles
+        ):
+            raise BundleReadError("item_profiles.json: dangling item profile")
+        natures = records["natures.json"]
+        if {item["id"] for item in natures if item["increased_stat"] is None} != {"serious"}:
+            raise BundleReadError("natures.json: Serious must be the only neutral nature")
+        for relation in records["mega_item_relations.json"]:
+            regulation_id = _string(relation, "regulation_id", "mega_item_relations.json")
+            item_id = _string(relation, "item_id", "mega_item_relations.json")
+            base_id = _string(relation, "base_form_id", "mega_item_relations.json")
+            mega_id = _string(relation, "mega_form_id", "mega_item_relations.json")
+            if (
+                (regulation_id, item_id) not in item_profiles
+                or base_id not in form_ids
+                or mega_id not in form_ids
+            ):
+                raise BundleReadError("mega_item_relations.json: dangling relation")
+            base = next(item for item in records["forms.json"] if item["id"] == base_id)
+            mega = next(item for item in records["forms.json"] if item["id"] == mega_id)
+            if (
+                base["is_mega"]
+                or not mega["is_mega"]
+                or mega["base_form_id"] != base["base_form_id"]
+            ):
+                raise BundleReadError("mega_item_relations.json: incoherent Mega mapping")
     for profile in records["ability_profiles.json"]:
         if (
             _string(profile, "regulation_id", "ability_profiles.json") not in regulation_ids
@@ -1093,7 +1206,7 @@ def _expected_counts(records: dict[str, list[JsonObject]]) -> dict[str, object]:
     learnsets = records["learnsets.json"]
     sprites = records["sprites.json"]
     flag_relations = records["move_flag_relations.json"]
-    return {
+    counts: dict[str, object] = {
         "forms": len(records["forms.json"]),
         "types": len(records["types.json"]),
         "memberships": len(memberships),
@@ -1158,6 +1271,16 @@ def _expected_counts(records: dict[str, list[JsonObject]]) -> dict[str, object]:
             )
         ),
     }
+    if "items.json" in records:
+        counts.update(
+            {
+                "items": len(records["items.json"]),
+                "item_profiles": len(records["item_profiles.json"]),
+                "natures": len(records["natures.json"]),
+                "mega_item_relations": len(records["mega_item_relations.json"]),
+            }
+        )
+    return counts
 
 
 def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataBundle:
@@ -1170,7 +1293,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError(f"{directory}: bundle path is not a directory")
     manifest = _object(_json(directory / "manifest.json"), "manifest.json")
     schema_version = _string(manifest, "bundle_schema_version", "manifest.json")
-    source_field = "showdown_sources" if schema_version == MULTI_SCHEMA_VERSION else "showdown"
+    source_field = "showdown_sources" if schema_version in MULTI_SCHEMA_VERSIONS else "showdown"
     _exact_keys(
         manifest,
         {
@@ -1197,16 +1320,24 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: unsupported bundle schema version")
     importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_importers = (
-        {MULTI_IMPORTER_VERSION}
-        if schema_version == MULTI_SCHEMA_VERSION
-        else SUPPORTED_IMPORTER_VERSIONS
+        {TEAM_IMPORTER_VERSION}
+        if schema_version == TEAM_SCHEMA_VERSION
+        else (
+            {MULTI_IMPORTER_VERSION}
+            if schema_version == MULTI_SCHEMA_VERSION
+            else SUPPORTED_IMPORTER_VERSIONS
+        )
     )
     if importer_version not in expected_importers:
         raise BundleReadError("manifest.json: unsupported importer version")
     expected_source_shape = (
-        MULTI_SOURCE_SHAPE_VERSION
-        if schema_version == MULTI_SCHEMA_VERSION
-        else SUPPORTED_SOURCE_SHAPE_VERSION
+        TEAM_SOURCE_SHAPE_VERSION
+        if schema_version == TEAM_SCHEMA_VERSION
+        else (
+            MULTI_SOURCE_SHAPE_VERSION
+            if schema_version == MULTI_SCHEMA_VERSION
+            else SUPPORTED_SOURCE_SHAPE_VERSION
+        )
     )
     if manifest.get("source_shape_version") != expected_source_shape:
         raise BundleReadError("manifest.json: unsupported source shape version")
@@ -1258,13 +1389,15 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError(
             "manifest.json: file inventory does not exactly match bundle contents"
         )
-    if not declared_paths >= REQUIRED_FILES:
-        missing = sorted(REQUIRED_FILES - declared_paths)
+    data_files = TEAM_DATA_FILES if schema_version == TEAM_SCHEMA_VERSION else DATA_FILES
+    required_files = frozenset((*data_files, "provenance.json", "validation.json"))
+    if not declared_paths >= required_files:
+        missing = sorted(required_files - declared_paths)
         raise BundleReadError(f"manifest.json: required files are missing: {', '.join(missing)}")
     bundle_hash = hashlib.sha256(canonical_bytes(file_records)).hexdigest()
     if manifest.get("bundle_hash") != bundle_hash:
         raise BundleReadError("manifest.json: canonical bundle hash mismatch")
-    if schema_version == MULTI_SCHEMA_VERSION:
+    if schema_version in MULTI_SCHEMA_VERSIONS:
         showdown_sources = _records(
             manifest.get("showdown_sources"), "manifest.json:showdown_sources"
         )
@@ -1309,7 +1442,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
             raise BundleReadError(f"manifest.json: unexpected {field} source")
     expected_id = (
         f"showdown-multi-s{schema_version}-i{importer_version}-{bundle_hash[:12]}"
-        if schema_version == MULTI_SCHEMA_VERSION
+        if schema_version in MULTI_SCHEMA_VERSIONS
         else (f"showdown-{revision[:8]}-s{schema_version}-i{importer_version}-{bundle_hash[:12]}")
     )
     if manifest.get("bundle_id") != expected_id or directory.name != expected_id:
@@ -1343,7 +1476,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: validation summary hash mismatch")
     provenance = _object(_json(directory / "provenance.json"), "provenance.json")
     provenance_source_field = (
-        "showdown_sources" if schema_version == MULTI_SCHEMA_VERSION else "showdown"
+        "showdown_sources" if schema_version in MULTI_SCHEMA_VERSIONS else "showdown"
     )
     _exact_keys(
         provenance,
@@ -1358,7 +1491,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         "champions_format_entries",
         "championsregmb_format_entries",
     }
-    if schema_version == MULTI_SCHEMA_VERSION:
+    if schema_version in MULTI_SCHEMA_VERSIONS:
         provenance_sources = _records(
             provenance.get("showdown_sources"), "provenance.json:showdown_sources"
         )
@@ -1516,7 +1649,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
             target = directory / relative
             if not target.is_file() or _sha256(target) != overlay[hash_field]:
                 raise BundleReadError(f"{target}: overlay file is missing or altered")
-    records = {name: _records(_json(directory / name), name) for name in DATA_FILES}
+    records = {name: _records(_json(directory / name), name) for name in data_files}
     _validate_record_shapes(records)
     for name, values in records.items():
         _validate_unique(values, FILE_KEYS[name], name)
