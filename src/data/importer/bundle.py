@@ -13,17 +13,26 @@ import struct
 import subprocess
 import sys
 import tempfile
+import tarfile
 import zlib
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "1"
-IMPORTER_VERSION = "2"
+SCHEMA_VERSION = "2"
+IMPORTER_VERSION = "3"
 LEGACY_IMPORTER_VERSION = "1"
-SOURCE_SHAPE_VERSION = "showdown-champions-1"
+SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-2"
 EXPECTED_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_COMMIT_DATE = "2026-10-13"
+HISTORICAL_REVISION = "b555f4d8ce7250e72939fe0c12cc5b303741d203"
+HISTORICAL_COMMIT_DATE = "2026-04-10"
+RETAINED_RELEASES = {
+    "showdown-3a766f2c-s1-i1-923ba416555c":
+        "923ba416555ca33c4b5d17f84d246661d6ef61a6170959aac807454a1978ead2",
+    "showdown-3a766f2c-s1-i2-4bedbf1eb44d":
+        "4bedbf1eb44d797b319aa5f750698463fb5cca6a63de6ff725d5c0bb0bc115a9",
+}
 EXPECTED_SPRITES_REVISION = "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
 EXPECTED_POKEAPI_REVISION = "81d20919845b6a445969b9265aab5cec6b04cece"
 SHOWDOWN_NOTICE_PATH = "POKEMON-SHOWDOWN-LICENSE.txt"
@@ -130,6 +139,12 @@ LEGACY_PINNED_COUNTS = {
     "move_flags": 37, "move_flag_relations": 3928, "learnsets": 43891,
     "mega_relations": 84, "sprites": 706, "sprite_mappings": 353,
 }
+MULTI_PINNED_COUNTS = {
+    "forms": 350, "types": 18, "memberships": 935, "profiles": 1050,
+    "abilities": 216, "ability_profiles": 645, "moves": 511, "move_profiles": 1513,
+    "move_flags": 37, "move_flag_relations": 5833, "learnsets": 64935,
+    "mega_relations": 82, "sprites": 700, "sprite_mappings": 350,
+}
 
 
 class BundleError(RuntimeError):
@@ -188,13 +203,88 @@ def _verify_showdown(showdown: Path) -> None:
         raise BundleError(f"{showdown}: unsupported source shape; missing {', '.join(missing)}")
 
 
-def _extract(showdown: Path) -> dict[str, Any]:
+def _extract(
+    showdown: Path, requested: str = "current", form_ids: list[str] | None = None
+) -> dict[str, Any]:
     script = Path(__file__).with_name("extract.mjs")
-    output = _run(["node", "--no-warnings", str(script), str(showdown)])
+    output = _run([
+        "node", "--no-warnings", str(script), str(showdown), requested,
+        ",".join(form_ids or []),
+    ])
     try:
         return json.loads(output)
     except json.JSONDecodeError as error:
         raise BundleError(f"extractor returned invalid JSON: {error}") from error
+
+
+HISTORICAL_PATHS = (
+    "config/formats.ts", "data/pokedex.ts", "data/moves.ts", "data/abilities.ts",
+    "data/learnsets.ts", "data/text/moves.ts", "data/text/abilities.ts",
+    "data/mods/champions/formats-data.ts", "data/mods/champions/moves.ts",
+    "data/mods/champions/abilities.ts", "data/mods/champions/learnsets.ts", "LICENSE",
+)
+
+
+def _materialize_historical_tree(repository: Path, destination: Path) -> None:
+    resolved = _run(["git", "rev-parse", f"{HISTORICAL_REVISION}^{{commit}}"], repository)
+    if resolved != HISTORICAL_REVISION:
+        raise BundleError(f"historical Showdown object resolved to {resolved}")
+    commit_date = _run(["git", "show", "-s", "--format=%cs", HISTORICAL_REVISION], repository)
+    if commit_date != HISTORICAL_COMMIT_DATE:
+        raise BundleError(f"historical Showdown commit date changed: {commit_date}")
+    result = subprocess.run(
+        ["git", "archive", "--format=tar", HISTORICAL_REVISION, *HISTORICAL_PATHS],
+        cwd=repository, check=False, capture_output=True,
+    )
+    if result.returncode:
+        raise BundleError(f"historical Showdown tree is unavailable: {result.stderr.decode().strip()}")
+    destination.mkdir()
+    try:
+        with tempfile.TemporaryFile() as archive_file:
+            archive_file.write(result.stdout)
+            archive_file.seek(0)
+            with tarfile.open(fileobj=archive_file, mode="r:") as archive:
+                names = {member.name for member in archive.getmembers() if member.isfile()}
+                if names != set(HISTORICAL_PATHS):
+                    raise BundleError(
+                        "historical Showdown archive did not contain the exact allow-list"
+                    )
+                for member in archive.getmembers():
+                    if (not (member.isfile() or member.isdir()) or member.name.startswith("/")
+                            or ".." in Path(member.name).parts):
+                        raise BundleError("historical Showdown archive contains an unsafe entry")
+                archive.extractall(destination, filter="data")
+    except (OSError, tarfile.TarError) as error:
+        raise BundleError(f"historical Showdown archive is invalid: {error}") from error
+
+
+def _combine_extractions(current: dict[str, Any], historical: dict[str, Any]) -> dict[str, Any]:
+    if [item["id"] for item in historical["formats"]] != ["m-a"]:
+        raise BundleError("historical extraction did not produce exactly Regulation M-A")
+    if {item["id"] for item in current["formats"]} != {"m-b", "m-c"}:
+        raise BundleError("current extraction did not produce Regulations M-B and M-C")
+    forms: dict[str, dict[str, Any]] = {}
+    for source in (historical, current):
+        for form in source["forms"]:
+            previous = forms.setdefault(form["id"], form)
+            if previous != form:
+                raise BundleError(f"cross-revision form identity conflict for {form['id']}")
+    mega: dict[str, dict[str, str]] = {}
+    for source in (historical, current):
+        for relation in source["mega_relations"]:
+            previous = mega.setdefault(relation["mega_form_id"], relation)
+            if previous != relation:
+                raise BundleError(f"cross-revision Mega relation conflict for {relation['mega_form_id']}")
+    return {
+        "formats": historical["formats"] + current["formats"],
+        "forms": sorted(forms.values(), key=lambda item: item["id"]),
+        "mega_relations": sorted(mega.values(), key=lambda item: item["mega_form_id"]),
+        "regulations": {**historical["regulations"], **current["regulations"]},
+        "source_counts": {
+            "m-a": historical["source_counts"],
+            "m-b,m-c": current["source_counts"],
+        },
+    }
 
 
 def _records(extracted: dict[str, Any]) -> dict[str, Any]:
@@ -708,9 +798,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     move_ids = {(value["regulation_id"], value["id"]) for value in move_profiles}
     profile_ids = {(value["regulation_id"], value["form_id"]) for value in profiles}
     membership_ids = {(value["regulation_id"], value["form_id"]) for value in memberships}
-    if regulation_ids != {"m-b", "m-c"}:
-        raise BundleError(f"regulations.json: expected m-b and m-c, found {sorted(regulation_ids)}")
+    multi_revision = regulation_ids == {"m-a", "m-b", "m-c"}
+    if not multi_revision and regulation_ids != {"m-b", "m-c"}:
+        raise BundleError(f"regulations.json: unsupported regulation set {sorted(regulation_ids)}")
     expected_formats = {
+        "m-a": ("[Gen 9 Champions] VGC 2026 Reg M-A", "champions"),
         "m-b": ("[Gen 9 Champions] VGC 2026 Reg M-B", "championsregmb"),
         "m-c": ("[Gen 9 Champions] VGC 2026 Reg M-C", "champions"),
     }
@@ -845,6 +937,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             raise BundleError(f"learnsets.json: pre-evolution resolution must change form {relation}")
         source_pair = (relation["source_mod"], relation["source_kind"])
         allowed_source_pairs = {
+            "m-a": {("champions", "direct"), ("base", "inherited")},
             "m-c": {("champions", "direct"), ("base", "inherited")},
             "m-b": {
                 ("champions", "inherited"), ("base", "inherited"),
@@ -914,19 +1007,47 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         ):
             raise BundleError(f"sprites.json: invalid source provenance for {sprite['form_id']}")
     provenance = _load_json(bundle, "provenance.json")
-    _fields(provenance, {"showdown", "sprites", "pokeapi_mapping", "overlays"}, "provenance.json")
-    _fields(
-        provenance["showdown"],
-        {"revision", "commit_date", "clean_tree", "source_counts", "notice_path", "notice_sha256"},
-        "provenance.json.showdown",
-    )
+    showdown_key = "showdown_sources" if multi_revision else "showdown"
+    _fields(provenance, {showdown_key, "sprites", "pokeapi_mapping", "overlays"}, "provenance.json")
+    if multi_revision:
+        sources = provenance[showdown_key]
+        if not isinstance(sources, list) or len(sources) != 2:
+            raise BundleError("provenance.json.showdown_sources: expected exactly two sources")
+        source_fields = {
+            "regulations", "revision", "commit_date", "clean_tree", "source_counts",
+            "notice_path", "notice_sha256",
+        }
+        for index, source in enumerate(sources):
+            _fields(source, source_fields, f"provenance.json.showdown_sources[{index}]")
+            if not isinstance(source["source_counts"], dict):
+                raise BundleError(
+                    f"provenance.json.showdown_sources[{index}].source_counts: expected object"
+                )
+        expected_sources = [
+            {"regulations": ["m-a"], "revision": HISTORICAL_REVISION,
+             "commit_date": HISTORICAL_COMMIT_DATE, "clean_tree": True,
+             "source_counts": provenance[showdown_key][0].get("source_counts"),
+             "notice_path": SHOWDOWN_NOTICE_PATH, "notice_sha256": SHOWDOWN_NOTICE_SHA256},
+            {"regulations": ["m-b", "m-c"], "revision": EXPECTED_REVISION,
+             "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True,
+             "source_counts": provenance[showdown_key][1].get("source_counts"),
+             "notice_path": SHOWDOWN_NOTICE_PATH, "notice_sha256": SHOWDOWN_NOTICE_SHA256},
+        ]
+        if provenance[showdown_key] != expected_sources:
+            raise BundleError("provenance.json: unexpected multi-revision Showdown provenance")
+    else:
+        _fields(
+            provenance["showdown"],
+            {"revision", "commit_date", "clean_tree", "source_counts", "notice_path", "notice_sha256"},
+            "provenance.json.showdown",
+        )
     _fields(
         provenance["sprites"],
         {"revision", "clean_tree", "family", "mapping_rule_version", "mapping_revision", "mapping_sha256", "cwebp_version", "cwebp_args", "license", "mapping_exceptions"},
         "provenance.json.sprites",
     )
     _fields(provenance["pokeapi_mapping"], {"revision", "clean_tree"}, "provenance.json.pokeapi_mapping")
-    if provenance["showdown"] != {
+    if not multi_revision and provenance["showdown"] != {
         "revision": EXPECTED_REVISION, "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True,
         "source_counts": provenance["showdown"]["source_counts"],
         "notice_path": SHOWDOWN_NOTICE_PATH, "notice_sha256": SHOWDOWN_NOTICE_SHA256,
@@ -968,7 +1089,10 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     legacy_release = Counter(x["regulation_id"] for x in memberships) == {"m-b": 316, "m-c": 351}
     summary = {
         "status": "valid", "errors": [], "warnings": [], "overlays": provenance["overlays"],
-        "source_counts": provenance["showdown"]["source_counts"],
+        "source_counts": (
+            {",".join(source["regulations"]): source["source_counts"] for source in provenance[showdown_key]}
+            if multi_revision else provenance["showdown"]["source_counts"]
+        ),
         "counts": {
             "forms": len(forms), "types": len(types), "memberships": len(memberships),
             "profiles": len(profiles),
@@ -999,42 +1123,68 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "mega_relation_percent": 100, "normal_sprite_percent": 100, "shiny_sprite_percent": 100,
         },
     }
-    expected_counts = LEGACY_PINNED_COUNTS if legacy_release else EXPECTED_PINNED_COUNTS
+    expected_counts = (
+        MULTI_PINNED_COUNTS if multi_revision else
+        LEGACY_PINNED_COUNTS if legacy_release else EXPECTED_PINNED_COUNTS
+    )
     for key, expected in expected_counts.items():
         if summary["counts"].get(key) != expected:
             raise BundleError(f"pinned bundle count {key}: expected {expected}, found {summary['counts'].get(key)}")
     expected_memberships = {"m-b": 316, "m-c": 351} if legacy_release else {"m-b": 314, "m-c": 349}
+    if multi_revision:
+        expected_memberships = {"m-a": 272, "m-b": 314, "m-c": 349}
     if summary["counts"]["legal_forms_by_regulation"] != expected_memberships:
         raise BundleError("pinned bundle regulation membership counts changed")
     expected_learnsets = (
         {"m-b": 21946, "m-c": 21945}
         if legacy_release else {"m-b": 21715, "m-c": 21714}
     )
+    if multi_revision:
+        expected_learnsets = {"m-a": 21506, "m-b": 21715, "m-c": 21714}
     if summary["counts"]["learnsets_by_regulation"] != expected_learnsets:
         raise BundleError("pinned bundle regulation learnset counts changed")
     expected_resolution = (
         {"base-to-mega": 11270, "changed-form": 932, "direct": 31689}
         if legacy_release else {"base-to-mega": 10962, "changed-form": 932, "direct": 31535}
     )
+    if multi_revision:
+        expected_resolution = {"base-to-mega": 16459, "changed-form": 1331, "direct": 47145}
     if summary["counts"]["learnsets_by_form_resolution"] != expected_resolution:
         raise BundleError("pinned bundle learnset form-resolution counts changed")
     expected_source_mod = (
         {"base": 676, "champions": 43164, "championsregmb": 51}
         if legacy_release else {"base": 214, "champions": 43164, "championsregmb": 51}
     )
+    if multi_revision:
+        expected_source_mod = {"base": 4578, "champions": 60306, "championsregmb": 51}
     if summary["counts"]["learnsets_by_source_mod"] != expected_source_mod:
         raise BundleError("pinned bundle learnset source-mod counts changed")
     expected_source_kind = (
         {"direct": 21607, "inherited": 22233, "override": 51}
         if legacy_release else {"direct": 21607, "inherited": 21771, "override": 51}
     )
+    if multi_revision:
+        expected_source_kind = {"direct": 38749, "inherited": 26135, "override": 51}
     if summary["counts"]["learnsets_by_source_kind"] != expected_source_kind:
         raise BundleError("pinned bundle learnset source-kind counts changed")
-    if provenance["showdown"]["source_counts"] != {
+    if not multi_revision and provenance["showdown"]["source_counts"] != {
         "pokedex": 1518, "base_moves": 954, "base_abilities": 321, "base_learnsets": 1289,
         "champions_format_entries": 1361, "championsregmb_format_entries": 1361,
     }:
         raise BundleError("provenance.json: pinned Showdown source counts changed")
+    if multi_revision and summary["source_counts"] != {
+        "m-a": {
+            "pokedex": 1516, "base_moves": 954, "base_abilities": 318,
+            "base_learnsets": 1287, "champions_format_entries": 1330,
+            "championsregmb_format_entries": 0,
+        },
+        "m-b,m-c": {
+            "pokedex": 1518, "base_moves": 954, "base_abilities": 321,
+            "base_learnsets": 1289, "champions_format_entries": 1361,
+            "championsregmb_format_entries": 1361,
+        },
+    }:
+        raise BundleError("provenance.json: pinned multi-revision source counts changed")
     if ("cinderace" in {form_id for regulation_id, form_id in membership_ids if regulation_id == "m-b"}
         or "cinderace" not in {form_id for regulation_id, form_id in membership_ids if regulation_id == "m-c"}
         or not {"charizard", "charizardmegax", "charizardmegay"} <= form_ids):
@@ -1047,21 +1197,23 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         manifest = _load_json(bundle, "manifest.json")
         expected_manifest_fields = {
             "bundle_id", "bundle_hash", "bundle_schema_version", "importer_version",
-            "source_shape_version", "showdown", "pokeapi_sprites", "pokeapi_mapping", "formats",
+            "source_shape_version", showdown_key, "pokeapi_sprites", "pokeapi_mapping", "formats",
             "mechanics_profile_id", "sprite_provenance", "overlays", "validation_status",
             "validation_sha256", "counts", "files",
         }
         _fields(manifest, expected_manifest_fields, "manifest.json")
-        if manifest["bundle_schema_version"] != SCHEMA_VERSION:
+        expected_schema = SCHEMA_VERSION if multi_revision else "1"
+        if manifest["bundle_schema_version"] != expected_schema:
             raise BundleError("manifest.json: unsupported bundle schema version")
         importer_version = manifest["importer_version"]
-        if importer_version not in {LEGACY_IMPORTER_VERSION, IMPORTER_VERSION}:
+        if importer_version not in {LEGACY_IMPORTER_VERSION, "2", IMPORTER_VERSION}:
             raise BundleError("manifest.json: unsupported importer or source-shape version")
-        if manifest["source_shape_version"] != SOURCE_SHAPE_VERSION:
+        expected_shape = SOURCE_SHAPE_VERSION if multi_revision else "showdown-champions-1"
+        if manifest["source_shape_version"] != expected_shape:
             raise BundleError("manifest.json: unsupported importer or source-shape version")
         if importer_version == LEGACY_IMPORTER_VERSION and not legacy_release:
             raise BundleError("manifest.json: importer version 1 cannot contain version 2 legality semantics")
-        if importer_version == IMPORTER_VERSION and legacy_release:
+        if importer_version in {"2", IMPORTER_VERSION} and legacy_release:
             raise BundleError("manifest.json: importer version 2 cannot contain legacy legality semantics")
         if manifest["formats"] != regulations or manifest["mechanics_profile_id"] != MECHANICS_PROFILE["id"]:
             raise BundleError("manifest.json: format or mechanics contract mismatch")
@@ -1071,7 +1223,12 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             raise BundleError("manifest.json: counts do not match validated bundle")
         if manifest["sprite_provenance"] != provenance["sprites"]:
             raise BundleError("manifest.json: sprite provenance mismatch")
-        if manifest["showdown"] != {
+        if multi_revision and manifest["showdown_sources"] != [
+            {key: source[key] for key in ("regulations", "revision", "commit_date", "clean_tree")}
+            for source in provenance["showdown_sources"]
+        ]:
+            raise BundleError("manifest.json: unexpected Showdown sources")
+        if not multi_revision and manifest["showdown"] != {
             "revision": EXPECTED_REVISION, "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True,
         }:
             raise BundleError("manifest.json: unexpected Showdown source")
@@ -1102,12 +1259,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         if manifest.get("bundle_hash") != bundle_hash:
             raise BundleError("manifest.json: canonical bundle hash mismatch")
         expected_id = (
-            f"showdown-{EXPECTED_REVISION[:8]}-s{SCHEMA_VERSION}-i{importer_version}-"
-            f"{bundle_hash[:12]}"
+            f"showdown-multi-s{SCHEMA_VERSION}-i{importer_version}-{bundle_hash[:12]}"
+            if multi_revision else
+            f"showdown-{EXPECTED_REVISION[:8]}-s1-i{importer_version}-{bundle_hash[:12]}"
         )
         if manifest.get("bundle_id") != expected_id:
             raise BundleError("manifest.json: bundle identifier does not match its canonical hash")
-        if manifest.get("showdown", {}).get("revision") != EXPECTED_REVISION:
+        if not multi_revision and RETAINED_RELEASES.get(manifest["bundle_id"]) != bundle_hash:
+            raise BundleError("manifest.json: schema-1 bundle is not an exact retained release")
+        if not multi_revision and manifest.get("showdown", {}).get("revision") != EXPECTED_REVISION:
             raise BundleError("manifest.json: unexpected Showdown revision")
         if manifest.get("pokeapi_sprites", {}).get("revision") != EXPECTED_SPRITES_REVISION:
             raise BundleError("manifest.json: unexpected PokeAPI sprites revision")
@@ -1135,7 +1295,14 @@ def build_bundle(showdown: Path, sprites: Path, pokeapi: Path, releases: Path) -
     _verify_showdown(showdown)
     _verify_repository(sprites, EXPECTED_SPRITES_REVISION, "PokeAPI sprites")
     _verify_repository(pokeapi, EXPECTED_POKEAPI_REVISION, "PokeAPI mapping")
-    extracted = _extract(showdown)
+    current = _extract(showdown)
+    with tempfile.TemporaryDirectory(prefix="bagredex-showdown-history-") as historical_name:
+        historical_root = Path(historical_name) / "tree"
+        _materialize_historical_tree(showdown, historical_root)
+        historical = _extract(
+            historical_root, "m-a", [form["id"] for form in current["forms"]]
+        )
+        extracted = _combine_extractions(current, historical)
     with tempfile.TemporaryDirectory(dir=releases, prefix=".bagredex-pokemon-data-") as temp_name:
         temp = Path(temp_name)
         records = _records(extracted)
@@ -1158,12 +1325,16 @@ def build_bundle(showdown: Path, sprites: Path, pokeapi: Path, releases: Path) -
         _write_json(
             temp / "provenance.json",
             {
-                "showdown": {
-                    "revision": EXPECTED_REVISION, "commit_date": EXPECTED_COMMIT_DATE,
-                    "clean_tree": True, "source_counts": extracted["source_counts"],
-                    "notice_path": SHOWDOWN_NOTICE_PATH,
-                    "notice_sha256": SHOWDOWN_NOTICE_SHA256,
-                },
+                "showdown_sources": [
+                    {"regulations": ["m-a"], "revision": HISTORICAL_REVISION,
+                     "commit_date": HISTORICAL_COMMIT_DATE, "clean_tree": True,
+                     "source_counts": extracted["source_counts"]["m-a"],
+                     "notice_path": SHOWDOWN_NOTICE_PATH, "notice_sha256": SHOWDOWN_NOTICE_SHA256},
+                    {"regulations": ["m-b", "m-c"], "revision": EXPECTED_REVISION,
+                     "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True,
+                     "source_counts": extracted["source_counts"]["m-b,m-c"],
+                     "notice_path": SHOWDOWN_NOTICE_PATH, "notice_sha256": SHOWDOWN_NOTICE_SHA256},
+                ],
                 "sprites": {
                     "revision": EXPECTED_SPRITES_REVISION, "clean_tree": True,
                     "family": "sprites/pokemon/other/home", "mapping_rule_version": SPRITE_MAPPING_VERSION,
@@ -1184,12 +1355,17 @@ def build_bundle(showdown: Path, sprites: Path, pokeapi: Path, releases: Path) -
         _write_json(temp / "validation.json", summary)
         files = _file_records(temp)
         bundle_hash = hashlib.sha256(_canonical_bytes(files)).hexdigest()
-        identifier = f"showdown-{EXPECTED_REVISION[:8]}-s{SCHEMA_VERSION}-i{IMPORTER_VERSION}-{bundle_hash[:12]}"
+        identifier = f"showdown-multi-s{SCHEMA_VERSION}-i{IMPORTER_VERSION}-{bundle_hash[:12]}"
         manifest = {
             "bundle_id": identifier, "bundle_hash": bundle_hash,
             "bundle_schema_version": SCHEMA_VERSION, "importer_version": IMPORTER_VERSION,
             "source_shape_version": SOURCE_SHAPE_VERSION,
-            "showdown": {"revision": EXPECTED_REVISION, "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True},
+            "showdown_sources": [
+                {"regulations": ["m-a"], "revision": HISTORICAL_REVISION,
+                 "commit_date": HISTORICAL_COMMIT_DATE, "clean_tree": True},
+                {"regulations": ["m-b", "m-c"], "revision": EXPECTED_REVISION,
+                 "commit_date": EXPECTED_COMMIT_DATE, "clean_tree": True},
+            ],
             "pokeapi_sprites": {"revision": EXPECTED_SPRITES_REVISION, "clean_tree": True},
             "pokeapi_mapping": {"revision": EXPECTED_POKEAPI_REVISION, "clean_tree": True},
             "formats": records["regulations.json"], "mechanics_profile_id": MECHANICS_PROFILE["id"],

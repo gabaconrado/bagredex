@@ -19,15 +19,7 @@ import type { Bootstrap, BulkDetails, PokedexIndex } from "./contracts";
 const bootstrap: Bootstrap = {
   schema_version: "pokedex-bootstrap-v2",
   active_version: "v1",
-  regulation: { id: "m-c", name: "regulation-m-c", label: "Regulation M-C" },
-  regulations: [
-    {
-      id: "m-c",
-      name: "regulation-m-c",
-      label: "Regulation M-C",
-      url: "/?regulation=m-c",
-    },
-  ],
+  regulation: { id: "m-c", name: "regulation-m-c" },
   index_url: "/index",
   details_url: "/details",
   sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",

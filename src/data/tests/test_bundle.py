@@ -6,14 +6,17 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.data.importer.bundle import (
     BundleError,
     EXPECTED_REVISION,
     _apply_overlays,
     _canonical_bytes,
+    _combine_extractions,
     _extract,
     _load_sprite_mapping,
+    _materialize_historical_tree,
     _parse_png,
     _parse_webp,
     _sprite_records,
@@ -21,6 +24,82 @@ from src.data.importer.bundle import (
     compare_bundles,
     validate_bundle,
 )
+
+
+class MultiRevisionSourceTests(unittest.TestCase):
+    def test_historical_tree_is_materialized_without_mutating_checkout(self) -> None:
+        repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
+        if not (repository / ".git").exists():
+            self.skipTest("local Pokémon Showdown checkout is unavailable")
+        before = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=repository, check=True,
+            capture_output=True, text=True,
+        ).stdout
+        with tempfile.TemporaryDirectory() as name:
+            tree = Path(name) / "tree"
+            _materialize_historical_tree(repository, tree)
+            extracted = _extract(tree, "m-a")
+            self.assertEqual([value["id"] for value in extracted["formats"]], ["m-a"])
+            self.assertEqual(
+                extracted["formats"][0]["name"],
+                "[Gen 9 Champions] VGC 2026 Reg M-A",
+            )
+        after = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=repository, check=True,
+            capture_output=True, text=True,
+        ).stdout
+        self.assertEqual(after, before)
+
+    def test_missing_historical_object_fails_closed(self) -> None:
+        repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
+        with tempfile.TemporaryDirectory() as name, mock.patch(
+            "src.data.importer.bundle._run", return_value="0" * 40
+        ):
+            with self.assertRaisesRegex(BundleError, "historical Showdown object resolved"):
+                _materialize_historical_tree(repository, Path(name) / "tree")
+
+    def test_wrong_historical_commit_date_fails_closed(self) -> None:
+        repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
+        with tempfile.TemporaryDirectory() as name, mock.patch(
+            "src.data.importer.bundle._run",
+            side_effect=[
+                "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+                "2026-04-11",
+            ],
+        ):
+            with self.assertRaisesRegex(BundleError, "commit date changed"):
+                _materialize_historical_tree(repository, Path(name) / "tree")
+
+    def test_invalid_historical_archive_fails_closed(self) -> None:
+        repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
+        completed = subprocess.CompletedProcess([], 0, stdout=b"not a tar", stderr=b"")
+        with tempfile.TemporaryDirectory() as name, mock.patch(
+            "src.data.importer.bundle._run",
+            side_effect=[
+                "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+                "2026-04-10",
+            ],
+        ), mock.patch("src.data.importer.bundle.subprocess.run", return_value=completed):
+            with self.assertRaisesRegex(BundleError, "archive is invalid"):
+                _materialize_historical_tree(repository, Path(name) / "tree")
+
+    def test_cross_revision_identity_conflict_fails_closed(self) -> None:
+        form = {
+            "id": "pikachu", "name": "Pikachu", "national_dex_number": 25,
+            "base_form_id": "pikachu", "form_label": "", "is_mega": False,
+            "sprite_id": "pikachu",
+        }
+        historical = {
+            "formats": [{"id": "m-a"}], "forms": [form], "mega_relations": [],
+            "regulations": {"m-a": {}}, "source_counts": {},
+        }
+        current = {
+            "formats": [{"id": "m-b"}, {"id": "m-c"}],
+            "forms": [{**form, "name": "Pikachu conflict"}], "mega_relations": [],
+            "regulations": {"m-b": {}, "m-c": {}}, "source_counts": {},
+        }
+        with self.assertRaisesRegex(BundleError, "form identity conflict"):
+            _combine_extractions(current, historical)
 
 
 class CanonicalEncodingTests(unittest.TestCase):
@@ -222,6 +301,49 @@ class SchemaArtifactTests(unittest.TestCase):
         for path in sorted(schema_root.glob("*.json")):
             with self.subTest(path=path.name):
                 self.assertIsInstance(json.loads(path.read_text(encoding="utf-8")), dict)
+
+    def test_v2_schema_pins_complete_published_manifest_and_rejects_mutations(self) -> None:
+        data_root = Path(__file__).parents[1]
+        schema = json.loads((data_root / "schema" / "bundle-v2.schema.json").read_text())
+        manifest = json.loads(
+            (
+                data_root / "releases" / "showdown-multi-s2-i3-fc85b358deaa" /
+                "manifest.json"
+            ).read_text()
+        )
+
+        def accepted(value: dict) -> bool:
+            # The v2 schema intentionally publishes one exact portable contract via JSON Schema
+            # `const`; equality is the complete Draft 2020-12 validation rule for this schema.
+            return value == schema["const"]
+
+        self.assertTrue(accepted(manifest))
+
+        mutations = []
+        value = json.loads(_canonical_bytes(manifest))
+        value["formats"][0] = {"id": "m-a"}
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["sprite_provenance"] = {}
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["counts"]["unexpected"] = 1
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["counts"]["forms"] += 1
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["files"][0]["path"] = "changed.json"
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["files"][0]["sha256"] = "0" * 64
+        mutations.append(value)
+        value = json.loads(_canonical_bytes(manifest))
+        value["files"][1] = value["files"][0]
+        mutations.append(value)
+        for value in mutations:
+            with self.subTest(mutation=value):
+                self.assertFalse(accepted(value))
 
     def test_record_schema_exposes_every_portable_file_root(self) -> None:
         schema = json.loads(
@@ -497,6 +619,66 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
 
 
 class PublishedBundleMutationTests(unittest.TestCase):
+    def test_multi_revision_release_goldens_and_semantic_diff(self) -> None:
+        releases = Path(__file__).parents[1] / "releases"
+        old = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
+        bundle = releases / "showdown-multi-s2-i3-fc85b358deaa"
+        manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            (manifest["bundle_id"], manifest["bundle_hash"]),
+            (
+                "showdown-multi-s2-i3-fc85b358deaa",
+                "fc85b358deaa105d4fcd57602dee863e29a57fa62e7bb6b1b69018ddd2dbd038",
+            ),
+        )
+        self.assertEqual(
+            [source["regulations"] for source in manifest["showdown_sources"]],
+            [["m-a"], ["m-b", "m-c"]],
+        )
+        memberships = json.loads(
+            (bundle / "regulation_memberships.json").read_text(encoding="utf-8")
+        )
+        ma = {value["form_id"] for value in memberships if value["regulation_id"] == "m-a"}
+        self.assertTrue({"pikachu", "charizard", "charizardmegax", "aegislash"} <= ma)
+        self.assertTrue({"cinderace", "magearnamega"}.isdisjoint(ma))
+        learnsets = json.loads((bundle / "learnsets.json").read_text(encoding="utf-8"))
+        self.assertTrue(any(value["regulation_id"] == "m-a" for value in learnsets))
+        self.assertEqual(
+            {value["source_mod"] for value in learnsets if value["regulation_id"] == "m-a"},
+            {"base", "champions"},
+        )
+        difference = compare_bundles(old, bundle)["files"]
+        self.assertTrue(all(value["removed"] == value["changed"] == 0 for value in difference.values()))
+        for filename in (
+            "regulation_memberships.json", "profiles.json", "ability_profiles.json",
+            "move_profiles.json", "move_flag_relations.json", "learnsets.json",
+        ):
+            self.assertTrue(all(key.startswith("m-a:") for key in difference[filename]["added_keys"]))
+        self.assertEqual(difference["moves.json"]["added_keys"], ["pound"])
+        self.assertEqual(difference["sprites.json"]["added"], 0)
+
+    def test_multi_revision_provenance_container_mutations_fail_closed(self) -> None:
+        reviewed = (
+            Path(__file__).parents[1] / "releases" /
+            "showdown-multi-s2-i3-fc85b358deaa"
+        )
+        with tempfile.TemporaryDirectory() as name:
+            bundle = Path(name) / reviewed.name
+            shutil.copytree(reviewed, bundle)
+            path = bundle / "provenance.json"
+            original = path.read_bytes()
+            valid = json.loads(original)["showdown_sources"]
+            for sources in (
+                [], [{}], [None, None], list(reversed(valid)),
+                [{**valid[0], "regulations": ["m-b"]}, valid[1]],
+            ):
+                value = json.loads(original)
+                value["showdown_sources"] = sources
+                path.write_bytes(_canonical_bytes(value))
+                with self.subTest(sources=sources), self.assertRaises(BundleError):
+                    validate_bundle(bundle, verify_manifest=False)
+            path.write_bytes(original)
+
     def test_corrected_release_has_exact_legality_and_dependency_delta(self) -> None:
         releases = Path(__file__).parents[1] / "releases"
         candidates = []

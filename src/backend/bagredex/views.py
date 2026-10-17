@@ -16,7 +16,6 @@ from .pokedex import (
     DETAIL_SCHEMA,
     DETAILS_SCHEMA,
     INDEX_SCHEMA,
-    REGULATION_IDS,
     PokedexUnavailable,
     Snapshot,
     active_version,
@@ -28,6 +27,12 @@ from .pokedex import (
     snapshot_for,
 )
 from .pokemon_data.models import DataVersion, Sprite
+from .regulations import (
+    REGULATION_IDS,
+    InvalidRegulationRequest,
+    regulation_selector_context,
+    resolve_regulation_request,
+)
 
 
 def _error(code: str, message: str, status: int, **extra: str) -> JsonResponse:
@@ -89,10 +94,11 @@ def _current_snapshot_response(
 @require_GET
 def home(request: HttpRequest) -> HttpResponse:
     """Render validated Pokédex bootstrap configuration or an unavailable state."""
-    values = request.GET.getlist("regulation")
-    if len(values) > 1 or (values and values[0] not in REGULATION_IDS):
+    try:
+        regulation_request = resolve_regulation_request(request)
+    except InvalidRegulationRequest:
         return HttpResponse("Invalid regulation.", status=400, content_type="text/plain")
-    regulation_id = values[0] if values else REGULATION_IDS[0]
+    regulation_id = regulation_request.canonical_id
     version = active_version()
     if version is None:
         return render(
@@ -112,7 +118,12 @@ def home(request: HttpRequest) -> HttpResponse:
     return render(
         request,
         "home.html",
-        {"pokedex_bootstrap": bootstrap(version, snapshot.regulation)},
+        {
+            "pokedex_bootstrap": bootstrap(version, snapshot.regulation),
+            "regulation_selector": regulation_selector_context(
+                request, version, snapshot.regulation
+            ),
+        },
     )
 
 

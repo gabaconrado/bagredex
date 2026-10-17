@@ -6,8 +6,9 @@ these files are reviewed inputs for loading immutable database versions.
 
 ## Build inputs
 
-The v1 importer accepts only three clean local repositories: Pokémon Showdown revision
-`3a766f2cfb5e51c1e428cfe87d0dba91a8f01640`, PokeAPI sprites revision
+The v2 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
+checkout must be at `3a766f2cfb5e51c1e428cfe87d0dba91a8f01640` and its local object database must contain
+historical commit `b555f4d8ce7250e72939fe0c12cc5b303741d203`. PokeAPI sprites revision
 `ba403973fdf9d0ac59175813861e6a1f8ed5020c`, and PokeAPI mapping revision
 `81d20919845b6a445969b9265aab5cec6b04cece`. It also requires installed `cwebp` 1.3.2. The build
 never contacts a remote or installs packages.
@@ -22,8 +23,11 @@ python -m src.data.importer build \
 ```
 
 The importer loads an audited allow-list of TypeScript data exports with the installed Node
-runtime. It verifies all local revisions and clean tracked trees, resolves the Champions and
-Champions Reg M-B inheritance layers, validates all references, maps forms through pinned PokeAPI
+runtime. It verifies the clean current tree and both exact commits, then materializes only the
+allow-listed files from the historical tree through read-only local Git commands. It independently
+extracts M-A from the 2026-04-10 historical tree and M-B/M-C from the 2026-10-13 current tree,
+resolves their inheritance layers, rejects cross-revision identity conflicts, validates all
+references, maps forms through pinned PokeAPI
 CSV identities, and converts only the required normal and shiny HOME PNGs to static 384 by 384
 WebPs. Missing sprites, invalid PNGs, tool drift, and unknown source flags fail the build.
 
@@ -32,21 +36,24 @@ A form is a regulation member only when its effective Showdown formats entry has
 including unknown future markers, is excluded by default. Profiles required by base-to-Mega
 relations remain separate from selectable regulation membership.
 
-Importer version 2 introduces this fail-closed legality and dependency-closure policy. Validation
-continues to accept the retained version-1 release only with its exact legacy legality semantics;
-newly generated corrected bundles use `i2` in their content-addressed identifier.
+Importer version 3 and schema 2 introduce the multi-revision source contract. Validation continues
+to accept both retained schema-1 releases only with their exact identifiers, hashes, and legality
+semantics. No source tree is checked out or mutated, and the build never fetches missing objects.
 
 Rebuilding identical inputs returns the existing bundle without rewriting it. Output files use
 canonical UTF-8 JSON with sorted keys, compact separators, stable record order, and a final newline.
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:
 
 ```text
-showdown-<revision-prefix>-s<schema>-i<importer>-<bundle-hash-prefix>
+showdown-multi-s2-i3-<bundle-hash-prefix>
 ```
 
 ## Bundle contract
 
-`manifest.json` is the authoritative interchange contract. The v1 files are:
+`manifest.json` is the authoritative interchange contract. Schema 2 keeps the same record files as
+schema 1 and replaces the single `showdown` source with ordered `showdown_sources`. Each source
+contains its exact revision, commit date, and regulation IDs; `provenance.json` additionally stores
+source counts for that tree. The portable files are:
 
 - `forms.json`: stable form identity, display name, National Dex number, base-form identity, Mega
   marker, and Showdown sprite identifier.

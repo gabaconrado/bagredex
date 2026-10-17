@@ -6,7 +6,9 @@ import {isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
 import {resolveLearnset} from './learnset-resolution.mjs';
 
 const root = path.resolve(process.argv[2] || '');
+const requested = process.argv[3] || 'current';
 if (!root) throw new Error('usage: node extract.mjs SHOWDOWN_ROOT');
+if (!['current', 'm-a'].includes(requested)) throw new Error(`unsupported extraction ${requested}`);
 
 const load = async (relative, name) => {
   const module = await import(pathToFileURL(path.join(root, relative)).href);
@@ -45,8 +47,7 @@ const exactFormat = (formats, name, mod) => {
 };
 
 const [pokedex, baseMoves, baseAbilities, baseLearnsets, movesText, abilitiesText, formats,
-  championsFormats, championsMovesDelta, championsAbilitiesDelta, championsLearnsetsDelta,
-  mbFormats, mbMovesDelta, mbLearnsetsDelta] = await Promise.all([
+  championsFormats, championsMovesDelta, championsAbilitiesDelta, championsLearnsetsDelta] = await Promise.all([
   load('data/pokedex.ts', 'Pokedex'),
   load('data/moves.ts', 'Moves'),
   load('data/abilities.ts', 'Abilities'),
@@ -58,17 +59,27 @@ const [pokedex, baseMoves, baseAbilities, baseLearnsets, movesText, abilitiesTex
   load('data/mods/champions/moves.ts', 'Moves'),
   load('data/mods/champions/abilities.ts', 'Abilities'),
   load('data/mods/champions/learnsets.ts', 'Learnsets'),
-  load('data/mods/championsregmb/formats-data.ts', 'FormatsData'),
-  load('data/mods/championsregmb/moves.ts', 'Moves'),
-  load('data/mods/championsregmb/learnsets.ts', 'Learnsets'),
 ]);
+
+const [mbFormats, mbMovesDelta, mbLearnsetsDelta] = requested === 'current'
+  ? await Promise.all([
+    load('data/mods/championsregmb/formats-data.ts', 'FormatsData'),
+    load('data/mods/championsregmb/moves.ts', 'Moves'),
+    load('data/mods/championsregmb/learnsets.ts', 'Learnsets'),
+  ]) : [{}, {}, {}];
 
 const championsMoves = mergeTable(baseMoves, championsMovesDelta);
 const championsAbilities = mergeTable(baseAbilities, championsAbilitiesDelta);
 const championsLearnsets = mergeTable(baseLearnsets, championsLearnsetsDelta);
 const mbMoves = mergeTable(championsMoves, mbMovesDelta);
 const mbLearnsets = mergeTable(championsLearnsets, mbLearnsetsDelta);
-const configurations = [
+const configurations = requested === 'm-a' ? [
+  {
+    id: 'm-a', mod: 'champions', formats: championsFormats, moves: championsMoves,
+    abilities: championsAbilities, learnsets: championsLearnsets,
+    format: exactFormat(formats, '[Gen 9 Champions] VGC 2026 Reg M-A', 'champions'),
+  },
+] : [
   {
     id: 'm-c', mod: 'champions', formats: championsFormats, moves: championsMoves,
     abilities: championsAbilities, learnsets: championsLearnsets,
@@ -89,7 +100,10 @@ const baseID = species => toID(species.baseSpecies || species.name);
 const spriteID = species => species.spriteid ||
   (toID(species.baseSpecies || species.name) + ((species.baseSpecies || species.name) !== species.name ? `-${toID(species.forme)}` : ''));
 
-const selected = new Set(selectRelatedFormIDs(configurations.flatMap(legalIDs), pokedex));
+const requestedFormIDs = (process.argv[4] || '').split(',').filter(Boolean);
+const selected = new Set(requestedFormIDs.length
+  ? requestedFormIDs
+  : selectRelatedFormIDs(configurations.flatMap(legalIDs), pokedex));
 
 const forms = [...selected].sort().map(id => {
   const species = pokedex[id];

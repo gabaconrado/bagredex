@@ -69,8 +69,7 @@ export type FormDetail = {
 export type Bootstrap = {
   schema_version: "pokedex-bootstrap-v2";
   active_version: string;
-  regulation: NamedValue & { label: string };
-  regulations: (NamedValue & { label: string; url: string })[];
+  regulation: NamedValue;
   index_url: string;
   details_url: string;
   sprite_url_template: string;
@@ -127,24 +126,11 @@ export function parseBootstrap(value: unknown): Bootstrap {
     !string(record.active_version) ||
     !localUrl(record.index_url) ||
     !localUrl(record.details_url) ||
-    !localUrl(record.sprite_url_template) ||
-    !Array.isArray(record.regulations) ||
-    record.regulations.length === 0
+    !localUrl(record.sprite_url_template)
   ) {
     throw new Error("The Pokédex page configuration is invalid.");
   }
   assertNamed(record.regulation);
-  if (!string(object(record.regulation)?.label))
-    throw new Error(
-      "The Pokédex page configuration contains an invalid regulation label.",
-    );
-  for (const value of record.regulations) {
-    assertNamed(value);
-    if (!string(object(value)?.label) || !localUrl(object(value)?.url))
-      throw new Error(
-        "The Pokédex page configuration contains an invalid regulation URL.",
-      );
-  }
   if (
     !record.sprite_url_template.includes("__FORM__") ||
     !record.sprite_url_template.includes("__VARIANT__")

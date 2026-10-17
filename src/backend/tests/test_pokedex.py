@@ -319,19 +319,69 @@ def test_home_bootstrap_and_regulation_validation(
     assert bootstrap["regulation"] == {
         "id": "m-b",
         "name": "Regulation M-B",
-        "label": "Regulation M-B",
     }
-    assert [item["label"] for item in bootstrap["regulations"]] == [
-        "Regulation M-C",
-        "Regulation M-B",
-    ]
+    assert "regulations" not in bootstrap
     assert bootstrap["index_url"].endswith(f"/pokedex/data/m-b/index/?version={VERSION_ID}")
     assert "__FORM__" in bootstrap["detail_url_template"]
     assert bootstrap["details_url"].endswith(f"/pokedex/data/m-b/details/?version={VERSION_ID}")
     assert bootstrap["sprite_url_template"].endswith(
         f"/pokedex/sprites/{VERSION_ID}/__FORM__/__VARIANT__.webp"
     )
+    default_response = authenticated_client.get("/")
+    assert default_response.status_code == 200
+    assert default_response.context["pokedex_bootstrap"]["regulation"]["id"] == "m-c"
+    assert default_response.context["regulation_selector"] == {
+        "selected_id": "m-c",
+        "choices": [
+            {"id": "m-c", "label": "Regulation M-C", "url": "/?regulation=m-c"},
+            {"id": "m-b", "label": "Regulation M-B", "url": "/?regulation=m-b"},
+        ],
+        "preserved_query": [],
+    }
+
+    preserved_response = authenticated_client.get("/?view=grid&tag=first&tag=second&regulation=m-c")
+    preserved_selector = preserved_response.context["regulation_selector"]
+    assert preserved_selector["preserved_query"] == [
+        {"name": "view", "value": "grid"},
+        {"name": "tag", "value": "first"},
+        {"name": "tag", "value": "second"},
+    ]
+    for choice in preserved_selector["choices"]:
+        choice_url = urlsplit(choice["url"])
+        assert parse_qs(choice_url.query) == {
+            "view": ["grid"],
+            "tag": ["first", "second"],
+            "regulation": [choice["id"]],
+        }
+
+    version = pokedex_data["version"]
+    mechanics = Regulation.objects.get(version=version, canonical_id="m-c").mechanics_profile
+    Regulation.objects.create(
+        version=version,
+        canonical_id="m-a",
+        name="Regulation M-A",
+        showdown_format_id="m-a",
+        mod="championsregma",
+        ruleset=[],
+        mechanics_profile=mechanics,
+    )
+    ma_response = authenticated_client.get("/?view=grid&regulation=m-a")
+    assert ma_response.status_code == 200
+    assert ma_response.context["pokedex_bootstrap"]["regulation"]["id"] == "m-a"
+    selector = ma_response.context["regulation_selector"]
+    assert selector["selected_id"] == "m-a"
+    assert selector["preserved_query"] == [{"name": "view", "value": "grid"}]
+    assert [choice["id"] for choice in selector["choices"]] == ["m-c", "m-b", "m-a"]
+    for choice in selector["choices"]:
+        choice_url = urlsplit(choice["url"])
+        assert choice_url.path == "/"
+        assert parse_qs(choice_url.query) == {
+            "view": ["grid"],
+            "regulation": [choice["id"]],
+        }
+
     assert authenticated_client.get("/?regulation=m-c&regulation=m-b").status_code == 400
+    assert authenticated_client.get("/?regulation=").status_code == 400
     assert authenticated_client.get("/?regulation=anything").status_code == 400
 
 
@@ -343,6 +393,10 @@ def test_home_and_index_report_missing_active_data(
     response = authenticated_client.get("/")
     assert response.status_code == 503
     assert response.context["pokedex_unavailable"]
+    assert response.context.get("regulation_selector") is None
+    rendered = response.content.decode()
+    assert "data-regulation-selector" not in rendered
+    assert 'name="regulation"' not in rendered
     response = authenticated_client.get("/pokedex/data/m-c/index/?version=missing")
     assert response.status_code == 503
     assert response.json()["code"] == "data-unavailable"

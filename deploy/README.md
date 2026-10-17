@@ -190,7 +190,9 @@ image.
 
 Builds require the three user-supplied local reference repositories and the exact tools documented
 in `src/data/README.md`; production does not contain those inputs. After reviewing and committing a
-new bundle, update `deploy/pokemon-data.env` in the same release.
+new bundle, update `deploy/pokemon-data.env` in the same release. The current pin is
+`showdown-multi-s2-i3-fc85b358deaa`, whose canonical bundle hash is
+`fc85b358deaa105d4fcd57602dee863e29a57fa62e7bb6b1b69018ddd2dbd038`.
 
 From a prepared source checkout, build the deterministic bundle with:
 
@@ -211,18 +213,28 @@ podman compose -p bagredex \
   exec server python manage.py load_pokemon_data /app/src/data/releases/BUNDLE_ID
 ```
 
-To explicitly activate a loaded version, use the production Compose environment shown in the
-administrator example below and run:
+To expose Regulation M-A on an existing installation, explicitly activate the loaded multi-source
+release with the production Compose environment shown in the administrator example below:
 
 ```bash
 podman compose -p bagredex \
   -f current/deploy/compose.yaml \
   -f current/deploy/compose.production.yaml \
-  exec server python manage.py activate_pokemon_data BUNDLE_ID
+  exec server python manage.py activate_pokemon_data showdown-multi-s2-i3-fc85b358deaa
 ```
 
-That command is also the rollback path: name any prior retained and validated bundle ID. It moves
-the singleton pointer atomically and retains both database versions and their activation audit.
+Rollback uses the same command with a retained, validated release. For example, return to the
+preceding M-B/M-C release with:
+
+```bash
+podman compose -p bagredex \
+  -f current/deploy/compose.yaml \
+  -f current/deploy/compose.production.yaml \
+  exec server python manage.py activate_pokemon_data showdown-3a766f2c-s1-i2-4bedbf1eb44d
+```
+
+Activation moves the singleton pointer atomically and retains both database versions and their
+activation audit.
 Deploying application code afterward does not auto-select another bundle. Never delete a retained
 bundle from source or its loaded database rows while an application rollback may still need it.
 

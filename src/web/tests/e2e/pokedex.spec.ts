@@ -196,9 +196,29 @@ test.beforeEach(async ({ page }) => {
 test("switches explicit regulations and supports keyboard selection", async ({
   page,
 }, testInfo) => {
-  await page.getByLabel("Regulation").selectOption("m-b");
+  const picker = page.getByLabel("Regulation");
+  await expect(picker).toHaveCount(1);
+  await expect(picker.locator("option")).toHaveText([
+    "Regulation M-C",
+    "Regulation M-B",
+    "Regulation M-A",
+  ]);
+  await expect(page.locator(".pokedex-title select")).toHaveCount(0);
+  await picker.focus();
+  await page.keyboard.press("ArrowDown");
   await expect(page).toHaveURL(/regulation=m-b/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-b");
+  await page.getByLabel("Regulation").selectOption("m-a");
+  await expect(page).toHaveURL(/regulation=m-a/);
+  await page.goBack();
+  await expect(page).toHaveURL(/regulation=m-b/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-b");
+  await page.goForward();
+  await expect(page).toHaveURL(/regulation=m-a/);
   await expect(page.getByText(/of \d+ Pokémon/)).toBeVisible();
+  await page.locator(".site-header__brand").click();
+  await expect(page).not.toHaveURL(/regulation=/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-c");
   await expect(page.locator(".site-header__brand small")).toHaveText(
     "development",
   );
@@ -662,6 +682,25 @@ test("switches explicit regulations and supports keyboard selection", async ({
   ).toHaveCount(0);
   await page.getByRole("button", { name: /^Show shiny / }).click();
   await expect(page.getByRole("img", { name: /^Shiny / })).toBeVisible();
+});
+
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("preserves unrelated query values in native regulation submission", async ({
+    page,
+  }) => {
+    await page.goto("/?view=grid&tag=first&tag=second&regulation=m-c");
+    const picker = page.getByLabel("Regulation");
+    await picker.selectOption("m-b");
+    await page.getByRole("button", { name: "Apply" }).click();
+
+    await expect(page).toHaveURL(/regulation=m-b/);
+    const query = new URL(page.url()).searchParams;
+    expect(query.getAll("regulation")).toEqual(["m-b"]);
+    expect(query.get("view")).toBe("grid");
+    expect(query.getAll("tag")).toEqual(["first", "second"]);
+  });
 });
 
 test("combines move, ability, and type filters and cycles sorting", async ({

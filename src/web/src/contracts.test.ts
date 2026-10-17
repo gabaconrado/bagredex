@@ -11,8 +11,7 @@ const named = { id: "x", name: "X" };
 const bootstrap = {
   schema_version: "pokedex-bootstrap-v2",
   active_version: "v1",
-  regulation: { ...named, label: "Regulation X" },
-  regulations: [{ ...named, label: "Regulation X", url: "/?regulation=x" }],
+  regulation: named,
   index_url: "/index?version=v1",
   details_url: "/details?version=v1",
   sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",
@@ -77,11 +76,6 @@ describe("transport validation", () => {
     ["schema", (x: any) => (x.schema_version = "old")],
     ["version", (x: any) => (x.active_version = "")],
     ["regulation", (x: any) => (x.regulation.name = 1)],
-    ["regulations", (x: any) => (x.regulations = null)],
-    [
-      "regulation URL",
-      (x: any) => (x.regulations[0].url = "https://example.test"),
-    ],
     ["index URL", (x: any) => (x.index_url = 4)],
     [
       "sprite URL",

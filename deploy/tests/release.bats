@@ -76,7 +76,7 @@ make_release() {
   [ "${migration_line}" -lt "${load_line}" ]
   [ "${load_line}" -lt "${activation_line}" ]
   [ "${activation_line}" -lt "${stop_line}" ]
-  grep -Fq 'activate_pokemon_data showdown-3a766f2c-s1-i2-4bedbf1eb44d --if-none' \
+  grep -Fq 'activate_pokemon_data showdown-multi-s2-i3-fc85b358deaa --if-none' \
     "${COMMAND_LOG}"
 }
 
@@ -123,8 +123,8 @@ make_release() {
   run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" CURL_STATUS=0 \
     "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh" "${REMOTE_DIR}" new-release
   [ "${status}" -eq 0 ]
-  [ "$(grep -Fc 'manage.py load_pokemon_data /app/src/data/releases/showdown-3a766f2c-s1-i2-4bedbf1eb44d' "${COMMAND_LOG}")" -eq 1 ]
-  [ "$(grep -Fc 'manage.py activate_pokemon_data showdown-3a766f2c-s1-i2-4bedbf1eb44d --if-none' "${COMMAND_LOG}")" -eq 1 ]
+  [ "$(grep -Fc 'manage.py load_pokemon_data /app/src/data/releases/showdown-multi-s2-i3-fc85b358deaa' "${COMMAND_LOG}")" -eq 1 ]
+  [ "$(grep -Fc 'manage.py activate_pokemon_data showdown-multi-s2-i3-fc85b358deaa --if-none' "${COMMAND_LOG}")" -eq 1 ]
   ! grep -E 'activate_pokemon_data .*--if-none' "${COMMAND_LOG}" | grep -Eq -- '--force|--replace'
 }
 

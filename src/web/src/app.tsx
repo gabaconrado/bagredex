@@ -1357,12 +1357,6 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
             <div>
               <h1>Pokédex</h1>
             </div>
-            <label class="regulation-picker">
-              Regulation
-              <select disabled>
-                <option>{bootstrap.regulation.label}</option>
-              </select>
-            </label>
             <div class="result-meta">
               <p
                 class="result-count result-count--placeholder"
@@ -1377,9 +1371,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           </header>
           <div class="shell-search" />
           <div class="shell-table" />
-          <span class="visually-hidden">
-            Loading {bootstrap.regulation.label}…
-          </span>
+          <span class="visually-hidden">Loading Pokémon…</span>
         </section>
         <aside class="detail-pane detail-pane--empty">
           <h2>Choose a Pokémon</h2>
@@ -1435,24 +1427,6 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           <div>
             <h1 id="pokedex-title">Pokédex</h1>
           </div>
-          <label class="regulation-picker">
-            Regulation
-            <select
-              value={bootstrap.regulation.id}
-              onChange={(event) => {
-                const target = bootstrap.regulations.find(
-                  ({ id }) => id === event.currentTarget.value,
-                );
-                if (target) location.assign(target.url);
-              }}
-            >
-              {bootstrap.regulations.map((regulation) => (
-                <option value={regulation.id} key={regulation.id}>
-                  {regulation.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <div class="result-meta">
             <p class="result-count" aria-live="polite">
               {visible.length} of {index.forms.length} Pokémon

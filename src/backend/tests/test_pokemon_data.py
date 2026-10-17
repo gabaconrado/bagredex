@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import shutil
 import struct
 import subprocess
 from base64 import b64decode
@@ -17,12 +18,17 @@ import pytest
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import DatabaseError, close_old_connections, transaction
+from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.test import Client
+from django.test.utils import CaptureQueriesContext
 
+from bagredex.accounts.models import User
 from bagredex.pokemon_data import services as pokemon_data_services
 from bagredex.pokemon_data.bundles import (
     EXPECTED_PINNED_COUNTS,
     EXPECTED_SOURCE_COUNTS,
+    MULTI_GROUP_COUNTS,
+    MULTI_PINNED_COUNTS,
     BundleReadError,
     canonical_bytes,
     read_bundle,
@@ -480,6 +486,40 @@ def _rewrite_bundle(
     return destination
 
 
+def _rewrite_multi_release(source: Path, tmp_path: Path, filename: str, mutate: Any) -> Path:
+    """Copy and consistently re-identify the committed schema-2 release after mutation."""
+    directory = tmp_path / source.name
+    shutil.copytree(source, directory)
+    path = directory / filename
+    value = json.loads(path.read_text(encoding="utf-8"))
+    mutate(value)
+    _write_json(path, value)
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files = [
+        {
+            "path": asset.relative_to(directory).as_posix(),
+            "bytes": asset.stat().st_size,
+            "sha256": _hash(asset),
+        }
+        for asset in sorted(
+            asset
+            for asset in directory.rglob("*")
+            if asset.is_file() and asset.name != "manifest.json"
+        )
+    ]
+    bundle_hash = hashlib.sha256(canonical_bytes(files)).hexdigest()
+    identifier = f"showdown-multi-s2-i3-{bundle_hash[:12]}"
+    manifest["files"] = files
+    manifest["bundle_hash"] = bundle_hash
+    manifest["bundle_id"] = identifier
+    manifest["validation_sha256"] = _hash(directory / "validation.json")
+    destination = directory.with_name(identifier)
+    directory.rename(destination)
+    _write_json(destination / "manifest.json", manifest)
+    return destination
+
+
 @pytest.fixture
 def synthetic_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -660,13 +700,100 @@ def test_committed_release_has_pinned_real_counts() -> None:
 
 def test_current_and_preceding_committed_releases_remain_readable_for_rollback() -> None:
     releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
+    multi = releases / "showdown-multi-s2-i3-fc85b358deaa"
     current = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
     preceding = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
-    if not current.is_dir() or not preceding.is_dir():
-        pytest.skip("the current and preceding reviewed releases are both required")
+    if not multi.is_dir() or not current.is_dir() or not preceding.is_dir():
+        pytest.skip("all three reviewed releases are required")
 
+    multi_bundle = read_bundle(multi)
+    assert multi_bundle.identifier == multi.name
+    for name, expected in MULTI_PINNED_COUNTS.items():
+        assert multi_bundle.manifest["counts"][name] == expected
+    for name, grouped_expected in MULTI_GROUP_COUNTS.items():
+        assert multi_bundle.manifest["counts"][name] == grouped_expected
+    assert [item["id"] for item in multi_bundle.records["regulations.json"]] == [
+        "m-a",
+        "m-b",
+        "m-c",
+    ]
+    assert multi_bundle.manifest["showdown_sources"] == [
+        {
+            "clean_tree": True,
+            "commit_date": "2026-04-10",
+            "regulations": ["m-a"],
+            "revision": "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+        },
+        {
+            "clean_tree": True,
+            "commit_date": "2026-10-13",
+            "regulations": ["m-b", "m-c"],
+            "revision": "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640",
+        },
+    ]
+    assert {
+        entry["source_mod"]
+        for entry in multi_bundle.records["learnsets.json"]
+        if entry["regulation_id"] == "m-a"
+    } <= {"base", "champions"}
     assert read_bundle(current).identifier == current.name
     assert read_bundle(preceding).identifier == preceding.name
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("importer_version", "2", "unsupported importer version"),
+        ("source_shape_version", "showdown-champions-1", "unsupported source shape version"),
+    ],
+)
+def test_multi_release_rejects_mismatched_contract_versions(
+    settings: Any,
+    tmp_path: Path,
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    source = settings.REPOSITORY_ROOT / "src/data/releases/showdown-multi-s2-i3-fc85b358deaa"
+    directory = _rewrite_multi_release(
+        source, tmp_path, "manifest.json", lambda manifest: manifest.__setitem__(field, value)
+    )
+
+    with pytest.raises(BundleReadError, match=message):
+        read_bundle(directory, require_pinned=False)
+
+
+def test_multi_release_rejects_reordered_showdown_sources(settings: Any, tmp_path: Path) -> None:
+    source = settings.REPOSITORY_ROOT / "src/data/releases/showdown-multi-s2-i3-fc85b358deaa"
+    directory = _rewrite_multi_release(
+        source,
+        tmp_path,
+        "manifest.json",
+        lambda manifest: manifest["showdown_sources"].reverse(),
+    )
+
+    with pytest.raises(BundleReadError, match="unexpected Showdown sources"):
+        read_bundle(directory, require_pinned=False)
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_multi_release_rejects_tampered_or_malformed_source_provenance(
+    settings: Any, tmp_path: Path, malformed: bool
+) -> None:
+    source = settings.REPOSITORY_ROOT / "src/data/releases/showdown-multi-s2-i3-fc85b358deaa"
+
+    def mutate(provenance: dict[str, Any]) -> None:
+        historical = provenance["showdown_sources"][0]
+        if malformed:
+            historical.pop("revision")
+        else:
+            historical["regulations"] = ["m-b"]
+
+    directory = _rewrite_multi_release(source, tmp_path, "provenance.json", mutate)
+
+    message = r"showdown_sources\[0\]" if malformed else "unexpected Showdown source"
+    with pytest.raises(BundleReadError, match=message):
+        read_bundle(directory, require_pinned=False)
 
 
 def test_arbitrary_valid_i1_bundle_is_not_an_allowlisted_runtime_bundle(tmp_path: Path) -> None:
@@ -682,26 +809,98 @@ def test_committed_releases_load_and_support_audited_rollback_and_reactivation(
     settings: Any,
 ) -> None:
     releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
+    multi_path = releases / "showdown-multi-s2-i3-fc85b358deaa"
     current_path = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
     preceding_path = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
-    if not current_path.is_dir() or not preceding_path.is_dir():
-        pytest.skip("the current and preceding reviewed releases are both required")
+    if not multi_path.is_dir() or not current_path.is_dir() or not preceding_path.is_dir():
+        pytest.skip("all three reviewed releases are required")
     settings.POKEMON_DATA_RELEASES_ROOT = releases
 
+    multi = load_pokemon_data(multi_path).version
+    repeated_multi = load_pokemon_data(multi_path)
     current = load_pokemon_data(current_path).version
     preceding = load_pokemon_data(preceding_path).version
-    activate_pokemon_data(current.pk)
+    activate_pokemon_data(multi.pk)
+    assert Regulation.objects.filter(version=multi, canonical_id="m-a").exists()
+    ma_charizard = PokemonProfile.objects.get(
+        regulation__version=multi,
+        regulation__canonical_id="m-a",
+        form__canonical_id="charizard",
+    )
+    assert (
+        ma_charizard.hp,
+        ma_charizard.attack,
+        ma_charizard.defense,
+        ma_charizard.special_attack,
+        ma_charizard.special_defense,
+        ma_charizard.speed,
+        ma_charizard.bst,
+    ) == (78, 84, 78, 109, 85, 100, 534)
+    assert repeated_multi.created is False
+    assert repeated_multi.version.pk == multi.pk
+    user = User.objects.create_user(username="ma-reader", password="test-password")
+    client = Client()
+    client.force_login(user)
+    rollback_current = activate_pokemon_data(current.pk)
+    assert not Regulation.objects.filter(version=current, canonical_id="m-a").exists()
+    unavailable_ma = client.get("/?regulation=m-a")
+    assert unavailable_ma.status_code == 503
+    assert unavailable_ma.context.get("regulation_selector") is None
+    assert "data-regulation-selector" not in unavailable_ma.content.decode()
+    available_mb = client.get("/?regulation=m-b")
+    assert available_mb.status_code == 200
+    assert available_mb.context["pokedex_bootstrap"]["regulation"]["id"] == "m-b"
+    assert available_mb.context["regulation_selector"]["selected_id"] == "m-b"
+    assert [choice["id"] for choice in available_mb.context["regulation_selector"]["choices"]] == [
+        "m-c",
+        "m-b",
+    ]
     rollback = activate_pokemon_data(preceding.pk)
-    reactivation = activate_pokemon_data(current.pk)
+    reactivation = activate_pokemon_data(multi.pk)
 
+    assert rollback_current.previous_identifier == multi.pk
+    assert rollback_current.new_identifier == current.pk
     assert rollback.previous_identifier == current.pk
     assert rollback.new_identifier == preceding.pk
     assert reactivation.previous_identifier == preceding.pk
-    assert reactivation.new_identifier == current.pk
-    assert ActiveDataVersion.objects.get().version_id == current.pk
-    assert DataActivation.objects.count() == 3
+    assert reactivation.new_identifier == multi.pk
+    assert ActiveDataVersion.objects.get().version_id == multi.pk
+    assert DataActivation.objects.count() == 4
+    assert RegulationMembership.objects.filter(profile__version=multi).count() == 935
     assert RegulationMembership.objects.filter(profile__version=current).count() == 663
     assert RegulationMembership.objects.filter(profile__version=preceding).count() == 667
+
+    index_url = f"/pokedex/data/m-a/index/?version={multi.pk}"
+    assert Client().get(index_url).status_code == 302
+    with CaptureQueriesContext(connection) as queries:
+        index_response = client.get(index_url)
+    assert index_response.status_code == 200
+    assert len(queries) <= 8
+    assert index_response.json()["regulation"]["id"] == "m-a"
+    assert (
+        client.get(index_url, HTTP_IF_NONE_MATCH=index_response.headers["ETag"]).status_code == 304
+    )
+
+    details_url = f"/pokedex/data/m-a/details/?version={multi.pk}"
+    details_response = client.get(details_url)
+    assert details_response.status_code == 200
+    assert details_response.json()["regulation_id"] == "m-a"
+
+    form_url = f"/pokedex/data/m-a/pokemon/charizard/details/?version={multi.pk}"
+    form_response = client.get(form_url)
+    assert form_response.status_code == 200
+    assert form_response.json()["form"]["id"] == "charizard"
+
+    sprite_url = f"/pokedex/sprites/{multi.pk}/charizard/normal.webp"
+    sprite_response = client.get(sprite_url)
+    assert sprite_response.status_code == 200
+    assert sprite_response.headers["Content-Type"] == "image/webp"
+    sprite_response.close()
+
+    stale = client.get(f"/pokedex/data/m-a/index/?version={current.pk}")
+    assert stale.status_code == 409
+    assert stale.json()["active_version"] == multi.pk
+    assert client.post(index_url).status_code == 405
 
 
 def test_build_command_preserves_paths_and_delegates_to_data_importer(

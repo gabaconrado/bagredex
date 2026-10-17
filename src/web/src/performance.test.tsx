@@ -59,10 +59,7 @@ const index: PokedexIndex = {
 const bootstrap: Bootstrap = {
   schema_version: "pokedex-bootstrap-v2",
   active_version: "v1",
-  regulation: { ...index.regulation, label: "Regulation M-C" },
-  regulations: [
-    { ...index.regulation, label: "Regulation M-C", url: "/?regulation=m-c" },
-  ],
+  regulation: index.regulation,
   index_url: "/index",
   details_url: "/details",
   sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",

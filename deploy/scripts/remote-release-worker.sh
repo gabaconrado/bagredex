@@ -152,7 +152,7 @@ set +a
 [[ "${BAGREDEX_IMAGE_VERSION:-}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
   printf 'Release %s has an invalid image version.\n' "${release_id}" >&2; exit 2;
 }
-[[ "${BAGREDEX_POKEMON_DATA_VERSION:-}" =~ ^showdown-[a-f0-9]{8}-s[0-9]+-i[0-9]+-[a-f0-9]{12}$ ]] || {
+[[ "${BAGREDEX_POKEMON_DATA_VERSION:-}" =~ ^showdown-([a-f0-9]{8}|multi)-s[0-9]+-i[0-9]+-[a-f0-9]{12}$ ]] || {
   printf 'Release %s has an invalid Pokemon data version.\n' "${release_id}" >&2; exit 2;
 }
 pokemon_data_bundle="/app/src/data/releases/${BAGREDEX_POKEMON_DATA_VERSION}"

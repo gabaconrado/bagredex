@@ -26,8 +26,8 @@ from .pokemon_data.models import (
     Sprite,
 )
 from .pokemon_data.stats import level_50_stat
+from .regulations import REGULATION_IDS
 
-REGULATION_IDS = ("m-c", "m-b")
 CANONICAL_ID = re.compile(r"^[a-z0-9]+$")
 INDEX_SCHEMA = "pokedex-index-v1"
 DETAIL_SCHEMA = "pokedex-form-detail-v1"
@@ -84,23 +84,7 @@ def _validate_mechanics(snapshot: Snapshot) -> None:
 
 
 def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
-    """Build JSON-safe page configuration from regulations in one version."""
-    available = {
-        regulation.canonical_id: regulation
-        for regulation in Regulation.objects.filter(
-            version=version, canonical_id__in=REGULATION_IDS
-        )
-    }
-    regulations = [
-        {
-            "id": canonical_id,
-            "name": available[canonical_id].name,
-            "label": f"Regulation {canonical_id.upper()}",
-            "url": f"{reverse('home')}?regulation={canonical_id}",
-        }
-        for canonical_id in REGULATION_IDS
-        if canonical_id in available
-    ]
+    """Build JSON-safe page configuration for one selected regulation."""
     version_id = version.pk
     return {
         "schema_version": BOOTSTRAP_SCHEMA,
@@ -108,9 +92,7 @@ def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
         "regulation": {
             "id": selected.canonical_id,
             "name": selected.name,
-            "label": f"Regulation {selected.canonical_id.upper()}",
         },
-        "regulations": regulations,
         "index_url": (
             f"{reverse('pokedex-index', kwargs={'regulation': selected.canonical_id})}"
             f"?version={version_id}"

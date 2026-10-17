@@ -13,7 +13,20 @@
     {% if request.user.is_authenticated %}
       <header class="site-header">
         <a class="site-header__brand" href="{% url 'home' %}"><span class="site-header__brand-name">Bagredex</span><small class="site-header__version">{{ bagredex_version_label }}</small></a>
-        {% block header_controls %}{% endblock %}
+        {% if regulation_selector %}
+          <form class="site-header__regulation" method="get" data-regulation-selector>
+            <label class="visually-hidden" for="site-regulation">Regulation</label>
+            {% for parameter in regulation_selector.preserved_query %}
+              <input type="hidden" name="{{ parameter.name }}" value="{{ parameter.value }}">
+            {% endfor %}
+            <select id="site-regulation" name="regulation">
+              {% for choice in regulation_selector.choices %}
+                <option value="{{ choice.id }}" data-url="{{ choice.url }}"{% if choice.id == regulation_selector.selected_id %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </select>
+            <button class="button button--secondary" type="submit" data-regulation-submit>Apply</button>
+          </form>
+        {% endif %}
         <div class="site-header__account">
           <span class="site-header__identity">{% firstof request.user.get_short_name request.user.get_username %}</span>
           <form method="post" action="{% url 'logout' %}">
@@ -24,6 +37,7 @@
       </header>
     {% endif %}
     <main class="site-main">{% block content %}{% endblock %}</main>
+    {% if regulation_selector %}<script src="{% static 'web/js/regulation-selector.js' %}" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

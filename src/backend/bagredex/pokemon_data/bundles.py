@@ -15,12 +15,18 @@ SUPPORTED_SCHEMA_VERSION = "1"
 SUPPORTED_IMPORTER_VERSION = "2"
 SUPPORTED_IMPORTER_VERSIONS = frozenset({"1", SUPPORTED_IMPORTER_VERSION})
 SUPPORTED_SOURCE_SHAPE_VERSION = "showdown-champions-1"
+MULTI_SCHEMA_VERSION = "2"
+MULTI_IMPORTER_VERSION = "3"
+MULTI_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-2"
+SUPPORTED_SCHEMA_VERSIONS = frozenset({SUPPORTED_SCHEMA_VERSION, MULTI_SCHEMA_VERSION})
 EXPECTED_SHOWDOWN_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_SPRITES_REVISION = "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
 EXPECTED_POKEAPI_REVISION = "81d20919845b6a445969b9265aab5cec6b04cece"
 EXPECTED_SPRITE_MAPPING_SHA256 = "2fd464a37c34f7c543ebd153f39ca6c47f3d6788617b932db6f75f640a537602"
 LEGACY_SPRITE_MAPPING_SHA256 = "4d77de037da77591d41b778850b4ec2ec2d9940dacc7fdbea5a8c4b03b7e15d4"
 EXPECTED_COMMIT_DATE = "2026-10-13"
+EXPECTED_MA_SHOWDOWN_REVISION = "b555f4d8ce7250e72939fe0c12cc5b303741d203"
+EXPECTED_MA_COMMIT_DATE = "2026-04-10"
 EXPECTED_CWEBP_VERSION = "1.3.2"
 SHOWDOWN_NOTICE_PATH = "POKEMON-SHOWDOWN-LICENSE.txt"
 SHOWDOWN_NOTICE_SHA256 = "b2002a9fd52ba8db3783a05fbdebfb09c34fd09513b90f6b390a2c0dfbc93ed0"
@@ -116,18 +122,79 @@ LEGACY_GROUP_COUNTS = {
         "override": 51,
     },
 }
+MULTI_PINNED_COUNTS = {
+    "forms": 350,
+    "types": 18,
+    "memberships": 935,
+    "profiles": 1050,
+    "abilities": 216,
+    "ability_profiles": 645,
+    "moves": 511,
+    "move_profiles": 1513,
+    "move_flags": 37,
+    "move_flag_relations": 5833,
+    "learnsets": 64935,
+    "mega_relations": 82,
+    "sprites": 700,
+    "sprite_mappings": 350,
+}
+MULTI_GROUP_COUNTS = {
+    "legal_forms_by_regulation": {"m-a": 272, "m-b": 314, "m-c": 349},
+    "learnsets_by_regulation": {"m-a": 21506, "m-b": 21715, "m-c": 21714},
+    "learnsets_by_form_resolution": {
+        "base-to-mega": 16459,
+        "changed-form": 1331,
+        "direct": 47145,
+    },
+    "learnsets_by_source_mod": {
+        "base": 4578,
+        "champions": 60306,
+        "championsregmb": 51,
+    },
+    "learnsets_by_source_kind": {
+        "direct": 38749,
+        "inherited": 26135,
+        "override": 51,
+    },
+}
 PINNED_RELEASE_CONTRACTS = {
     "showdown-3a766f2c-s1-i2-4bedbf1eb44d": (
         "4bedbf1eb44d797b319aa5f750698463fb5cca6a63de6ff725d5c0bb0bc115a9",
         EXPECTED_PINNED_COUNTS,
         PINNED_GROUP_COUNTS,
         EXPECTED_SPRITE_MAPPING_SHA256,
+        None,
     ),
     "showdown-3a766f2c-s1-i1-923ba416555c": (
         "923ba416555ca33c4b5d17f84d246661d6ef61a6170959aac807454a1978ead2",
         LEGACY_PINNED_COUNTS,
         LEGACY_GROUP_COUNTS,
         LEGACY_SPRITE_MAPPING_SHA256,
+        None,
+    ),
+    "showdown-multi-s2-i3-fc85b358deaa": (
+        "fc85b358deaa105d4fcd57602dee863e29a57fa62e7bb6b1b69018ddd2dbd038",
+        MULTI_PINNED_COUNTS,
+        MULTI_GROUP_COUNTS,
+        EXPECTED_SPRITE_MAPPING_SHA256,
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
     ),
 }
 EXPECTED_SOURCE_COUNTS = {
@@ -632,7 +699,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]]) -> None:
                 raise BundleReadError(f"{label}: {field} must be {expected!r}")
 
 
-def _validate_relations(records: dict[str, list[JsonObject]]) -> None:
+def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version: str) -> None:
     form_ids = {_string(item, "id", "forms.json") for item in records["forms.json"]}
     regulation_ids = {
         _string(item, "id", "regulations.json") for item in records["regulations.json"]
@@ -649,8 +716,12 @@ def _validate_relations(records: dict[str, list[JsonObject]]) -> None:
         _string(item, "id", "mechanics_profiles.json")
         for item in records["mechanics_profiles.json"]
     }
-    if regulation_ids != {"m-b", "m-c"}:
-        raise BundleReadError("regulations.json: exactly m-b and m-c are required")
+    expected_regulation_ids = (
+        {"m-a", "m-b", "m-c"} if schema_version == MULTI_SCHEMA_VERSION else {"m-b", "m-c"}
+    )
+    if regulation_ids != expected_regulation_ids:
+        required = ", ".join(sorted(expected_regulation_ids))
+        raise BundleReadError(f"regulations.json: exactly {required} are required")
     if records["mechanics_profiles.json"] != [
         {
             "id": "champions-level-50-v1",
@@ -667,6 +738,11 @@ def _validate_relations(records: dict[str, list[JsonObject]]) -> None:
         _string(item, "id", "regulations.json"): item for item in records["regulations.json"]
     }
     expected_regulations = {
+        "m-a": {
+            "name": "[Gen 9 Champions] VGC 2026 Reg M-A",
+            "showdown_format_id": "gen9championsvgc2026regma",
+            "mod": "champions",
+        },
         "m-b": {
             "name": "[Gen 9 Champions] VGC 2026 Reg M-B",
             "showdown_format_id": "gen9championsvgc2026regmb",
@@ -678,7 +754,8 @@ def _validate_relations(records: dict[str, list[JsonObject]]) -> None:
             "mod": "champions",
         },
     }
-    for regulation_id, expected in expected_regulations.items():
+    for regulation_id in expected_regulation_ids:
+        expected = expected_regulations[regulation_id]
         regulation = regulations_by_id[regulation_id]
         if any(regulation[field] != value for field, value in expected.items()) or regulation[
             "ruleset"
@@ -762,7 +839,7 @@ def _validate_relations(records: dict[str, list[JsonObject]]) -> None:
     }
     if profile_ids != expected_profiles:
         raise BundleReadError(
-            "profiles.json: every included form requires both regulation profiles"
+            "profiles.json: every included form requires every regulation profile"
         )
     memberships = {
         (
@@ -1092,6 +1169,8 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if not directory.is_dir():
         raise BundleReadError(f"{directory}: bundle path is not a directory")
     manifest = _object(_json(directory / "manifest.json"), "manifest.json")
+    schema_version = _string(manifest, "bundle_schema_version", "manifest.json")
+    source_field = "showdown_sources" if schema_version == MULTI_SCHEMA_VERSION else "showdown"
     _exact_keys(
         manifest,
         {
@@ -1100,7 +1179,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
             "bundle_schema_version",
             "importer_version",
             "source_shape_version",
-            "showdown",
+            source_field,
             "pokeapi_sprites",
             "pokeapi_mapping",
             "formats",
@@ -1114,11 +1193,22 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         },
         "manifest.json",
     )
-    if manifest.get("bundle_schema_version") != SUPPORTED_SCHEMA_VERSION:
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise BundleReadError("manifest.json: unsupported bundle schema version")
-    if manifest.get("importer_version") not in SUPPORTED_IMPORTER_VERSIONS:
+    importer_version = _string(manifest, "importer_version", "manifest.json")
+    expected_importers = (
+        {MULTI_IMPORTER_VERSION}
+        if schema_version == MULTI_SCHEMA_VERSION
+        else SUPPORTED_IMPORTER_VERSIONS
+    )
+    if importer_version not in expected_importers:
         raise BundleReadError("manifest.json: unsupported importer version")
-    if manifest.get("source_shape_version") != SUPPORTED_SOURCE_SHAPE_VERSION:
+    expected_source_shape = (
+        MULTI_SOURCE_SHAPE_VERSION
+        if schema_version == MULTI_SCHEMA_VERSION
+        else SUPPORTED_SOURCE_SHAPE_VERSION
+    )
+    if manifest.get("source_shape_version") != expected_source_shape:
         raise BundleReadError("manifest.json: unsupported source shape version")
     for field in ("bundle_hash", "validation_sha256"):
         if HASH_PATTERN.fullmatch(_string(manifest, field, "manifest.json")) is None:
@@ -1174,15 +1264,41 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     bundle_hash = hashlib.sha256(canonical_bytes(file_records)).hexdigest()
     if manifest.get("bundle_hash") != bundle_hash:
         raise BundleReadError("manifest.json: canonical bundle hash mismatch")
-    showdown = _object(manifest.get("showdown"), "manifest.json:showdown")
-    _exact_keys(showdown, {"revision", "commit_date", "clean_tree"}, "manifest.json:showdown")
-    revision = _string(showdown, "revision", "manifest.json:showdown")
-    if (
-        revision != EXPECTED_SHOWDOWN_REVISION
-        or showdown.get("commit_date") != EXPECTED_COMMIT_DATE
-        or showdown.get("clean_tree") is not True
-    ):
-        raise BundleReadError("manifest.json: unexpected Showdown revision")
+    if schema_version == MULTI_SCHEMA_VERSION:
+        showdown_sources = _records(
+            manifest.get("showdown_sources"), "manifest.json:showdown_sources"
+        )
+        expected_showdown_sources = [
+            {
+                "revision": EXPECTED_MA_SHOWDOWN_REVISION,
+                "commit_date": EXPECTED_MA_COMMIT_DATE,
+                "clean_tree": True,
+                "regulations": ["m-a"],
+            },
+            {
+                "revision": EXPECTED_SHOWDOWN_REVISION,
+                "commit_date": EXPECTED_COMMIT_DATE,
+                "clean_tree": True,
+                "regulations": ["m-b", "m-c"],
+            },
+        ]
+        if showdown_sources != expected_showdown_sources:
+            raise BundleReadError("manifest.json: unexpected Showdown sources")
+        revision = "multi"
+    else:
+        showdown = _object(manifest.get("showdown"), "manifest.json:showdown")
+        _exact_keys(
+            showdown,
+            {"revision", "commit_date", "clean_tree"},
+            "manifest.json:showdown",
+        )
+        revision = _string(showdown, "revision", "manifest.json:showdown")
+        if (
+            revision != EXPECTED_SHOWDOWN_REVISION
+            or showdown.get("commit_date") != EXPECTED_COMMIT_DATE
+            or showdown.get("clean_tree") is not True
+        ):
+            raise BundleReadError("manifest.json: unexpected Showdown revision")
     for field, expected_revision in (
         ("pokeapi_sprites", EXPECTED_SPRITES_REVISION),
         ("pokeapi_mapping", EXPECTED_POKEAPI_REVISION),
@@ -1191,10 +1307,10 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         _exact_keys(source, {"revision", "clean_tree"}, f"manifest.json:{field}")
         if source.get("revision") != expected_revision or source.get("clean_tree") is not True:
             raise BundleReadError(f"manifest.json: unexpected {field} source")
-    importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_id = (
-        f"showdown-{revision[:8]}-s{SUPPORTED_SCHEMA_VERSION}"
-        f"-i{importer_version}-{bundle_hash[:12]}"
+        f"showdown-multi-s{schema_version}-i{importer_version}-{bundle_hash[:12]}"
+        if schema_version == MULTI_SCHEMA_VERSION
+        else (f"showdown-{revision[:8]}-s{schema_version}-i{importer_version}-{bundle_hash[:12]}")
     )
     if manifest.get("bundle_id") != expected_id or directory.name != expected_id:
         raise BundleReadError(
@@ -1226,58 +1342,107 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if manifest.get("validation_sha256") != _sha256(directory / "validation.json"):
         raise BundleReadError("manifest.json: validation summary hash mismatch")
     provenance = _object(_json(directory / "provenance.json"), "provenance.json")
+    provenance_source_field = (
+        "showdown_sources" if schema_version == MULTI_SCHEMA_VERSION else "showdown"
+    )
     _exact_keys(
         provenance,
-        {"showdown", "sprites", "pokeapi_mapping", "overlays"},
+        {provenance_source_field, "sprites", "pokeapi_mapping", "overlays"},
         "provenance.json",
     )
-    provenance_showdown = _object(provenance.get("showdown"), "provenance.json:showdown")
-    _exact_keys(
-        provenance_showdown,
-        {
-            "revision",
-            "commit_date",
-            "clean_tree",
-            "source_counts",
-            "notice_path",
-            "notice_sha256",
-        },
-        "provenance.json:showdown",
-    )
-    if (
-        provenance_showdown.get("revision") != EXPECTED_SHOWDOWN_REVISION
-        or provenance_showdown.get("commit_date") != EXPECTED_COMMIT_DATE
-        or provenance_showdown.get("clean_tree") is not True
-        or provenance_showdown.get("notice_path") != SHOWDOWN_NOTICE_PATH
-        or provenance_showdown.get("notice_sha256") != SHOWDOWN_NOTICE_SHA256
-    ):
-        raise BundleReadError("provenance.json: unexpected Showdown source")
+    source_count_keys = {
+        "pokedex",
+        "base_moves",
+        "base_abilities",
+        "base_learnsets",
+        "champions_format_entries",
+        "championsregmb_format_entries",
+    }
+    if schema_version == MULTI_SCHEMA_VERSION:
+        provenance_sources = _records(
+            provenance.get("showdown_sources"), "provenance.json:showdown_sources"
+        )
+        manifest_sources = cast(list[JsonObject], manifest["showdown_sources"])
+        if len(provenance_sources) != len(manifest_sources):
+            raise BundleReadError("provenance.json: unexpected Showdown sources")
+        source_counts: JsonObject = {}
+        for index, (source, manifest_source) in enumerate(
+            zip(provenance_sources, manifest_sources, strict=True)
+        ):
+            label = f"provenance.json:showdown_sources[{index}]"
+            _exact_keys(
+                source,
+                {
+                    "revision",
+                    "commit_date",
+                    "clean_tree",
+                    "regulations",
+                    "source_counts",
+                    "notice_path",
+                    "notice_sha256",
+                },
+                label,
+            )
+            if (
+                any(source.get(field) != manifest_source.get(field) for field in manifest_source)
+                or source.get("notice_path") != SHOWDOWN_NOTICE_PATH
+                or source.get("notice_sha256") != SHOWDOWN_NOTICE_SHA256
+            ):
+                raise BundleReadError("provenance.json: unexpected Showdown source")
+            counts = _object(source.get("source_counts"), f"{label}:source_counts")
+            _exact_keys(counts, source_count_keys, f"{label}:source_counts")
+            for field in counts:
+                _integer_range(
+                    counts,
+                    field,
+                    f"{label}:source_counts",
+                    minimum=0,
+                    maximum=2**31 - 1,
+                )
+            regulations = _string_list(source.get("regulations"), f"{label}:regulations", minimum=1)
+            source_counts[",".join(regulations)] = counts
+    else:
+        provenance_showdown = _object(provenance.get("showdown"), "provenance.json:showdown")
+        _exact_keys(
+            provenance_showdown,
+            {
+                "revision",
+                "commit_date",
+                "clean_tree",
+                "source_counts",
+                "notice_path",
+                "notice_sha256",
+            },
+            "provenance.json:showdown",
+        )
+        if (
+            provenance_showdown.get("revision") != EXPECTED_SHOWDOWN_REVISION
+            or provenance_showdown.get("commit_date") != EXPECTED_COMMIT_DATE
+            or provenance_showdown.get("clean_tree") is not True
+            or provenance_showdown.get("notice_path") != SHOWDOWN_NOTICE_PATH
+            or provenance_showdown.get("notice_sha256") != SHOWDOWN_NOTICE_SHA256
+        ):
+            raise BundleReadError("provenance.json: unexpected Showdown source")
+        source_counts = _object(
+            provenance_showdown.get("source_counts"),
+            "provenance.json:showdown:source_counts",
+        )
+        _exact_keys(
+            source_counts,
+            source_count_keys,
+            "provenance.json:showdown:source_counts",
+        )
+        for field in source_counts:
+            _integer_range(
+                source_counts,
+                field,
+                "provenance.json:showdown:source_counts",
+                minimum=1,
+                maximum=2**31 - 1,
+            )
     notice = directory / SHOWDOWN_NOTICE_PATH
     if not notice.is_file() or _sha256(notice) != SHOWDOWN_NOTICE_SHA256:
         raise BundleReadError(f"{notice}: pinned Showdown notice is missing or altered")
-    source_counts = _object(
-        provenance_showdown.get("source_counts"), "provenance.json:showdown:source_counts"
-    )
-    _exact_keys(
-        source_counts,
-        {
-            "pokedex",
-            "base_moves",
-            "base_abilities",
-            "base_learnsets",
-            "champions_format_entries",
-            "championsregmb_format_entries",
-        },
-        "provenance.json:showdown:source_counts",
-    )
-    for field in source_counts:
-        _integer_range(
-            source_counts,
-            field,
-            "provenance.json:showdown:source_counts",
-            minimum=1,
-            maximum=2**31 - 1,
-        )
     sprite_provenance = _object(provenance.get("sprites"), "provenance.json:sprites")
     _exact_keys(
         sprite_provenance,
@@ -1355,7 +1520,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     _validate_record_shapes(records)
     for name, values in records.items():
         _validate_unique(values, FILE_KEYS[name], name)
-    _validate_relations(records)
+    _validate_relations(records, schema_version=schema_version)
     mappings = {
         _string(item, "form_id", "sprite_mappings.json"): item
         for item in records["sprite_mappings.json"]
@@ -1390,7 +1555,13 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         contract = PINNED_RELEASE_CONTRACTS.get(cast(str, manifest.get("bundle_id")))
         if contract is None or contract[0] != bundle_hash:
             raise BundleReadError("bundle is not an allowlisted pinned release")
-        _, pinned_counts, pinned_group_counts, pinned_mapping_sha256 = contract
+        (
+            _,
+            pinned_counts,
+            pinned_group_counts,
+            pinned_mapping_sha256,
+            pinned_source_counts,
+        ) = contract
         for name, expected in pinned_counts.items():
             if expected_counts.get(name) != expected:
                 raise BundleReadError(
@@ -1402,7 +1573,8 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         for name, group_expected in pinned_group_counts.items():
             if expected_counts.get(name) != group_expected:
                 raise BundleReadError(f"pinned bundle count {name} changed")
-        if source_counts != EXPECTED_SOURCE_COUNTS:
+        expected_source_counts = pinned_source_counts or EXPECTED_SOURCE_COUNTS
+        if source_counts != expected_source_counts:
             raise BundleReadError("pinned Showdown source counts changed")
     if manifest.get("formats") != records["regulations.json"]:
         raise BundleReadError("manifest.json: formats do not match regulations.json")
