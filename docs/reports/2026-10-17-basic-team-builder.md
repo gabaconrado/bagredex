@@ -85,4 +85,5 @@ work or a known implementation defect.
 
 ## Commits
 
-This report is included in the pending cycle commit.
+The feature, validation corrections, and this report were committed as
+`6c572bcadbb78c920fea404353b1a1f5fbfc91ef` (`feat(teams): add regulation-pinned team builder`).
