@@ -89,6 +89,34 @@ incus config device remove bagredex-dev bagredex-review
 
 The review command does not invoke Incus, change firewall rules, or bind Bagredex beyond loopback.
 
+### Isolated human-review sessions
+
+The explicit `$human-review` agent workflow uses a separate, resumable environment after a feature
+is complete and committed. Its deterministic lifecycle commands are:
+
+```bash
+./bagredex.sh human-review start FEATURE-SLUG
+./bagredex.sh human-review status
+./bagredex.sh human-review reload
+./bagredex.sh human-review finish
+```
+
+`start` defaults to `http://127.0.0.1:8001/`, creates the fixed
+`bagredex-human-review` project and fresh `bagredex-human-review-database` volume, and prints stable
+labeled connection fields only after readiness. `BAGREDEX_HUMAN_REVIEW_PORT`,
+`BAGREDEX_REVIEW_USERNAME`, and `BAGREDEX_REVIEW_PASSWORD` may override the loopback port and local
+account. The ignored marker under `.cache/human-review` stores the credentials with mode `0600`;
+do not share them or use them outside this local environment.
+
+`reload` rebuilds and reapplies idempotent setup while preserving the session volume and any review
+data. `status` is read-only. If startup or reload is interrupted, retain the marker and run
+`reload`; if teardown is interrupted, run `finish` again. Marker/resource disagreement fails closed
+instead of guessing which state may be deleted.
+
+Only explicit `finish` removes the exact human-review containers, network, and named volume. A
+later `start` therefore begins with a fresh database. These commands never target the ordinary
+`bagredex-local` review volume, and the existing `./bagredex.sh review` behavior is unchanged.
+
 ## Publish images
 
 Publishing requires a clean `main` checkout, Podman, a Docker Hub login, and a stable semantic

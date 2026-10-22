@@ -1,0 +1,36 @@
+services:
+  database:
+    environment:
+      POSTGRES_DB: bagredex
+      POSTGRES_USER: bagredex
+      POSTGRES_PASSWORD: local-development-only
+    volumes:
+      - database-data:/var/lib/postgresql/data
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Containerfile
+      target: development
+    command:
+      - sh
+      - -c
+      - python manage.py migrate --noinput && exec python manage.py runserver 0.0.0.0:8000
+    environment:
+      BAGREDEX_DOMAIN: localhost
+      BAGREDEX_DATABASE_NAME: bagredex
+      BAGREDEX_DATABASE_USER: bagredex
+      BAGREDEX_DATABASE_PASSWORD: local-development-only
+      BAGREDEX_DATABASE_HOST: database
+      BAGREDEX_DATABASE_PORT: "5432"
+      DJANGO_SETTINGS_MODULE: bagredex.settings.local
+    ports:
+      - "127.0.0.1:${BAGREDEX_HUMAN_REVIEW_PORT:?human review port required}:8000"
+    volumes:
+      - ../src/backend:/app/src/backend
+      - ../src/web:/app/src/web:ro
+
+volumes:
+  database-data:
+    name: bagredex-human-review-database
+    labels:
+      bagredex.human-review: "true"

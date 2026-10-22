@@ -64,6 +64,14 @@ Use the `feature-development` skill for every requested feature.
 7. Dispatch `architect` to write a concise cycle report under `docs/reports`.
 8. Dispatch `deployment_agent` for final checks and one or more justified local commits.
 
+After that cycle is complete and committed, the user may explicitly invoke `$human-review` for an
+optional isolated browser-feedback loop. Ordinary requests never enter it implicitly. Focused
+feedback rounds defer independent review, full validation, the supplemental report, and the
+follow-up commit until the user explicitly finishes. An unchanged finish only tears down the
+session; a changed finish restores the matching reviewers, architect review, full validation,
+supplemental report, and a separate local commit. Follow the `human-review` skill for targeting,
+routing, recovery, artifacts, and lifecycle commands.
+
 ## Data policy
 
 - Pokémon Showdown is the sole upstream Pokémon data and mechanics source until an approved plan

@@ -342,7 +342,11 @@ setup_review_mocks() {
 
 @test "normal lifecycle commands never request volume deletion" {
   run grep -R -E 'down[[:space:]]+(-v|--volumes)|volume[[:space:]]+(rm|prune)' \
-    "${REPOSITORY_ROOT}/bagredex.sh" "${REPOSITORY_ROOT}/deploy/scripts"
+    "${REPOSITORY_ROOT}/bagredex.sh" \
+    "${REPOSITORY_ROOT}/deploy/scripts/deploy.sh" \
+    "${REPOSITORY_ROOT}/deploy/scripts/preflight.sh" \
+    "${REPOSITORY_ROOT}/deploy/scripts/publish.sh" \
+    "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh"
   [ "${status}" -eq 1 ]
 }
 

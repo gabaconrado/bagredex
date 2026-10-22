@@ -89,6 +89,9 @@ Exact colors and contrast pairs will be selected and tested when the first inter
 Features begin with a one-question-at-a-time interview and an architect-authored plan. Scope owners
 implement the agreed work; independent reviewers return concrete findings until no blockers remain.
 The deployment agent runs final local checks, creates local commits, and records a concise report.
+After that cycle is complete, an explicit `$human-review` invocation can open an isolated,
+disposable browser-feedback loop. It never starts implicitly; changed sessions return through the
+normal review, validation, report, and separate-commit gates when the user explicitly finishes.
 
 Agents operate locally. They never run Git remote operations, contact deployment targets, install
 missing host tools, or bypass sandbox restrictions. The deployment agent may request narrow
@@ -106,6 +109,7 @@ remain outside agent execution.
 ./bagredex.sh check
 ./bagredex.sh run
 ./bagredex.sh migrate
+./bagredex.sh human-review start FEATURE-SLUG
 ./bagredex.sh publish VERSION
 ./bagredex.sh deploy VERSION [--dry-run]
 ```
@@ -115,7 +119,8 @@ remain outside agent execution.
 `migrate` applies local migrations without starting the web server. `publish` and `deploy` are
 human-invoked operational commands; agents do not execute their registry, SSH, certificate, or
 remote-system operations. See the [deployment guide](deploy/README.md) for database persistence,
-host preparation, configuration, account bootstrap, TLS, renewal, and rollback behavior.
+isolated human-review lifecycle, host preparation, configuration, account bootstrap, TLS, renewal,
+and rollback behavior.
 
 ## License
 

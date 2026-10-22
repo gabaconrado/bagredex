@@ -7,6 +7,7 @@ readonly compose_project="bagredex-local"
 readonly base_compose="${script_dir}/deploy/compose.yaml"
 readonly local_compose="${script_dir}/deploy/compose.local.yaml"
 readonly pokemon_data_env="${script_dir}/deploy/pokemon-data.env"
+readonly human_review_script="${script_dir}/deploy/scripts/human-review.sh"
 
 require_tools() {
   local tool
@@ -92,20 +93,25 @@ run_local() {
   cleanup 0
 }
 
-review_data_version() {
+review_data_version_from() {
+  local data_env="${1}"
   local -a versions=()
-  [[ -f "${pokemon_data_env}" ]] || {
-    printf 'Review data pin is unavailable: %s\n' "${pokemon_data_env}" >&2
+  [[ -f "${data_env}" ]] || {
+    printf 'Review data pin is unavailable: %s\n' "${data_env}" >&2
     return 2
   }
   mapfile -t versions < <(
-    sed -n 's/^BAGREDEX_POKEMON_DATA_VERSION=//p' "${pokemon_data_env}"
+    sed -n 's/^BAGREDEX_POKEMON_DATA_VERSION=//p' "${data_env}"
   )
   [[ "${#versions[@]}" -eq 1 && "${versions[0]}" =~ ^[A-Za-z0-9._-]+$ ]] || {
     printf 'Review data pin must contain one valid BAGREDEX_POKEMON_DATA_VERSION.\n' >&2
     return 2
   }
   printf '%s\n' "${versions[0]}"
+}
+
+review_data_version() {
+  review_data_version_from "${pokemon_data_env}"
 }
 
 wait_for_review_database() {
@@ -133,12 +139,35 @@ wait_for_review_server() {
   return 1
 }
 
+configure_review_account() {
+  local compose_function="${1:?compose function required}"
+  local review_username="${2:?review username required}"
+  local review_password="${3:?review password required}"
+  local account_python
+  account_python='import sys
+from django.contrib.auth import get_user_model
+from django.db import transaction
+
+username, password, terminator = sys.stdin.buffer.read().split(b"\0")
+if terminator:
+    raise ValueError("invalid review credential input")
+with transaction.atomic():
+    user, _ = get_user_model().objects.update_or_create(
+        username=username.decode(),
+        defaults={"is_active": True, "is_staff": True, "is_superuser": True},
+    )
+    user.set_password(password.decode())
+    user.save(update_fields=["password"])'
+  printf '%s\0%s\0' "${review_username}" "${review_password}" | \
+    "${compose_function}" run --rm -T server python manage.py shell -c "${account_python}"
+}
+
 review_local() {
   require_tools podman npm node sed curl
   local review_port="${BAGREDEX_PORT-8000}"
   local review_username="${BAGREDEX_REVIEW_USERNAME-admin}"
   local review_password="${BAGREDEX_REVIEW_PASSWORD-bagredex-local}"
-  local data_version account_python
+  local data_version
   [[ "${review_port}" =~ ^[0-9]+$ && "${review_port}" -ge 1 && \
     "${review_port}" -le 65535 ]] || {
     printf 'BAGREDEX_PORT must be an integer from 1 through 65535.\n' >&2
@@ -179,22 +208,7 @@ review_local() {
     "/app/src/data/releases/${data_version}"
   compose_local run --rm server python manage.py activate_pokemon_data "${data_version}"
 
-  account_python='import sys
-from django.contrib.auth import get_user_model
-from django.db import transaction
-
-username, password, terminator = sys.stdin.buffer.read().split(b"\0")
-if terminator:
-    raise ValueError("invalid review credential input")
-with transaction.atomic():
-    user, _ = get_user_model().objects.update_or_create(
-        username=username.decode(),
-        defaults={"is_active": True, "is_staff": True, "is_superuser": True},
-    )
-    user.set_password(password.decode())
-    user.save(update_fields=["password"])'
-  printf '%s\0%s\0' "${review_username}" "${review_password}" | \
-    compose_local run --rm -T server python manage.py shell -c "${account_python}"
+  configure_review_account compose_local "${review_username}" "${review_password}"
 
   compose_local up -d server
   wait_for_review_server "${review_port}"
@@ -229,6 +243,7 @@ usage() {
     '  check-deploy          Run documentation, shell, and deployment tests' \
     '  run                   Build and run the local stack in the foreground' \
     '  review                Initialize and run a complete local review stack' \
+    '  human-review ACTION   Manage an explicit isolated review session' \
     '  migrate               Apply local database migrations' \
     '  publish VERSION       Validate, build, tag, and push production images' \
     '  deploy VERSION [--dry-run]  Deploy a published release'
@@ -248,6 +263,12 @@ main() {
     check-deploy) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; check_deploy ;;
     run) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; run_local ;;
     review) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; review_local ;;
+    human-review)
+      # shellcheck source=deploy/scripts/human-review.sh
+      # shellcheck disable=SC1091
+      source "${human_review_script}"
+      human_review_main "$@"
+      ;;
     migrate) [[ "$#" -eq 0 ]] || { usage >&2; return 2; }; migrate_local ;;
     publish) exec "${script_dir}/deploy/scripts/publish.sh" "$@" ;;
     deploy) exec "${script_dir}/deploy/scripts/deploy.sh" "$@" ;;
