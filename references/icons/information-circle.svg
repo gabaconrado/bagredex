@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-label="Information">
-  <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2.5"/>
-  <circle cx="24" cy="13.5" r="3.2" fill="currentColor"/>
-  <path fill="currentColor" d="M19 20h8v14h3v3H18v-3h3V23h-2z"/>
-</svg>
