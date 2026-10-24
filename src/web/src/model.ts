@@ -29,6 +29,24 @@ export const statLabels: Record<SortKey, string> = {
   spe: "Speed",
   bst: "BST",
 };
+export const statKeys: SortKey[] = [
+  "hp",
+  "atk",
+  "def",
+  "spa",
+  "spd",
+  "spe",
+  "bst",
+];
+export const shortStatLabels: Record<SortKey, string> = {
+  hp: "HP",
+  atk: "Atk",
+  def: "Def",
+  spa: "SpA",
+  spd: "SpD",
+  spe: "Spe",
+  bst: "BST",
+};
 
 export function normalizeSearch(value: string): string {
   return value

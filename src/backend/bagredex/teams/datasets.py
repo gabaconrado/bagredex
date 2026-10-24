@@ -11,6 +11,7 @@ from bagredex.pokemon_data.models import (
     ItemProfile,
     LearnsetEntry,
     MegaItemRelation,
+    MoveFlagRelation,
     Nature,
     PokemonProfile,
     PokemonProfileAbility,
@@ -46,21 +47,71 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         types.setdefault(type_row["profile_id"], []).append(type_id)
         type_names[type_id] = type_row["type__name"]
     abilities: dict[Any, list[str]] = {}
-    ability_names: dict[str, str] = {}
+    ability_records: dict[str, dict[str, str]] = {}
     for ability_row in PokemonProfileAbility.objects.filter(profile_id__in=profile_ids).values(
-        "profile_id", "ability_profile__ability__canonical_id", "ability_profile__ability__name"
+        "profile_id",
+        "ability_profile__ability__canonical_id",
+        "ability_profile__ability__name",
+        "ability_profile__short_description",
+        "ability_profile__description",
     ):
         ability_id = ability_row["ability_profile__ability__canonical_id"]
         abilities.setdefault(ability_row["profile_id"], []).append(ability_id)
-        ability_names[ability_id] = ability_row["ability_profile__ability__name"]
+        ability_records[ability_id] = {
+            "id": ability_id,
+            "name": ability_row["ability_profile__ability__name"],
+            "short_description": ability_row["ability_profile__short_description"],
+            "description": ability_row["ability_profile__description"],
+        }
     moves: dict[Any, list[str]] = {}
-    move_names: dict[str, str] = {}
+    move_records: dict[str, dict[str, Any]] = {}
+    move_profile_ids: dict[Any, str] = {}
     for move_row in LearnsetEntry.objects.filter(profile_id__in=profile_ids).values(
-        "profile_id", "move_profile__move__canonical_id", "move_profile__move__name"
+        "profile_id",
+        "move_profile_id",
+        "move_profile__move__canonical_id",
+        "move_profile__move__name",
+        "move_profile__type__canonical_id",
+        "move_profile__type__name",
+        "move_profile__category",
+        "move_profile__base_power",
+        "move_profile__accuracy",
+        "move_profile__always_hits",
+        "move_profile__pp",
+        "move_profile__priority",
+        "move_profile__target",
+        "move_profile__short_description",
+        "move_profile__description",
     ):
         move_id = move_row["move_profile__move__canonical_id"]
         moves.setdefault(move_row["profile_id"], []).append(move_id)
-        move_names[move_id] = move_row["move_profile__move__name"]
+        move_profile_ids[move_row["move_profile_id"]] = move_id
+        move_records[move_id] = {
+            "id": move_id,
+            "name": move_row["move_profile__move__name"],
+            "type": {
+                "id": move_row["move_profile__type__canonical_id"],
+                "name": move_row["move_profile__type__name"],
+            },
+            "category": move_row["move_profile__category"],
+            "base_power": move_row["move_profile__base_power"],
+            "accuracy": move_row["move_profile__accuracy"],
+            "always_hits": move_row["move_profile__always_hits"],
+            "pp": move_row["move_profile__pp"],
+            "priority": move_row["move_profile__priority"],
+            "target": move_row["move_profile__target"],
+            "short_description": move_row["move_profile__short_description"],
+            "description": move_row["move_profile__description"],
+            "flags": [],
+        }
+    for flag_row in (
+        MoveFlagRelation.objects.filter(move_profile_id__in=move_profile_ids)
+        .values("move_profile_id", "flag__canonical_id")
+        .order_by("move_profile_id", "flag__canonical_id")
+    ):
+        move_records[move_profile_ids[flag_row["move_profile_id"]]]["flags"].append(
+            flag_row["flag__canonical_id"]
+        )
 
     mega_rows = list(
         MegaItemRelation.objects.filter(regulation=snapshot.regulation)
@@ -81,10 +132,17 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         "profile__form_id",
         "ability_profile__ability__canonical_id",
         "ability_profile__ability__name",
+        "ability_profile__short_description",
+        "ability_profile__description",
     ):
         ability_id = mega_ability_row["ability_profile__ability__canonical_id"]
         mega_abilities.setdefault(mega_ability_row["profile__form_id"], []).append(ability_id)
-        ability_names[ability_id] = mega_ability_row["ability_profile__ability__name"]
+        ability_records[ability_id] = {
+            "id": ability_id,
+            "name": mega_ability_row["ability_profile__ability__name"],
+            "short_description": mega_ability_row["ability_profile__short_description"],
+            "description": mega_ability_row["ability_profile__description"],
+        }
 
     def named(values: dict[str, str]) -> list[dict[str, str]]:
         return [
@@ -127,8 +185,12 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         "regulation": {"id": snapshot.regulation.canonical_id, "name": snapshot.regulation.name},
         "forms": forms,
         "types": named(type_names),
-        "abilities": named(ability_names),
-        "moves": named(move_names),
+        "abilities": sorted(
+            ability_records.values(), key=lambda value: (value["name"].casefold(), value["id"])
+        ),
+        "moves": sorted(
+            move_records.values(), key=lambda value: (value["name"].casefold(), value["id"])
+        ),
         "items": [
             {"id": profile.item.canonical_id, "name": profile.item.name}
             for profile in sorted(

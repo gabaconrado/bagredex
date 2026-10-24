@@ -24,6 +24,8 @@ from bagredex.pokemon_data.models import (
     MechanicsProfile,
     MegaItemRelation,
     Move,
+    MoveFlag,
+    MoveFlagRelation,
     MoveProfile,
     Nature,
     PokemonForm,
@@ -137,6 +139,16 @@ def team_data() -> dict[str, Any]:
         short_description="May paralyze.",
         description="May paralyze the target.",
     )
+    protect_flag = MoveFlag.objects.create(
+        version=version,
+        canonical_id="protect",
+    )
+    contact_flag = MoveFlag.objects.create(
+        version=version,
+        canonical_id="contact",
+    )
+    MoveFlagRelation.objects.create(move_profile=move_profile, flag=protect_flag)
+    MoveFlagRelation.objects.create(move_profile=move_profile, flag=contact_flag)
     LearnsetEntry.objects.create(
         profile=profile,
         move_profile=move_profile,
@@ -542,7 +554,7 @@ def test_nature_increasing_and_hindering_stats_truncate(team_data: dict[str, Any
         ({"item": "missing"}, "members.0.item"),
         ({"moves": ["missing", None, None, None]}, "members.0.moves.0"),
         ({"moves": ["thunderbolt", "thunderbolt", None, None]}, "members.0.moves.1"),
-        ({"nickname": "x" * 13}, "members.0.nickname"),
+        ({"nickname": "x" * 11}, "members.0.nickname"),
         ({"nature": "missing"}, "members.0.nature"),
         ({"mega_preview": True, "item": None}, "members.0.mega_preview"),
     ],
@@ -558,6 +570,66 @@ def test_member_legality_errors_have_stable_paths(
     response = client.post("/teams/", data=json.dumps(draft), content_type="application/json")
     assert response.status_code == 400
     assert path in response.json()["error"]["fields"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("nickname", ["", "x" * 10])
+def test_nickname_write_limit_accepts_up_to_ten_characters(
+    team_data: dict[str, Any], nickname: str
+) -> None:
+    owner = User.objects.create_user(username=f"nickname-valid-{len(nickname)}")
+    client = Client()
+    client.force_login(owner)
+    draft = _draft(team_data)
+    draft["members"] = [_member(nickname=nickname)]
+
+    response = client.post("/teams/", data=json.dumps(draft), content_type="application/json")
+
+    assert response.status_code == 201
+    assert response.json()["data"]["members"][0]["nickname"] == nickname
+
+
+@pytest.mark.django_db
+def test_nickname_write_limit_rejects_eleven_and_preserves_legacy_values(
+    team_data: dict[str, Any],
+) -> None:
+    owner = User.objects.create_user(username="nickname-limit")
+    client = Client()
+    client.force_login(owner)
+    draft = _draft(team_data)
+    draft["members"] = [_member(nickname="x" * 11)]
+
+    rejected_create = client.post(
+        "/teams/", data=json.dumps(draft), content_type="application/json"
+    )
+
+    assert rejected_create.status_code == 400
+    assert rejected_create.json()["error"]["fields"]["members.0.nickname"] == [
+        "Use at most 10 characters."
+    ]
+    assert not Team.objects.filter(owner=owner).exists()
+
+    draft["members"] = [_member(nickname="before")]
+    created = client.post("/teams/", data=json.dumps(draft), content_type="application/json")
+    assert created.status_code == 201
+    team_id = created.json()["data"]["id"]
+    draft["members"] = [_member(nickname="y" * 11)]
+
+    rejected_update = client.put(
+        f"/teams/{team_id}/", data=json.dumps(draft), content_type="application/json"
+    )
+
+    assert rejected_update.status_code == 400
+    assert rejected_update.json()["error"]["fields"]["members.0.nickname"] == [
+        "Use at most 10 characters."
+    ]
+    member = TeamMember.objects.get(team_id=team_id)
+    assert member.nickname == "before"
+
+    TeamMember.objects.filter(pk=member.pk).update(nickname="legacy-value")
+    legacy = client.get(f"/teams/{team_id}/")
+    assert legacy.status_code == 200
+    assert legacy.json()["data"]["members"][0]["nickname"] == "legacy-value"
 
 
 @pytest.mark.django_db
@@ -935,6 +1007,55 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
 
 
 @pytest.mark.django_db
+def test_builder_dataset_v2_has_pinned_ability_and_move_details(
+    team_data: dict[str, Any],
+) -> None:
+    owner = User.objects.create_user(username="dataset-details")
+    client = Client()
+    client.force_login(owner)
+
+    response = client.get(f"/teams/data/{team_data['version'].pk}/m-c/")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, max-age=3600"
+    payload = response.json()
+    assert payload["schema_version"] == "team-builder-data-v2"
+    assert payload["data_version"] == team_data["version"].pk
+    assert payload["regulation"]["id"] == "m-c"
+    assert payload["abilities"] == [
+        {
+            "id": "static",
+            "name": "Static",
+            "short_description": "May paralyze.",
+            "description": "May paralyze on contact.",
+        }
+    ]
+    assert payload["moves"] == [
+        {
+            "id": "thunderbolt",
+            "name": "Thunderbolt",
+            "type": {"id": "electric", "name": "Electric"},
+            "category": "Special",
+            "base_power": 90,
+            "accuracy": 100,
+            "always_hits": False,
+            "pp": 15,
+            "priority": 0,
+            "target": "normal",
+            "short_description": "May paralyze.",
+            "description": "May paralyze the target.",
+            "flags": ["contact", "protect"],
+        }
+    ]
+    assert payload["forms"][0]["ability_ids"] == ["static"]
+    assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
+    assert payload["mega_relations"][0]["target"]["ability_ids"] == ["static"]
+    assert set(payload["items"][0]) == {"id", "name"}
+    assert payload["sprite_url_template"].startswith("/")
+    assert team_data["version"].pk in payload["sprite_url_template"]
+
+
+@pytest.mark.django_db
 def test_my_teams_filters_by_owner_and_canonical_regulation_in_newest_order(
     team_data: dict[str, Any],
 ) -> None:
@@ -958,8 +1079,57 @@ def test_my_teams_filters_by_owner_and_canonical_regulation_in_newest_order(
     response = client.get("/teams/?regulation=m-c")
     assert response.status_code == 200
     summaries = response.context["team_builder_bootstrap"]["teams"]
+    bootstrap = response.context["team_builder_bootstrap"]
+    assert bootstrap["schema_version"] == "team-builder-bootstrap-v2"
+    assert bootstrap["next_team_number"] == 4
     assert [summary["name"] for summary in summaries] == ["Newest version", "Older version"]
     assert summaries[1]["pinned_version"] == retained.version_id
+
+
+@pytest.mark.django_db
+def test_team_summaries_use_ordered_pinned_form_sprite_urls(team_data: dict[str, Any]) -> None:
+    owner = User.objects.create_user(username="summary-sprites")
+    team = Team.objects.create(owner=owner, regulation=team_data["regulation"], name="Sprites")
+    TeamMember.objects.create(
+        team=team,
+        position=4,
+        profile=team_data["alternate_profile"],
+        species_form=team_data["alternate_profile"].form.base_form,
+        nature=team_data["nature"],
+        shiny=False,
+        mega_preview=True,
+    )
+    TeamMember.objects.create(
+        team=team,
+        position=1,
+        profile=team_data["extra_profiles"][0],
+        species_form=team_data["extra_profiles"][0].form,
+        nature=team_data["nature"],
+        shiny=True,
+        mega_preview=True,
+    )
+
+    client = Client()
+    client.force_login(owner)
+    response = client.get("/teams/?regulation=m-c")
+
+    assert response.status_code == 200
+    summary = response.context["team_builder_bootstrap"]["teams"][0]
+    assert "member_count" not in summary
+    assert summary["pinned_version"] == team_data["version"].pk
+    assert summary["members"] == [
+        {
+            "position": 1,
+            "sprite_url": (f"/pokedex/sprites/{team_data['version'].pk}/species1/shiny.webp"),
+        },
+        {
+            "position": 4,
+            "sprite_url": (
+                f"/pokedex/sprites/{team_data['version'].pk}/pikachurockstar/normal.webp"
+            ),
+        },
+    ]
+    assert all(member["sprite_url"].startswith("/") for member in summary["members"])
 
 
 @pytest.mark.django_db
@@ -991,6 +1161,19 @@ def test_cross_version_canonical_ids_cannot_be_forged(
 def test_team_endpoints_have_bounded_query_counts(team_data: dict[str, Any]) -> None:
     owner = User.objects.create_user(username="queries")
     team = Team.objects.create(owner=owner, regulation=team_data["regulation"], name="Queries")
+    for index in range(3):
+        listed_team = Team.objects.create(
+            owner=owner,
+            regulation=team_data["regulation"],
+            name=f"Listed {index}",
+        )
+        TeamMember.objects.create(
+            team=listed_team,
+            position=index,
+            profile=team_data["extra_profiles"][index],
+            species_form=team_data["extra_profiles"][index].form,
+            nature=team_data["nature"],
+        )
     client = Client()
     client.force_login(owner)
     with CaptureQueriesContext(connection) as page_queries:
@@ -999,7 +1182,7 @@ def test_team_endpoints_have_bounded_query_counts(team_data: dict[str, Any]) -> 
         assert client.get(f"/teams/{team.pk}/").status_code == 200
     with CaptureQueriesContext(connection) as dataset_queries:
         assert client.get(f"/teams/data/{team_data['version'].pk}/m-c/").status_code == 200
-    assert len(page_queries) <= 15
+    assert len(page_queries) <= 16
     assert len(detail_queries) <= 15
     assert len(dataset_queries) <= 20
 

@@ -7,6 +7,7 @@ const root = document.querySelector<HTMLElement>("[data-team-builder-root]");
 const script = document.getElementById("team-builder-bootstrap");
 if (root && script) {
   try {
+    root.replaceChildren();
     render(
       <TeamBuilder
         bootstrap={parseBootstrap(JSON.parse(script.textContent ?? "null"))}

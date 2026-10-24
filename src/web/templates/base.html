@@ -40,7 +40,7 @@
         </div>
       </header>
     {% endif %}
-    <main class="site-main">{% block content %}{% endblock %}</main>
+    <main class="site-main{% block main_class %}{% endblock %}">{% block content %}{% endblock %}</main>
     {% if regulation_selector %}<script src="{% static 'web/js/regulation-selector.js' %}" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>

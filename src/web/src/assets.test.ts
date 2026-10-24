@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { render } from "@testing-library/preact";
 import { describe, expect, it } from "vitest";
 
@@ -8,7 +8,8 @@ import physical from "./assets/pokedex-icons/physical-move.svg?raw";
 import shiny from "./assets/pokedex-icons/shiny.svg?raw";
 import special from "./assets/pokedex-icons/special-move.svg?raw";
 import status from "./assets/pokedex-icons/status-move.svg?raw";
-import { CategoryIcon, MegaIcon, ShinyIcon } from "./icons";
+import information from "./assets/icons/information-circle.svg?raw";
+import { CategoryIcon, InformationIcon, MegaIcon, ShinyIcon } from "./icons";
 
 const assets = {
   "mega-evolution.svg": [
@@ -55,6 +56,20 @@ describe("supplied Pokédex icons", () => {
     expect(readdirSync("src/assets/pokedex-icons").sort()).toEqual(
       Object.keys(assets).sort(),
     );
+  });
+
+  it("keeps the supplied information icon bytes and shared mask primitive", () => {
+    expect(information).toBe(
+      readFileSync("../../references/icons/information-circle.svg", "utf8"),
+    );
+    expect(createHash("sha256").update(information).digest("hex")).toBe(
+      "f88a110cdbd4e4eb5797e111a9272d74d41ec3d5dc5b9d2c0e656539ae61cadd",
+    );
+    const { container } = render(InformationIcon());
+    const icon = container.querySelector(".icon--information")!;
+    expect(icon.getAttribute("aria-hidden")).toBe("true");
+    expect(icon.getAttribute("style")).toContain("information-circle");
+    expect(container.querySelector("svg")).toBeNull();
   });
 
   it("keeps the approved Status geometry with deep blue-gray and white only", () => {

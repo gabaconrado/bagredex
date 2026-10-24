@@ -19,8 +19,9 @@ const stats = {
 describe("team builder contracts", () => {
   it("strictly parses and adapts the bootstrap", () => {
     const parsed = parseBootstrap({
-      schema_version: "team-builder-bootstrap-v1",
+      schema_version: "team-builder-bootstrap-v2",
       active_version: "version-3",
+      next_team_number: 4,
       regulation: named,
       teams: [
         {
@@ -28,7 +29,12 @@ describe("team builder contracts", () => {
           name: "Rain",
           pinned_version: "version-3",
           regulation: named,
-          member_count: 1,
+          members: [
+            {
+              position: 0,
+              sprite_url: "/pokedex/sprites/version-3/charizard/shiny.webp",
+            },
+          ],
           updated_at: "2026-10-17T00:00:00Z",
         },
       ],
@@ -38,12 +44,27 @@ describe("team builder contracts", () => {
     });
     expect(parsed.data_url).toContain("/data/");
     expect(parsed.teams[0]?.data_version).toBe("version-3");
+    expect(parsed.next_team_number).toBe(4);
     expect(() => parseBootstrap({ schema_version: "bad" })).toThrow();
+    expect(() =>
+      parseBootstrap({
+        ...parsed,
+        teams: [
+          {
+            ...parsed.teams[0],
+            members: [
+              { position: 0, sprite_url: "/normal.webp" },
+              { position: 0, sprite_url: "/shiny.webp" },
+            ],
+          },
+        ],
+      }),
+    ).toThrow("Invalid team summary member");
   });
 
   it("parses the exact dataset and builds same-origin sprites", () => {
     const parsed = parseBuilderData({
-      schema_version: "team-builder-data-v1",
+      schema_version: "team-builder-data-v2",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -61,10 +82,36 @@ describe("team builder contracts", () => {
       ],
       types: [{ id: "fire", name: "Fire" }],
       abilities: [
-        { id: "blaze", name: "Blaze" },
-        { id: "toughclaws", name: "Tough Claws" },
+        {
+          id: "blaze",
+          name: "Blaze",
+          short_description: "Boosts Fire moves.",
+          description: "Boosts Fire-type moves when HP is low.",
+        },
+        {
+          id: "toughclaws",
+          name: "Tough Claws",
+          short_description: "Boosts contact moves.",
+          description: "Boosts the power of contact moves.",
+        },
       ],
-      moves: [{ id: "protect", name: "Protect" }],
+      moves: [
+        {
+          id: "protect",
+          name: "Protect",
+          type: { id: "normal", name: "Normal" },
+          category: "Status",
+          base_power: 0,
+          accuracy: null,
+          always_hits: true,
+          pp: 10,
+          priority: 4,
+          target: "self",
+          short_description: "Protects the user.",
+          description: "Protects the user from most attacks.",
+          flags: [],
+        },
+      ],
       items: [{ id: "charizarditex", name: "Charizardite X" }],
       natures: [
         {
@@ -72,6 +119,12 @@ describe("team builder contracts", () => {
           name: "Serious",
           increased_stat: null,
           decreased_stat: null,
+        },
+        {
+          id: "jolly",
+          name: "Jolly",
+          increased_stat: "spe",
+          decreased_stat: "spa",
         },
       ],
       mechanics: {
@@ -100,8 +153,14 @@ describe("team builder contracts", () => {
         "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
     });
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
+    expect(parsed.schema_version).toBe("team-builder-data-v2");
+    expect(parsed.abilities[0]?.description).toContain("Fire-type");
+    expect(parsed.moves[0]?.always_hits).toBe(true);
     expect(parsed.mega_relations[0]?.target.ability.name).toBe("Tough Claws");
     expect(parsed.forms[0]?.sprites.shiny).toContain("/shiny.webp");
+    expect(parsed.natures.find((nature) => nature.id === "jolly")?.name).toBe(
+      "Jolly (+Spe/-SpA)",
+    );
   });
 
   it("adapts aggregates and serializes complete draft replacement", () => {

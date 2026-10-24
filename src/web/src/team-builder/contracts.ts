@@ -7,17 +7,18 @@ export type TeamSummary = {
   name: string;
   data_version: string;
   regulation: Named;
-  member_count: number;
+  members: { position: number; sprite_url: string }[];
   updated_at: string;
 };
 
 export type Bootstrap = {
-  schema_version: "team-builder-bootstrap-v1";
+  schema_version: "team-builder-bootstrap-v2";
   active_version: string;
   regulation: Named;
   data_url: string;
   create_url: string;
   team_url_template: string;
+  next_team_number: number;
   teams: TeamSummary[];
 };
 
@@ -33,19 +34,36 @@ export type Nature = Named & {
   increased_stat: StatId | null;
   decreased_stat: StatId | null;
 };
+export type AbilityDetail = Named & {
+  short_description: string;
+  description: string;
+};
+export type MoveDetail = Named & {
+  type: Named;
+  category: "Physical" | "Special" | "Status";
+  base_power: number;
+  accuracy: number | null;
+  always_hits: boolean;
+  pp: number;
+  priority: number;
+  target: string;
+  short_description: string;
+  description: string;
+  flags: string[];
+};
 export type MegaRelation = {
   form_id: string;
   item_id: string;
   target: BuilderForm & { ability: Named };
 };
 export type BuilderData = {
-  schema_version: "team-builder-data-v1";
+  schema_version: "team-builder-data-v2";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
   types: Named[];
-  abilities: Named[];
-  moves: Named[];
+  abilities: AbilityDetail[];
+  moves: MoveDetail[];
   items: Named[];
   natures: Nature[];
   mega_relations: MegaRelation[];
@@ -123,25 +141,40 @@ const assertSummary = (value: unknown) => {
     !text(item.id) ||
     !text(item.name) ||
     !text(item.data_version) ||
-    !Number.isInteger(item.member_count) ||
-    Number(item.member_count) < 0 ||
-    Number(item.member_count) > 6 ||
+    !Array.isArray(item.members) ||
+    item.members.length > 6 ||
     !text(item.updated_at)
   )
     throw new Error("Invalid team summary.");
   assertNamed(item.regulation);
+  const positions = new Set<number>();
+  item.members.forEach((value) => {
+    const member = record(value);
+    if (
+      !member ||
+      !Number.isInteger(member.position) ||
+      Number(member.position) < 0 ||
+      Number(member.position) > 5 ||
+      positions.has(Number(member.position)) ||
+      !localUrl(member.sprite_url)
+    )
+      throw new Error("Invalid team summary member.");
+    positions.add(Number(member.position));
+  });
 };
 
 export function parseBootstrap(value: unknown): Bootstrap {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-bootstrap-v1" ||
+    item.schema_version !== "team-builder-bootstrap-v2" ||
     !text(item.active_version) ||
     !localUrl(item.dataset_url) ||
     !localUrl(item.create_url) ||
     !localUrl(item.team_url_template) ||
     !String(item.team_url_template).includes("__TEAM__") ||
+    !Number.isInteger(item.next_team_number) ||
+    Number(item.next_team_number) < 1 ||
     !Array.isArray(item.teams)
   )
     throw new Error("The team builder configuration is invalid.");
@@ -180,7 +213,7 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v1" ||
+    item.schema_version !== "team-builder-data-v2" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
     !Array.isArray(item.abilities) ||
@@ -231,8 +264,36 @@ export function parseBuilderData(value: unknown): BuilderData {
     },
   }));
   forms.forEach(assertForm);
-  assertNamedArray(item.abilities);
-  assertNamedArray(item.moves);
+  item.abilities.forEach((value) => {
+    assertNamed(value);
+    const ability = record(value)!;
+    if (
+      typeof ability.short_description !== "string" ||
+      typeof ability.description !== "string"
+    )
+      throw new Error("Invalid ability details.");
+  });
+  item.moves.forEach((value) => {
+    assertNamed(value);
+    const move = record(value)!;
+    if (
+      !record(move.type) ||
+      !["Physical", "Special", "Status"].includes(String(move.category)) ||
+      !Number.isInteger(move.base_power) ||
+      (move.accuracy !== null && !Number.isInteger(move.accuracy)) ||
+      typeof move.always_hits !== "boolean" ||
+      !Number.isInteger(move.pp) ||
+      !Number.isInteger(move.priority) ||
+      !text(move.target) ||
+      typeof move.short_description !== "string" ||
+      typeof move.description !== "string" ||
+      !Array.isArray(move.flags) ||
+      move.flags.some((flag) => !text(flag)) ||
+      (move.accuracy === null) !== move.always_hits
+    )
+      throw new Error("Invalid move details.");
+    assertNamed(move.type);
+  });
   assertNamedArray(item.items);
   item.natures.forEach((value) => {
     assertNamed(value);
@@ -299,16 +360,30 @@ export function parseBuilderData(value: unknown): BuilderData {
       };
     },
   );
+  const natureLabels: Record<Exclude<StatId, "hp">, string> = {
+    atk: "Atk",
+    def: "Def",
+    spa: "SpA",
+    spd: "SpD",
+    spe: "Spe",
+  };
+  const natures = (item.natures as Nature[]).map((nature) => ({
+    ...nature,
+    name:
+      nature.increased_stat && nature.decreased_stat
+        ? `${nature.name} (+${natureLabels[nature.increased_stat as Exclude<StatId, "hp">]}/-${natureLabels[nature.decreased_stat as Exclude<StatId, "hp">]})`
+        : nature.name,
+  }));
   return {
-    schema_version: "team-builder-data-v1",
+    schema_version: "team-builder-data-v2",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
     forms,
     types,
-    abilities: item.abilities as Named[],
-    moves: item.moves as Named[],
+    abilities: item.abilities as AbilityDetail[],
+    moves: item.moves as MoveDetail[],
     items: item.items as Named[],
-    natures: item.natures as Nature[],
+    natures,
     mega_relations: mega,
     mechanics: {
       level: 50,

@@ -7,6 +7,7 @@ import type {
   StatId,
   Stats,
 } from "./contracts";
+import type { Sort } from "../model";
 
 export type PaletteFilter = Named & { kind: "type" | "ability" | "move" };
 export const statIds: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
@@ -18,6 +19,29 @@ export const statLabels: Record<StatId, string> = {
   spd: "Sp. Def",
   spe: "Speed",
 };
+export const baseStatTotal = (stats: Stats) =>
+  statIds.reduce((total, id) => total + stats[id], 0);
+export function sortPaletteForms(forms: BuilderForm[], sort: Sort) {
+  return [...forms].sort((left, right) => {
+    if (sort) {
+      const leftValue =
+        sort.key === "bst"
+          ? baseStatTotal(left.base_stats)
+          : left.base_stats[sort.key];
+      const rightValue =
+        sort.key === "bst"
+          ? baseStatTotal(right.base_stats)
+          : right.base_stats[sort.key];
+      if (leftValue !== rightValue)
+        return (
+          (leftValue - rightValue) * (sort.direction === "ascending" ? 1 : -1)
+        );
+    }
+    return (
+      left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    );
+  });
+}
 export const normalizeSearch = (value: string) =>
   value
     .normalize("NFKD")
@@ -97,11 +121,13 @@ export function validateLocal(
     !data.natures.some((nature) => nature.id === member.nature_id)
   )
     errors.nature_id = "Choose a valid nature.";
-  if (member.nickname.length > 12)
-    errors.nickname = "Use 12 characters or fewer.";
+  if (member.nickname.length > 10)
+    errors.nickname = "Use 10 characters or fewer.";
   if (member.ability_id && !form.ability_ids.includes(member.ability_id))
     errors.ability_id = "Choose an ability this Pokémon can use.";
-  if (
+  if (member.item_id && !data.items.some((item) => item.id === member.item_id))
+    errors.item_id = "Choose an available item.";
+  else if (
     member.item_id &&
     members.some(
       (item, memberIndex) =>

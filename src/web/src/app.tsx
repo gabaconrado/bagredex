@@ -18,7 +18,15 @@ import type {
   PokedexIndex,
 } from "./contracts";
 import { parseApiError, parseDetails, parseIndex } from "./contracts";
-import { CategoryIcon, MegaIcon, ShinyIcon } from "./icons";
+import { CategoryIcon, InformationIcon, MegaIcon, ShinyIcon } from "./icons";
+import {
+  AnchoredListbox,
+  SearchLiveCount,
+  SearchOptionGroup,
+  SearchOptionRow,
+  SearchTextField,
+  useActiveOptionScroll,
+} from "./search-list";
 import {
   addFilter,
   cycleMoveSort,
@@ -27,6 +35,8 @@ import {
   sortedForms,
   sortedMoves,
   statLabels,
+  statKeys,
+  shortStatLabels,
   suggestions,
   type Filter,
   type Sort,
@@ -117,12 +127,7 @@ function Search({
     }))
     .filter((group) => group.values.length);
   const groupStarts = groups.map((group) => choices.indexOf(group.values[0]!));
-  useEffect(() => {
-    if (active < 0) return;
-    document
-      .getElementById(`suggestion-${active}`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [active]);
+  useActiveOptionScroll(active >= 0 ? `suggestion-${active}` : undefined);
   useLayoutEffect(() => {
     if (!clearRevision) return;
     setOpen(false);
@@ -137,119 +142,108 @@ function Search({
   };
   return (
     <div class="search">
-      <label for="pokedex-search">
-        Search Pokémon, moves, abilities, or types
-      </label>
-      <div class="search-input-wrap">
-        <input
-          ref={inputRef}
-          id="pokedex-search"
-          type="search"
-          value={query}
-          autocomplete="off"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open && Boolean(query)}
-          aria-controls={open && query ? listId : undefined}
-          aria-activedescendant={
-            active >= 0 ? `suggestion-${active}` : undefined
-          }
-          onInput={(event) => {
-            onQuery(event.currentTarget.value);
-            setOpen(true);
+      <SearchTextField
+        inputRef={inputRef}
+        inputId="pokedex-search"
+        label="Search Pokémon, moves, abilities, or types"
+        hint={
+          <kbd class="search-shortcut-hint" aria-hidden="true">
+            /
+          </kbd>
+        }
+        type="search"
+        value={query}
+        autocomplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open && Boolean(query)}
+        aria-controls={open && query ? listId : undefined}
+        aria-activedescendant={active >= 0 ? `suggestion-${active}` : undefined}
+        onInput={(event) => {
+          onQuery(event.currentTarget.value);
+          setOpen(true);
+          setActive(-1);
+        }}
+        onFocus={() => query && setOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setOpen(false);
             setActive(-1);
-          }}
-          onFocus={() => query && setOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setOpen(false);
-              setActive(-1);
-              event.currentTarget.blur();
-              return;
-            }
-            if (!choices.length) return;
-            if (
-              event.altKey &&
-              !event.ctrlKey &&
-              !event.metaKey &&
-              (event.key === "ArrowDown" || event.key === "ArrowUp")
-            ) {
-              event.preventDefault();
-              setOpen(true);
-              const currentGroup = groupStarts.findIndex((start, index) => {
-                const next = groupStarts[index + 1] ?? choices.length;
-                return active >= start && active < next;
-              });
-              const delta = event.key === "ArrowDown" ? 1 : -1;
-              const base =
-                currentGroup < 0 ? (delta > 0 ? -1 : 0) : currentGroup;
-              const next =
-                (base + delta + groupStarts.length) % groupStarts.length;
-              setActive(groupStarts[next]!);
-              return;
-            }
-            if (event.ctrlKey || event.metaKey || event.altKey) return;
-            if (event.key === "Tab" && open) {
-              event.preventDefault();
-              setActive(
-                event.shiftKey
-                  ? active <= 0
-                    ? choices.length - 1
-                    : active - 1
-                  : (active + 1) % choices.length,
-              );
-              return;
-            }
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setOpen(true);
-              setActive((active + 1) % choices.length);
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setOpen(true);
-              setActive(active <= 0 ? choices.length - 1 : active - 1);
-            }
-            if (event.key === "Enter" && open) {
-              event.preventDefault();
-              activate(choices[active >= 0 ? active : 0]!);
-            }
-          }}
-        />
-        <kbd class="search-shortcut-hint" aria-hidden="true">
-          /
-        </kbd>
-      </div>
-      <span class="visually-hidden" role="status" aria-live="polite">
+            event.currentTarget.blur();
+            return;
+          }
+          if (!choices.length) return;
+          if (
+            event.altKey &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            (event.key === "ArrowDown" || event.key === "ArrowUp")
+          ) {
+            event.preventDefault();
+            setOpen(true);
+            const currentGroup = groupStarts.findIndex((start, index) => {
+              const next = groupStarts[index + 1] ?? choices.length;
+              return active >= start && active < next;
+            });
+            const delta = event.key === "ArrowDown" ? 1 : -1;
+            const base = currentGroup < 0 ? (delta > 0 ? -1 : 0) : currentGroup;
+            const next =
+              (base + delta + groupStarts.length) % groupStarts.length;
+            setActive(groupStarts[next]!);
+            return;
+          }
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          if (event.key === "Tab" && open) {
+            event.preventDefault();
+            setActive(
+              event.shiftKey
+                ? active <= 0
+                  ? choices.length - 1
+                  : active - 1
+                : (active + 1) % choices.length,
+            );
+            return;
+          }
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setOpen(true);
+            setActive((active + 1) % choices.length);
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+            setActive(active <= 0 ? choices.length - 1 : active - 1);
+          }
+          if (event.key === "Enter" && open) {
+            event.preventDefault();
+            activate(choices[active >= 0 ? active : 0]!);
+          }
+        }}
+      />
+      <SearchLiveCount>
         {open && query
           ? choices.length
             ? `${choices.length} suggestions available.`
             : "No suggestions available."
           : ""}
-      </span>
+      </SearchLiveCount>
       {open && query && (
-        <div class="suggestions" id={listId} role="listbox">
+        <AnchoredListbox id={listId} className="suggestions">
           {choices.length === 0 && <p class="suggestions__empty">No matches</p>}
           {groups.map((group) => (
-            <section
-              class="suggestions__group"
+            <SearchOptionGroup
               key={group.kind}
-              role="group"
-              aria-labelledby={`group-${group.kind}`}
+              id={`group-${group.kind}`}
+              label={labels[group.kind]}
             >
-              <h3 id={`group-${group.kind}`}>{labels[group.kind]}</h3>
               {group.values.map((choice) => {
                 const choiceIndex = choices.indexOf(choice);
                 return (
-                  <button
-                    type="button"
-                    role="option"
+                  <SearchOptionRow
                     id={`suggestion-${choiceIndex}`}
-                    aria-selected={active === choiceIndex}
-                    class={active === choiceIndex ? "is-active" : ""}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => activate(choice)}
+                    active={active === choiceIndex}
+                    onActivate={() => activate(choice)}
                     key={`${choice.kind}-${choice.id}`}
                   >
                     <span>{choice.name}</span>
@@ -258,12 +252,12 @@ function Search({
                         Enter
                       </kbd>
                     )}
-                  </button>
+                  </SearchOptionRow>
                 );
               })}
-            </section>
+            </SearchOptionGroup>
           ))}
-        </div>
+        </AnchoredListbox>
       )}
       {filters.length > 0 && (
         <div class="filters" aria-label="Active filters">
@@ -284,17 +278,6 @@ function Search({
     </div>
   );
 }
-
-const rowKeys: SortKey[] = ["hp", "atk", "def", "spa", "spd", "spe", "bst"];
-const shortStatLabels: Record<SortKey, string> = {
-  hp: "HP",
-  atk: "Atk",
-  def: "Def",
-  spa: "SpA",
-  spd: "SpD",
-  spe: "Spe",
-  bst: "BST",
-};
 
 export const PokemonRow = memo(function PokemonRow({
   form,
@@ -334,7 +317,7 @@ export const PokemonRow = memo(function PokemonRow({
       <td class="pokemon-table__types">
         <Types values={form.types} />
       </td>
-      {rowKeys.map((key) => (
+      {statKeys.map((key) => (
         <td data-label={statLabels[key]} key={key}>
           <span class="stat-value">
             {key === "bst" ? form.bst : form.stats[key]}
@@ -376,7 +359,7 @@ function PokemonTable({
           <col class="pokemon-col pokemon-col--sprite" />
           <col class="pokemon-col pokemon-col--name" />
           <col class="pokemon-col pokemon-col--types" />
-          {rowKeys.map((key) => (
+          {statKeys.map((key) => (
             <col class="pokemon-col pokemon-col--stat" key={key} />
           ))}
         </colgroup>
@@ -387,7 +370,7 @@ function PokemonTable({
             </th>
             <th scope="col">Pokémon</th>
             <th scope="col">Types</th>
-            {rowKeys.map((key) => (
+            {statKeys.map((key) => (
               <th
                 class="pokemon-table__stat-header"
                 scope="col"
@@ -639,9 +622,7 @@ function StatsHeading() {
           });
         }}
       >
-        <span class="info-mark" aria-hidden="true">
-          i
-        </span>
+        <InformationIcon />
       </button>
       {open && (
         <span class="stats-tooltip" id="stats-explanation" role="tooltip">

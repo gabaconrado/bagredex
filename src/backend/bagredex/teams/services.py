@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from django.db import IntegrityError, transaction
+from django.urls import reverse
 
 from bagredex.pokemon_data.models import (
     AbilityProfile,
@@ -24,8 +25,8 @@ from .models import Team, TeamMember, TeamMemberMove
 
 API_SCHEMA = "team-api-v1"
 DRAFT_SCHEMA = "team-draft-v1"
-DATA_SCHEMA = "team-builder-data-v1"
-BOOTSTRAP_SCHEMA = "team-builder-bootstrap-v1"
+DATA_SCHEMA = "team-builder-data-v2"
+BOOTSTRAP_SCHEMA = "team-builder-bootstrap-v2"
 STAT_IDS = ("hp", "attack", "defense", "special_attack", "special_defense", "speed")
 
 
@@ -103,8 +104,8 @@ def _resolve_member(
         if profile is None:
             _field(errors, f"{prefix}.pokemon", "Choose a legal non-Mega Pokémon.")
     nickname = raw.get("nickname", "")
-    if not isinstance(nickname, str) or len(nickname) > 12:
-        _field(errors, f"{prefix}.nickname", "Use at most 12 characters.")
+    if not isinstance(nickname, str) or len(nickname) > 10:
+        _field(errors, f"{prefix}.nickname", "Use at most 10 characters.")
         nickname = ""
 
     ability: AbilityProfile | None = None
@@ -413,6 +414,19 @@ def summary(team: Team) -> dict[str, Any]:
         "name": team.name,
         "pinned_version": team.regulation.version_id,
         "regulation": {"id": team.regulation.canonical_id, "name": team.regulation.name},
-        "member_count": team.members.count(),
+        "members": [
+            {
+                "position": member.position,
+                "sprite_url": reverse(
+                    "pokedex-sprite",
+                    kwargs={
+                        "version": team.regulation.version_id,
+                        "form": member.profile.form.canonical_id,
+                        "variant": "shiny" if member.shiny else "normal",
+                    },
+                ),
+            }
+            for member in sorted(team.members.all(), key=lambda value: value.position)
+        ],
         "updated_at": team.updated_at.isoformat(),
     }

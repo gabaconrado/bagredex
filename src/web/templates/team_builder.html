@@ -3,6 +3,8 @@
 
 {% block title %}Team Builder · Bagredex{% endblock %}
 
+{% block main_class %} site-main--team-builder{% endblock %}
+
 {% block head %}
   {% if team_builder_bootstrap %}{% vite_styles 'src/team-builder.tsx' %}{% endif %}
 {% endblock %}
@@ -18,7 +20,7 @@
     {{ team_builder_bootstrap|json_script:"team-builder-bootstrap" }}
     <form hidden aria-hidden="true">{% csrf_token %}</form>
     <div data-team-builder-root>
-      <section class="team-state" aria-live="polite">
+      <section class="team-state" data-team-builder-fallback>
         <h1>Team Builder</h1>
         <p>Loading your teams…</p>
       </section>

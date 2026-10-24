@@ -1138,7 +1138,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
   });
   const [infoBox, markBox] = await Promise.all([
     statsInfo.boundingBox(),
-    statsInfo.locator(".info-mark").boundingBox(),
+    statsInfo.locator(".icon--information").boundingBox(),
   ]);
   // Firefox can report exact CSS-pixel boundaries a few millionths off.
   expect(infoBox?.width).toBeGreaterThanOrEqual(43.99);

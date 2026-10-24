@@ -3,6 +3,7 @@ import physicalMoveUrl from "./assets/pokedex-icons/physical-move.svg?no-inline"
 import shinyUrl from "./assets/pokedex-icons/shiny.svg?no-inline";
 import specialMoveUrl from "./assets/pokedex-icons/special-move.svg?no-inline";
 import statusMoveUrl from "./assets/pokedex-icons/status-move.svg?no-inline";
+import informationCircleUrl from "./assets/icons/information-circle.svg?no-inline";
 
 const DecorativeIcon = ({
   src,
@@ -24,6 +25,14 @@ export const ShinyIcon = () => (
 );
 
 export const MegaIcon = () => <DecorativeIcon src={megaEvolutionUrl} />;
+
+export const InformationIcon = () => (
+  <span
+    class="icon icon--information"
+    style={{ "--information-icon": `url(${informationCircleUrl})` }}
+    aria-hidden="true"
+  />
+);
 
 const categoryUrls = {
   Physical: physicalMoveUrl,

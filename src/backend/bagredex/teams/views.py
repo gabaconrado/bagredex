@@ -142,6 +142,7 @@ def teams_page(request: HttpRequest) -> HttpResponse:
     bootstrap = {
         "schema_version": BOOTSTRAP_SCHEMA,
         "active_version": version.pk,
+        "next_team_number": Team.objects.filter(owner=cast(Any, request.user)).count() + 1,
         "regulation": {
             "id": snapshot.regulation.canonical_id,
             "name": snapshot.regulation.name,

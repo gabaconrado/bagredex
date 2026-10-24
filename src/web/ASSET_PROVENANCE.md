@@ -18,3 +18,10 @@ The user-supplied Status source has SHA-256
 `8cc0aec5fe120ab7c21034cbe84e8f18f5349dcba7453c25c1313cb57381e331`. The packaged file makes the
 approved Bagredex substitution from `#000000` to deep blue-gray `#4F6F82`; its geometry and white
 portion are otherwise unchanged.
+
+## Information icon
+
+The Bagredex user supplied `references/icons/information-circle.svg` on 2026-10-23 as a first-party
+asset. It is copied byte-for-byte to `src/assets/icons/information-circle.svg` with SHA-256
+`f88a110cdbd4e4eb5797e111a9272d74d41ec3d5dc5b9d2c0e656539ae61cadd`. Its `currentColor`
+presentation lets the shared Web icon follow the active theme.

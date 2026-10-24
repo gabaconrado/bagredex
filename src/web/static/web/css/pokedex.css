@@ -124,7 +124,7 @@ html:has([data-pokedex-root]) {
   margin-top: 1.25rem;
   padding-bottom: 0.375rem;
 }
-.search > label {
+.search-field > label {
   display: block;
   margin-bottom: 0.375rem;
   font-weight: 750;
@@ -141,7 +141,7 @@ html:has([data-pokedex-root]) {
   color: var(--color-text);
   font: inherit;
 }
-.search-input-wrap {
+.search-field__input-wrap {
   position: relative;
 }
 .search-shortcut-hint {
@@ -186,7 +186,7 @@ html:has([data-pokedex-root]) {
   background: var(--color-surface);
   box-shadow: 0 1rem 2.5rem var(--color-shadow);
 }
-.suggestions__group h3 {
+.suggestions .search-list__group h3 {
   margin: 0.5rem 0.75rem 0.25rem;
   color: var(--color-text-muted);
   font-size: 0.72rem;
@@ -586,6 +586,11 @@ html:has([data-pokedex-root]) {
   width: 1.25rem;
   height: 1.25rem;
 }
+.icon--information {
+  display: block;
+  background: currentColor;
+  mask: var(--information-icon) center / contain no-repeat;
+}
 .icon--shiny {
   filter: brightness(0) invert(1) drop-shadow(0 0 1px #312e81)
     drop-shadow(0 0 1px #312e81);
@@ -623,16 +628,9 @@ html:has([data-pokedex-root]) {
   font: inherit;
   font-weight: 900;
 }
-.info-mark {
-  display: grid;
-  width: 1.4rem;
-  height: 1.4rem;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: var(--color-canvas);
-  font-size: 0.82rem;
-  line-height: 1;
-  place-items: center;
+.info-button .icon--information {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 .info-button:focus-visible {
   outline: 0.18rem solid var(--color-accent);

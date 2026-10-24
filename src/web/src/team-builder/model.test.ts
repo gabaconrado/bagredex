@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { BuilderData, BuilderForm, Nature } from "./contracts";
 import {
+  baseStatTotal,
   moveMember,
   newMember,
   paletteResults,
   realStats,
+  sortPaletteForms,
   validateLocal,
 } from "./model";
 
@@ -40,6 +42,50 @@ const data = {
 } as BuilderData;
 
 describe("team builder model", () => {
+  it("calculates picker BST from all six typed base stats", () => {
+    expect(baseStatTotal(base.base_stats)).toBe(534);
+    expect(
+      baseStatTotal({ hp: 1, atk: 2, def: 3, spa: 4, spd: 5, spe: 6 }),
+    ).toBe(21);
+  });
+  it("sorts picker stats in three-state order with stable name and ID ties", () => {
+    const lower = {
+      ...base,
+      id: "abomasnow-b",
+      name: "Abomasnow",
+      base_stats: { ...base.base_stats, hp: 60 },
+    };
+    const tied = { ...lower, id: "abomasnow-a" };
+    expect(
+      sortPaletteForms([base, lower, tied], null).map((form) => form.id),
+    ).toEqual(["abomasnow-a", "abomasnow-b", "charizard"]);
+    expect(
+      sortPaletteForms([base, lower, tied], {
+        key: "hp",
+        direction: "descending",
+      }).map((form) => form.id),
+    ).toEqual(["charizard", "abomasnow-a", "abomasnow-b"]);
+    expect(
+      sortPaletteForms([base, lower, tied], {
+        key: "hp",
+        direction: "ascending",
+      }).map((form) => form.id),
+    ).toEqual(["abomasnow-a", "abomasnow-b", "charizard"]);
+  });
+  it("requires edited nicknames to fit the ten-character aggregate limit", () => {
+    const member = newMember("charizard", "serious", 0);
+    member.nickname = "ElevenChars";
+    expect(validateLocal(member, data, [member], 0).nickname).toBe(
+      "Use 10 characters or fewer.",
+    );
+  });
+  it("rejects a stale canonical item identifier", () => {
+    const member = newMember("charizard", "serious", 0);
+    member.item_id = "missing-item";
+    expect(validateLocal(member, data, [member], 0).item_id).toBe(
+      "Choose an available item.",
+    );
+  });
   it("combines palette filters with AND and excludes used species", () => {
     expect(
       paletteResults(

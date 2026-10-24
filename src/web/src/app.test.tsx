@@ -1272,7 +1272,7 @@ describe("Pokédex app", () => {
     const info = await screen.findByRole("button", {
       name: "Show level-50 stat calculation information",
     });
-    expect(info.querySelector(".info-mark")?.textContent).toBe("i");
+    expect(info.querySelector(".icon--information")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Stats" })).toBeTruthy();
     await user.hover(info);
     expect(screen.getByRole("tooltip").textContent).toBe(
