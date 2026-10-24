@@ -20,10 +20,10 @@
     {{ team_builder_bootstrap|json_script:"team-builder-bootstrap" }}
     <form hidden aria-hidden="true">{% csrf_token %}</form>
     <div data-team-builder-root>
-      <section class="team-state" data-team-builder-fallback>
-        <h1>Team Builder</h1>
-        <p>Loading your teams…</p>
-      </section>
+      <div class="page-loading" role="status" aria-busy="true" data-team-builder-fallback>
+        <span class="page-loading__spinner" aria-hidden="true"></span>
+        <span class="visually-hidden">Loading Team Builder…</span>
+      </div>
     </div>
     <noscript><p class="state-card state-card--error">JavaScript is required to build and save teams.</p></noscript>
   {% endif %}

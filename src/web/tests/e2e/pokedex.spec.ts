@@ -1480,6 +1480,11 @@ test("keeps responsive shell, sort columns, and delayed detail geometry stable",
     await route.fulfill(detailsFixture);
   });
   await page.reload({ waitUntil: "domcontentloaded" });
+  const initialLoading = page.getByRole("status");
+  await expect(initialLoading).toBeVisible();
+  await expect(initialLoading).toContainText("Loading Pokédex…");
+  await expect(initialLoading).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator(".pokedex-app")).toHaveCount(0);
   await expect(page.locator("html")).toHaveCSS("scrollbar-gutter", /stable/);
   const root = page.locator("[data-pokedex-root]");
   const app = page.locator(".pokedex-app");

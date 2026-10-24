@@ -1332,32 +1332,9 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
   );
   if (loadState === "loading")
     return (
-      <div class="pokedex-app pokedex-app--shell" aria-live="polite">
-        <section class="pokedex-list">
-          <header class="pokedex-title">
-            <div>
-              <h1>Pokédex</h1>
-            </div>
-            <div class="result-meta">
-              <p
-                class="result-count result-count--placeholder"
-                aria-hidden="true"
-              >
-                000 of 000 Pokémon
-              </p>
-              <p class="shortcut-reminder">
-                Press <kbd>?</kbd> for keyboard shortcuts
-              </p>
-            </div>
-          </header>
-          <div class="shell-search" />
-          <div class="shell-table" />
-          <span class="visually-hidden">Loading Pokémon…</span>
-        </section>
-        <aside class="detail-pane detail-pane--empty">
-          <h2>Choose a Pokémon</h2>
-          <p>Select a row or search result to see its full details.</p>
-        </aside>
+      <div class="page-loading" role="status" aria-busy="true">
+        <span class="page-loading__spinner" aria-hidden="true" />
+        <span class="visually-hidden">Loading Pokédex…</span>
       </div>
     );
   if (loadState !== "ready" || !index)

@@ -39,7 +39,12 @@ describe("DamageCalculator", () => {
       vi.fn(() => new Promise(() => undefined)),
     );
     render(<DamageCalculator bootstrap={bootstrap} />);
-    expect(screen.getByText("Loading calculation data…")).toBeTruthy();
+    const loading = screen.getByRole("status");
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    expect(loading.textContent).toBe("Loading damage calculator…");
+    expect(
+      screen.queryByRole("heading", { name: "Damage Calculator" }),
+    ).toBeNull();
   });
 
   it("renders the ready controls without redundant introduction copy", async () => {

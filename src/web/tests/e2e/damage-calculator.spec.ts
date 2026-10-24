@@ -723,7 +723,10 @@ test("renders delayed loading state", async ({ page }) => {
     await route.continue();
   });
   const reload = page.reload();
-  await expect(page.getByText(/Loading calculation data/)).toBeVisible();
+  const loading = page.getByRole("status");
+  await expect(loading).toBeVisible();
+  await expect(loading).toContainText("Loading damage calculator…");
+  await expect(loading).toHaveAttribute("aria-busy", "true");
   await reload;
   await expect(
     page.getByRole("combobox", { name: "Pokémon", exact: true }).first(),

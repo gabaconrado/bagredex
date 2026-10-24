@@ -38,6 +38,21 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveURL(/\/teams\//);
 });
 
+test("renders a centralized initial loading state", async ({ page }) => {
+  await page.route("**/teams/data/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.continue();
+  });
+  const reload = page.reload({ waitUntil: "domcontentloaded" });
+  const loading = page.getByRole("status");
+  await expect(loading).toBeVisible();
+  await expect(loading).toContainText("Loading Team Builder…");
+  await expect(loading).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator(".team-builder-app")).toHaveCount(0);
+  await reload;
+  await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
+});
+
 test("creates a keyboard-first local draft and protects it from navigation", async ({
   page,
 }) => {

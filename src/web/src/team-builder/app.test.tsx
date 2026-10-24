@@ -98,6 +98,35 @@ function BlankAutocomplete({ count = 3 }: { count?: number }) {
   );
 }
 
+describe("Team Builder initial loading", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the shared page loader before builder data resolves", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => undefined)),
+    );
+    const bootstrap: Bootstrap = {
+      schema_version: "team-builder-bootstrap-v2",
+      active_version: "v1",
+      regulation: { id: "m-c", name: "Regulation M-C" },
+      data_url: "/teams/data/",
+      create_url: "/teams/",
+      team_url_template: "/teams/__TEAM__/",
+      next_team_number: 1,
+      teams: [],
+    };
+    render(<TeamBuilder bootstrap={bootstrap} />);
+    const loading = screen.getByRole("status");
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    expect(loading.textContent).toBe("Loading Team Builder…");
+    expect(document.querySelector(".team-builder-app")).toBeNull();
+  });
+});
+
 describe("team builder autocomplete", () => {
   afterEach(() => {
     cleanup();

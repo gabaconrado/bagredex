@@ -18,10 +18,10 @@
   {% else %}
     {{ damage_calculator_bootstrap|json_script:"damage-calculator-bootstrap" }}
     <div data-damage-calculator-root>
-      <section class="damage-state" data-damage-calculator-fallback>
-        <h1>Damage Calculator</h1>
-        <p>Loading calculation data…</p>
-      </section>
+      <div class="page-loading" role="status" aria-busy="true" data-damage-calculator-fallback>
+        <span class="page-loading__spinner" aria-hidden="true"></span>
+        <span class="visually-hidden">Loading damage calculator…</span>
+      </div>
     </div>
     <noscript><p class="state-card state-card--error">JavaScript is required to calculate damage.</p></noscript>
   {% endif %}

@@ -190,6 +190,18 @@ describe("Pokédex shortcut eligibility", () => {
   });
 });
 describe("Pokédex app", () => {
+  it("shows the shared page loader while the index is pending", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => undefined)),
+    );
+    render(<App bootstrap={bootstrap} />);
+    const loading = screen.getByRole("status");
+    expect(loading.getAttribute("aria-busy")).toBe("true");
+    expect(loading.textContent).toBe("Loading Pokédex…");
+    expect(document.querySelector(".pokedex-app")).toBeNull();
+  });
+
   it("leaves information dialogs in control of their keyboard events", async () => {
     vi.stubGlobal(
       "fetch",

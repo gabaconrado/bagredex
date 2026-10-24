@@ -2022,6 +2022,13 @@ export function TeamBuilder({
         (item) => item.increased_stat === null && item.decreased_stat === null,
       )!)
     : null;
+  if (status.kind === "loading" && !data)
+    return (
+      <div class="page-loading" role="status" aria-busy="true">
+        <span class="page-loading__spinner" aria-hidden="true" />
+        <span class="visually-hidden">Loading Team Builder…</span>
+      </div>
+    );
   return (
     <div
       class="team-builder-app"

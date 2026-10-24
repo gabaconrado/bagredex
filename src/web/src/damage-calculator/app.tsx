@@ -1102,10 +1102,10 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
     );
   if (!data || !left || !right)
     return (
-      <section class="damage-state" aria-live="polite">
-        <h1>Damage Calculator</h1>
-        <p>Loading calculation data…</p>
-      </section>
+      <div class="page-loading" role="status" aria-busy="true">
+        <span class="page-loading__spinner" aria-hidden="true" />
+        <span class="visually-hidden">Loading damage calculator…</span>
+      </div>
     );
   const hasUnavailableMegaAbility = [left, right].some((side) => {
     if (!side.mega) return false;
