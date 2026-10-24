@@ -215,6 +215,9 @@ setup_review_mocks() {
 @test "Web GUI build uses the exact lockfile and excludes generated build inputs" {
   grep -Fq 'npm ci --ignore-scripts --no-audit --no-fund' \
     "${REPOSITORY_ROOT}/deploy/Containerfile"
+  grep -Fq \
+    'COPY src/data/fixtures/damage-calculator-data-v1.json /app/src/data/fixtures/' \
+    "${REPOSITORY_ROOT}/deploy/Containerfile"
   grep -Fq 'COPY --from=frontend-build /app/src/web/static/web/dist/' \
     "${REPOSITORY_ROOT}/deploy/Containerfile"
   grep -Fq 'verify-vite-assets.mjs static/web/dist/.vite/manifest.json static/web/dist' \

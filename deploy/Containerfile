@@ -7,6 +7,7 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 
 FROM frontend-dependencies AS frontend-build
 COPY src/web/ ./
+COPY src/data/fixtures/damage-calculator-data-v1.json /app/src/data/fixtures/
 COPY deploy/scripts/verify-vite-assets.mjs /tmp/verify-vite-assets.mjs
 RUN npm run build
 RUN node /tmp/verify-vite-assets.mjs static/web/dist/.vite/manifest.json static/web/dist
