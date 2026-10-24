@@ -70,10 +70,13 @@ Use the `feature-development` skill for every requested feature.
 After that cycle is complete and committed, the user may explicitly invoke `$human-review` for an
 optional isolated browser-feedback loop. Ordinary requests never enter it implicitly. Focused
 feedback rounds defer independent review, full validation, the supplemental report, and the
-follow-up commit until the user explicitly finishes. An unchanged finish only tears down the
-session; a changed finish restores the matching reviewers, architect review, full validation,
-supplemental report, and a separate local commit. Follow the `human-review` skill for targeting,
-routing, recovery, artifacts, and lifecycle commands.
+follow-up commits until the user explicitly finishes. Successful teardown enters recoverable
+`completion-pending` state until a committed per-target completion receipt is validated. An
+unchanged finish creates only a narrow completion-record commit. A changed finish restores the
+matching reviewers, architect review, full validation, and supplemental report, then uses a
+reviewed-result commit followed by a narrow receipt/report-correction commit. Follow the
+`human-review` skill for candidate selection, explicit re-review, recovery, artifacts, and lifecycle
+commands.
 
 ## Data policy
 

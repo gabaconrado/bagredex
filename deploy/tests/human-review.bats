@@ -83,6 +83,35 @@ human_review() {
     BAGREDEX_HUMAN_REVIEW_CACHE="${SESSION_CACHE}" "$@"
 }
 
+create_candidate_repository() {
+  local repository="${TEST_TEMP}/candidate-repository"
+  mkdir -p "${repository}/deploy/scripts" "${repository}/docs/plans" \
+    "${repository}/docs/reports"
+  cp "${REPOSITORY_ROOT}/bagredex.sh" "${repository}/bagredex.sh"
+  cp "${REPOSITORY_ROOT}/deploy/scripts/human-review.sh" \
+    "${repository}/deploy/scripts/human-review.sh"
+  printf '# Candidate plan\n' >"${repository}/docs/plans/2026-01-01-candidate.md"
+  printf '# Candidate report\n\n## Commits\n\nPending.\n' \
+    >"${repository}/docs/reports/2026-01-01-candidate.md"
+  git -C "${repository}" init -q
+  git -C "${repository}" config user.name 'Bagredex Test'
+  git -C "${repository}" config user.email 'test@bagredex.local'
+  git -C "${repository}" add .
+  git -C "${repository}" commit -qm 'feat: candidate boundary'
+  CANDIDATE_COMMIT="$(git -C "${repository}" rev-parse HEAD)"
+  printf '# Candidate report\n\n## Commits\n\n`%s`\n' "${CANDIDATE_COMMIT}" \
+    >"${repository}/docs/reports/2026-01-01-candidate.md"
+  git -C "${repository}" add docs/reports/2026-01-01-candidate.md
+  git -C "${repository}" commit -qm 'docs: record candidate commit'
+  CANDIDATE_REPOSITORY="${repository}"
+  export CANDIDATE_COMMIT CANDIDATE_REPOSITORY
+}
+
+candidate_review() {
+  env BAGREDEX_HUMAN_REVIEW_CACHE="${TEST_TEMP}/candidate-cache" \
+    "${CANDIDATE_REPOSITORY}/bagredex.sh" human-review "$@"
+}
+
 @test "human-review help and target validation reject before Podman mutation" {
   run "${REPOSITORY_ROOT}/bagredex.sh" human-review
   [ "${status}" -eq 2 ]
@@ -93,6 +122,215 @@ human_review() {
   [[ "${output}" == *"must match"* ]]
   [ ! -s "${COMMAND_LOG}" ]
   [ ! -e "${SESSION_CACHE}/session" ]
+}
+
+@test "candidate is read-only and reports available then reviewed without older fallback" {
+  create_candidate_repository
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"TARGET: candidate"* ]]
+  [[ "${output}" == *"STATE: available"* ]]
+  [[ "${output}" == *"EXPLICIT_TARGET_REQUIRED: false"* ]]
+
+  local receipt="${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate-human-review-completion.md"
+  printf '%s\n' '# Completion' '' '## Completion records' '' '```text' \
+    "v1|2026-01-02T00:00:00Z|candidate|docs/plans/2026-01-01-candidate.md|docs/reports/2026-01-01-candidate.md|${CANDIDATE_COMMIT}|unchanged|${CANDIDATE_COMMIT}|-" \
+    '```' >"${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record review completion'
+
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: reviewed"* ]]
+  [[ "${output}" == *"EXPLICIT_TARGET_REQUIRED: true"* ]]
+  [[ "${output}" == *"RESULT_COMMIT: ${CANDIDATE_COMMIT}"* ]]
+}
+
+@test "candidate skips a committed pending current-repository-shaped plan and report" {
+  create_candidate_repository
+  printf '# Human review completion tracking\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/plans/2026-10-24-human-review-completion-tracking.md"
+  printf '# Human review completion tracking\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-10-24-human-review-completion-tracking.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: add pending completion tracking artifacts'
+
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"TARGET: candidate"* ]]
+  [[ "${output}" == *"STATE: available"* ]]
+}
+
+@test "candidate fails closed for a committed report without a hash or pending marker" {
+  create_candidate_repository
+  printf '# Candidate report\n\n## Commits\n\nUnknown boundary.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs/reports/2026-01-01-candidate.md
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: corrupt candidate boundary'
+
+  run candidate_review candidate
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"malformed completion evidence"* ]]
+}
+
+@test "candidate uses commit topology instead of artifact filename or mtime" {
+  create_candidate_repository
+  printf '# Earlier-named plan\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/plans/2025-01-01-earlier-named.md"
+  printf '# Earlier-named report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2025-01-01-earlier-named.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'feat: later history boundary'
+  local later_commit
+  later_commit="$(git -C "${CANDIDATE_REPOSITORY}" rev-parse HEAD)"
+  printf '# Earlier-named report\n\n## Commits\n\n`%s`\n' "${later_commit}" \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2025-01-01-earlier-named.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs/reports/2025-01-01-earlier-named.md
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record later history boundary'
+  touch "${CANDIDATE_REPOSITORY}/docs/plans/2026-01-01-candidate.md" \
+    "${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate.md"
+
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"TARGET: earlier-named"* ]]
+  [[ "${output}" == *"FEATURE_COMMIT: ${later_commit}"* ]]
+}
+
+@test "candidate reports a reviewed newest boundary without falling back to older available" {
+  create_candidate_repository
+  printf '# Newest plan\n' >"${CANDIDATE_REPOSITORY}/docs/plans/2026-02-01-newest.md"
+  printf '# Newest report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-02-01-newest.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'feat: newest boundary'
+  local newest_commit
+  newest_commit="$(git -C "${CANDIDATE_REPOSITORY}" rev-parse HEAD)"
+  printf '# Newest report\n\n## Commits\n\n`%s`\n' "${newest_commit}" \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-02-01-newest.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs/reports/2026-02-01-newest.md
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record newest boundary'
+  local receipt="${CANDIDATE_REPOSITORY}/docs/reports/2026-02-01-newest-human-review-completion.md"
+  printf '%s\n' '# Completion' '```text' \
+    "v1|2026-02-02T00:00:00Z|newest|docs/plans/2026-02-01-newest.md|docs/reports/2026-02-01-newest.md|${newest_commit}|unchanged|${newest_commit}|-" \
+    '```' >"${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record newest completion'
+
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"TARGET: newest"* ]]
+  [[ "${output}" == *"STATE: reviewed"* ]]
+  [[ "${output}" == *"EXPLICIT_TARGET_REQUIRED: true"* ]]
+}
+
+@test "candidate rejects dirty and malformed completion evidence without Podman" {
+  create_candidate_repository
+  local receipt="${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate-human-review-completion.md"
+  printf '%s\n' '# Completion' '```text' 'v1|malformed' '```' >"${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: add malformed receipt'
+
+  run candidate_review candidate
+  [ "${status}" -eq 10 ]
+  [[ "${output}" == *"Malformed human-review completion record"* ]]
+
+  printf '\nDirty.\n' >>"${receipt}"
+  run candidate_review candidate
+  [ "${status}" -eq 10 ]
+  [[ "${output}" == *"must be tracked and unchanged"* ]]
+}
+
+@test "candidate accepts changed completion only with corrected supplemental evidence" {
+  create_candidate_repository
+  local supplemental="docs/reports/2026-01-03-candidate-human-review.md"
+  printf '# Supplemental report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/${supplemental}"
+  printf 'reviewed change\n' >"${CANDIDATE_REPOSITORY}/reviewed-change.txt"
+  git -C "${CANDIDATE_REPOSITORY}" add "${supplemental}" reviewed-change.txt
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'fix: apply review feedback'
+  local result_commit
+  result_commit="$(git -C "${CANDIDATE_REPOSITORY}" rev-parse HEAD)"
+  printf '# Supplemental report\n\n## Commits\n\n`%s`\n' "${result_commit}" \
+    >"${CANDIDATE_REPOSITORY}/${supplemental}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${supplemental}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: correct supplemental boundary'
+
+  local receipt="${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate-human-review-completion.md"
+  printf '%s\n' '# Completion' '```text' \
+    "v1|2026-01-04T00:00:00Z|candidate|docs/plans/2026-01-01-candidate.md|docs/reports/2026-01-01-candidate.md|${CANDIDATE_COMMIT}|changed|${result_commit}|${supplemental}" \
+    '```' >"${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record changed review completion'
+
+  run candidate_review candidate
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: reviewed"* ]]
+  [[ "${output}" == *"RESULT_COMMIT: ${result_commit}"* ]]
+
+  printf '# Supplemental report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/${supplemental}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${supplemental}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: invalidate supplemental boundary'
+  run candidate_review candidate
+  [ "${status}" -eq 10 ]
+  [[ "${output}" == *"does not record the exact result commit"* ]]
+}
+
+@test "candidate rejects two targets at the same newest commit boundary" {
+  create_candidate_repository
+  printf '# Second plan\n' >"${CANDIDATE_REPOSITORY}/docs/plans/2026-01-02-second.md"
+  printf '# Second report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-01-02-second.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'feat: shared candidate boundary'
+  local shared_commit
+  shared_commit="$(git -C "${CANDIDATE_REPOSITORY}" rev-parse HEAD)"
+  printf '# Candidate report\n\n## Commits\n\n`%s`\n' "${shared_commit}" \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate.md"
+  printf '# Second report\n\n## Commits\n\n`%s`\n' "${shared_commit}" \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-01-02-second.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs/reports
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record shared boundary'
+
+  run candidate_review candidate
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"boundary is ambiguous"* ]]
+}
+
+@test "complete requires a record not older than the session and removes only the marker" {
+  create_candidate_repository
+  local receipt="${CANDIDATE_REPOSITORY}/docs/reports/2026-01-01-candidate-human-review-completion.md"
+  printf '%s\n' '# Completion' '' '## Completion records' '' '```text' \
+    "v1|2026-01-02T00:00:00Z|candidate|docs/plans/2026-01-01-candidate.md|docs/reports/2026-01-01-candidate.md|${CANDIDATE_COMMIT}|unchanged|${CANDIDATE_COMMIT}|-" \
+    '```' >"${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record old completion'
+  local cache="${TEST_TEMP}/candidate-cache"
+  mkdir -p "${cache}"
+  printf '%s\n' 'FORMAT_VERSION=1' 'TARGET=candidate' 'STATE=recording' \
+    'PLAN=docs/plans/2026-01-01-candidate.md' \
+    'REPORT=docs/reports/2026-01-01-candidate.md' \
+    "BASE_COMMIT=${CANDIDATE_COMMIT}" 'ACTIVE_BUNDLE=test-bundle' 'PORT=8000' \
+    'USERNAME=admin' 'PASSWORD=admin' 'CREATED_AT=2026-01-03T00:00:00Z' \
+    >"${cache}/session"
+  chmod 600 "${cache}/session"
+
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" \
+    MOCK_STATE="${MOCK_STATE}" BAGREDEX_HUMAN_REVIEW_CACHE="${cache}" \
+    "${CANDIDATE_REPOSITORY}/bagredex.sh" human-review complete
+  [ "${status}" -eq 10 ]
+  [ -f "${cache}/session" ]
+
+  sed -i '$i\v1|2026-01-04T00:00:00Z|candidate|docs/plans/2026-01-01-candidate.md|docs/reports/2026-01-01-candidate.md|'"${CANDIDATE_COMMIT}"'|unchanged|'"${CANDIDATE_COMMIT}"'|-' "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" add "${receipt}"
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: record repeat completion'
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" \
+    MOCK_STATE="${MOCK_STATE}" BAGREDEX_HUMAN_REVIEW_CACHE="${cache}" \
+    "${CANDIDATE_REPOSITORY}/bagredex.sh" human-review complete
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: complete"* ]]
+  [[ "${output}" == *"OUTCOME: unchanged"* ]]
+  [ ! -e "${cache}/session" ]
 }
 
 @test "human-review start writes a private marker and reports stable fields without logging credentials" {
@@ -166,8 +404,10 @@ human_review() {
   : >"${COMMAND_LOG}"
   run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review finish
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"STATE: absent"* ]]
-  [ ! -e "${SESSION_CACHE}/session" ]
+  [[ "${output}" == *"STATE: completion-pending"* ]]
+  grep -Fxq 'STATE=recording' "${SESSION_CACHE}/session"
+  [[ "${output}" != *"USERNAME:"* ]]
+  [[ "${output}" != *"PASSWORD:"* ]]
   [ ! -e "${MOCK_STATE}/volume" ]
   [ "$(grep -Fc -- '-p bagredex-human-review' "${COMMAND_LOG}")" -eq 1 ]
   grep -Fq 'down --volumes --remove-orphans' "${COMMAND_LOG}"
@@ -186,7 +426,36 @@ human_review() {
 
   run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review finish
   [ "${status}" -eq 0 ]
-  [ ! -e "${SESSION_CACHE}/session" ]
+  grep -Fxq 'STATE=recording' "${SESSION_CACHE}/session"
+}
+
+@test "completion-pending finish and status are idempotent and reload start complete fail closed" {
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review finish
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: completion-pending"* ]]
+  [[ "${output}" == *"FEATURE_COMMIT:"* ]]
+  [[ "${output}" != *"USERNAME:"* ]]
+  : >"${COMMAND_LOG}"
+
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review finish
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: completion-pending"* ]]
+  [ ! -s "${COMMAND_LOG}" ]
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review status
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: completion-pending"* ]]
+  [ ! -s "${COMMAND_LOG}" ]
+
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 7 ]
+  [[ "${output}" == *"completion recording is pending"* ]]
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 3 ]
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review complete
+  [ "${status}" -eq 10 ]
+  grep -Fxq 'STATE=recording' "${SESSION_CACHE}/session"
 }
 
 @test "human-review rejects active sessions orphaned resources and invalid markers" {
@@ -412,6 +681,7 @@ human_review() {
   [[ "${output}" == *"STATE: partial-finishing"* ]]
   run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review finish
   [ "${status}" -eq 0 ]
+  grep -Fxq 'STATE=recording' "${SESSION_CACHE}/session"
 }
 
 @test "starting reconciliation accepts validated expected resource subsets for reload repair" {
@@ -484,13 +754,16 @@ human_review() {
 }
 
 @test "human-review skill routes finishing to finish and resumable states to reload" {
-  run grep -F 'If status reports `partial-finishing`, ask the deployment agent to run' \
+  run grep -F 'Route `partial-finishing` to `./bagredex.sh human-review finish`.' \
     "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
   [ "${status}" -eq 0 ]
-  run grep -F '`./bagredex.sh human-review finish` to resume the exact teardown. For `partial-starting`,' \
+  run grep -F 'For bare `$human-review`, ask the deployment agent to run' \
     "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
   [ "${status}" -eq 0 ]
-  run grep -F '`partial-reloading`, `partial-ready`, or `stopped`, ask it to run' \
+  run grep -F '`./bagredex.sh human-review candidate`.' \
+    "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
+  [ "${status}" -eq 0 ]
+  run grep -F 'Route `completion-pending` to completion recording below;' \
     "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
   [ "${status}" -eq 0 ]
   run grep -F 'exactly as shown without injecting a port override' \

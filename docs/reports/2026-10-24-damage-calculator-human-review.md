@@ -73,5 +73,7 @@ None.
 
 ## Commits
 
-This report is included in the pending separate human-review follow-up commit. The original base
-commit `4b57ca9` and its plan and report remain unchanged.
+The reviewed changes and this report were committed as
+`f9ad9b168f0431cb9e13bec90ef32d72bca693cf`
+(`feat(calc): refine calculator from human review`). The original base commit `4b57ca9` and its plan
+and report remain unchanged.

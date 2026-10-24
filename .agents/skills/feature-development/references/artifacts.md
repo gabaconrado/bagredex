@@ -90,5 +90,17 @@ change tracked files:
   uses the implementation-report sections above, linking the original artifacts and supplemental
   plan.
 
-An unchanged session creates neither artifact. Update one supplemental plan across rounds rather
-than creating a file per round.
+An unchanged session creates neither supplemental artifact. Every finished session creates or
+appends one authoritative receipt at
+`docs/reports/YYYY-MM-DD-<feature>-human-review-completion.md`. Its fenced machine-record history is
+append-only and uses:
+
+```text
+v1|COMPLETED_AT|TARGET|PLAN|REPORT|FEATURE_COMMIT|OUTCOME|RESULT_COMMIT|SUPPLEMENTAL_REPORT
+```
+
+Use `OUTCOME` `changed` with the exact reviewed-result commit and supplemental report path, or
+`unchanged` with the original feature commit as the result and `-` as the supplemental report.
+Update one supplemental plan across rounds rather than creating a file per round. A changed report
+may say its commit is pending only in the reviewed-result commit; the narrow completion-record
+commit must replace that statement with the full result hash.

@@ -90,8 +90,10 @@ Features begin with a one-question-at-a-time interview and an architect-authored
 implement the agreed work; independent reviewers return concrete findings until no blockers remain.
 The deployment agent runs final local checks, creates local commits, and records a concise report.
 After that cycle is complete, an explicit `$human-review` invocation can open an isolated,
-disposable browser-feedback loop. It never starts implicitly; changed sessions return through the
-normal review, validation, report, and separate-commit gates when the user explicitly finishes.
+disposable browser-feedback loop. It never starts implicitly. Successful teardown remains
+completion-pending until a committed per-target receipt is validated. Changed sessions use a
+reviewed-result commit and a narrow completion-record commit; unchanged sessions create only the
+completion record.
 
 Agents operate locally. They never run Git remote operations, contact deployment targets, install
 missing host tools, or bypass sandbox restrictions. The deployment agent may request narrow
@@ -110,7 +112,9 @@ remain outside agent execution.
 ./bagredex.sh run
 ./bagredex.sh review
 ./bagredex.sh migrate
+./bagredex.sh human-review candidate
 ./bagredex.sh human-review start FEATURE-SLUG
+./bagredex.sh human-review complete
 ./bagredex.sh publish VERSION
 ./bagredex.sh deploy VERSION [--dry-run]
 ```

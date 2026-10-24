@@ -26,6 +26,10 @@ hr_port=""
 hr_username=""
 hr_password=""
 hr_created_at=""
+hr_completion_outcome=""
+hr_completion_result=""
+hr_completion_receipt=""
+hr_completion_completed_at=""
 hr_has_database=false
 hr_has_server=false
 hr_has_volume=false
@@ -34,10 +38,12 @@ hr_has_network=false
 human_review_usage() {
   printf '%s\n' \
     'Usage:' \
+    '  ./bagredex.sh human-review candidate' \
     '  ./bagredex.sh human-review start TARGET' \
     '  ./bagredex.sh human-review status' \
     '  ./bagredex.sh human-review reload' \
-    '  ./bagredex.sh human-review finish'
+    '  ./bagredex.sh human-review finish' \
+    '  ./bagredex.sh human-review complete'
 }
 
 human_compose() {
@@ -121,7 +127,7 @@ human_review_read_marker() {
     esac
   done <"${human_review_marker}"
   [[ "${format_version}" == 1 && "${hr_target}" =~ ^[a-z0-9][a-z0-9-]*$ &&
-    "${hr_state}" =~ ^(starting|ready|reloading|finishing)$ &&
+    "${hr_state}" =~ ^(starting|ready|reloading|finishing|recording)$ &&
     "${hr_plan}" =~ ^docs/plans/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$ &&
     "${hr_report}" =~ ^docs/reports/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$ &&
     "${hr_base_commit}" =~ ^[0-9a-f]{40,64}$ && "${hr_bundle}" =~ ^[A-Za-z0-9._-]+$ &&
@@ -165,6 +171,7 @@ human_review_resources_present() {
 human_review_reconcile() {
   local containers volume_label network_label name status
   hr_has_database=false hr_has_server=false hr_has_volume=false hr_has_network=false
+  [[ "${hr_state}" != recording ]] || return 0
   containers="$(podman ps -a --filter \
     "label=io.podman.compose.project=${human_review_project}" --format '{{.Names}}')" || {
     printf 'Could not inspect fixed human-review containers.\n' >&2
@@ -225,6 +232,159 @@ human_review_reported_commits() {
   ' "${report}" | grep -Eo '[0-9a-f]{40,64}' || true
 }
 
+human_review_report_is_pending() {
+  local report="${1}"
+  awk '
+    /^## Commits[[:space:]]*$/ { in_commits = 1; next }
+    /^## / && in_commits { exit }
+    in_commits { print }
+  ' "${report}" | grep -Eiq '(^|[^[:alpha:]])pending([^[:alpha:]]|$)'
+}
+
+human_review_path_is_clean_and_tracked() {
+  local path="${1:?repository path required}"
+  git -C "${script_dir}" ls-files --error-unmatch -- "${path}" >/dev/null 2>&1 &&
+    git -C "${script_dir}" diff --quiet HEAD -- "${path}"
+}
+
+human_review_commit_is_reachable() {
+  local commit="${1:?commit required}"
+  git -C "${script_dir}" cat-file -e "${commit}^{commit}" 2>/dev/null &&
+    git -C "${script_dir}" merge-base --is-ancestor "${commit}" HEAD
+}
+
+human_review_valid_timestamp() {
+  local timestamp="${1:?timestamp required}"
+  [[ "${timestamp}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] &&
+    [[ "$(date -u -d "${timestamp}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" == "${timestamp}" ]]
+}
+
+human_review_validate_receipts() {
+  local receipt relative line version completed_at target plan report feature_commit outcome
+  local result_commit supplemental_report key identity extra in_records=false receipt_records=0
+  local block_seen=false
+  local -a receipts=() supplement_commits=()
+  hr_completion_completed_at="" hr_completion_outcome="" hr_completion_result=""
+  hr_completion_receipt=""
+  mapfile -t receipts < <(
+    find "${script_dir}/docs/reports" -maxdepth 1 -type f \
+      -name '????-??-??-*-human-review-completion.md' -print | LC_ALL=C sort
+  )
+  declare -A receipt_by_target=() seen_records=() records_by_identity=()
+  for receipt in "${receipts[@]}"; do
+    in_records=false
+    receipt_records=0
+    block_seen=false
+    relative="${receipt#"${script_dir}/"}"
+    human_review_path_is_clean_and_tracked "${relative}" || {
+      printf 'Human-review completion receipt must be tracked and unchanged: %s\n' \
+        "${relative}" >&2
+      return 10
+    }
+    while IFS= read -r line; do
+      if [[ "${line}" == '```text' ]]; then
+        [[ "${in_records}" == false && "${block_seen}" == false ]] || {
+          printf 'Multiple or nested completion record blocks in %s.\n' "${relative}" >&2
+          return 10
+        }
+        in_records=true
+        block_seen=true
+        continue
+      fi
+      if [[ "${line}" == '```' && "${in_records}" == true ]]; then
+        in_records=false
+        continue
+      fi
+      if [[ "${in_records}" == true ]]; then
+        IFS='|' read -r version completed_at target plan report feature_commit outcome \
+          result_commit supplemental_report extra <<<"${line}"
+        if [[ "${version}" != v1 || -n "${extra:-}" ]] ||
+          ! human_review_valid_timestamp "${completed_at}" ||
+          [[ ! "${target}" =~ ^[a-z0-9][a-z0-9-]*$ ||
+            ! "${plan}" =~ ^docs/plans/[0-9]{4}-[0-9]{2}-[0-9]{2}-${target}\.md$ ||
+            ! "${report}" =~ ^docs/reports/[0-9]{4}-[0-9]{2}-[0-9]{2}-${target}\.md$ ||
+            ! "${feature_commit}" =~ ^[0-9a-f]{40,64}$ ||
+            ! "${outcome}" =~ ^(changed|unchanged)$ ||
+            ! "${result_commit}" =~ ^[0-9a-f]{40,64}$ ]]; then
+          printf 'Malformed human-review completion record in %s.\n' "${relative}" >&2
+          return 10
+        fi
+        [[ -z "${receipt_by_target[${target}]:-}" ||
+          "${receipt_by_target[${target}]}" == "${relative}" ]] || {
+          printf 'Multiple completion receipts claim target: %s\n' "${target}" >&2
+          return 10
+        }
+        receipt_by_target["${target}"]="${relative}"
+        key="${line}"
+        [[ -z "${seen_records[${key}]:-}" ]] || {
+          printf 'Duplicate human-review completion record in %s.\n' "${relative}" >&2
+          return 10
+        }
+        seen_records["${key}"]=true
+        identity="${completed_at}|${target}|${plan}|${report}|${feature_commit}"
+        [[ -z "${records_by_identity[${identity}]:-}" ||
+          "${records_by_identity[${identity}]}" == "${key}" ]] || {
+          printf 'Conflicting human-review completion records exist for one session boundary.\n' >&2
+          return 10
+        }
+        records_by_identity["${identity}"]="${key}"
+        receipt_records=$((receipt_records + 1))
+        if ! human_review_path_is_clean_and_tracked "${plan}" ||
+          ! human_review_path_is_clean_and_tracked "${report}" ||
+          ! human_review_commit_is_reachable "${feature_commit}" ||
+          ! human_review_commit_is_reachable "${result_commit}" ||
+          ! git -C "${script_dir}" cat-file -e "${feature_commit}:${plan}" ||
+          ! git -C "${script_dir}" cat-file -e "${feature_commit}:${report}"; then
+          printf 'Completion record references dirty, missing, or unreachable evidence.\n' >&2
+          return 10
+        fi
+        if [[ "${outcome}" == unchanged ]]; then
+          [[ "${result_commit}" == "${feature_commit}" &&
+            "${supplemental_report}" == - ]] || {
+            printf 'Unchanged completion record has an invalid result boundary.\n' >&2
+            return 10
+          }
+        else
+          if [[ ! "${supplemental_report}" =~ ^docs/reports/[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+-human-review\.md$ ]] ||
+            ! human_review_path_is_clean_and_tracked "${supplemental_report}" ||
+            ! git -C "${script_dir}" merge-base --is-ancestor \
+              "${feature_commit}" "${result_commit}" ||
+            ! git -C "${script_dir}" cat-file -e \
+              "${result_commit}:${supplemental_report}"; then
+            printf 'Changed completion record has invalid supplemental evidence.\n' >&2
+            return 10
+          fi
+          mapfile -t supplement_commits < <(
+            human_review_reported_commits "${script_dir}/${supplemental_report}"
+          )
+          [[ "${#supplement_commits[@]}" -gt 0 &&
+            "${supplement_commits[${#supplement_commits[@]} - 1]}" == "${result_commit}" ]] || {
+            printf 'Changed completion report does not record the exact result commit.\n' >&2
+            return 10
+          }
+        fi
+        if [[ "${target}" == "${hr_target}" && "${plan}" == "${hr_plan}" &&
+          "${report}" == "${hr_report}" && "${feature_commit}" == "${hr_base_commit}" &&
+          "${completed_at}" < "${hr_created_at}" ]]; then
+          continue
+        fi
+        if [[ "${target}" == "${hr_target}" && "${plan}" == "${hr_plan}" &&
+          "${report}" == "${hr_report}" && "${feature_commit}" == "${hr_base_commit}" &&
+          ( -z "${hr_completion_receipt}" || "${completed_at}" > "${hr_completion_completed_at}" ) ]]; then
+          hr_completion_completed_at="${completed_at}"
+          hr_completion_outcome="${outcome}"
+          hr_completion_result="${result_commit}"
+          hr_completion_receipt="${relative}"
+        fi
+      fi
+    done <"${receipt}"
+    [[ "${in_records}" == false && "${receipt_records}" -gt 0 ]] || {
+      printf 'Completion receipt has no complete machine-record block: %s\n' "${relative}" >&2
+      return 10
+    }
+  done
+}
+
 human_review_resolve_target() {
   local target="${1}" plan_pattern report_pattern reported_commit
   local -a plans reports reported_commits
@@ -270,6 +430,96 @@ human_review_resolve_target() {
   fi
   hr_target="${target}"
   hr_base_commit="${reported_commit}"
+}
+
+human_review_candidate() {
+  local plan basename target commit relative_plan relative_report selected_target=""
+  local selected_commit="" rank selected_rank=2147483647
+  local -a plans=() commits_at_rank=() matching_reports=() reported_commits=()
+  declare -A commit_rank=()
+  require_tools git find awk grep sort sed date
+  [[ ! -e "${human_review_marker}" ]] || {
+    printf 'A human-review lifecycle marker exists; run status to resume it.\n' >&2
+    return 3
+  }
+  rank=0
+  while IFS= read -r commit; do
+    commit_rank["${commit}"]="${rank}"
+    rank=$((rank + 1))
+  done < <(git -C "${script_dir}" rev-list --topo-order HEAD)
+  mapfile -t plans < <(
+    find "${script_dir}/docs/plans" -maxdepth 1 -type f \
+      -name '????-??-??-*.md' ! -name '*-human-review.md' \
+      ! -name '*-human-review-completion.md' -print | LC_ALL=C sort
+  )
+  for plan in "${plans[@]}"; do
+    basename="${plan##*/}"
+    target="${basename:11}"
+    target="${target%.md}"
+    mapfile -t matching_reports < <(
+      compgen -G "${script_dir}/docs/reports/????-??-??-${target}.md" || true
+    )
+    if [[ "${#matching_reports[@]}" -eq 0 ]]; then
+      continue
+    fi
+    if [[ "${#matching_reports[@]}" -ne 1 ]]; then
+      human_review_resolve_target "${target}"
+      return 2
+    fi
+    relative_plan="${plan#"${script_dir}/"}"
+    relative_report="${matching_reports[0]#"${script_dir}/"}"
+    if ! human_review_path_is_clean_and_tracked "${relative_plan}" ||
+      ! human_review_path_is_clean_and_tracked "${relative_report}"; then
+      printf 'Target artifacts must be committed and unchanged before human review.\n' >&2
+      return 2
+    fi
+    mapfile -t reported_commits < <(
+      human_review_reported_commits "${matching_reports[0]}"
+    )
+    if [[ "${#reported_commits[@]}" -eq 0 ]]; then
+      if human_review_report_is_pending "${matching_reports[0]}"; then
+        continue
+      fi
+      printf 'Target report has malformed completion evidence: %s\n' \
+        "${relative_report}" >&2
+      return 2
+    fi
+    human_review_resolve_target "${target}"
+    commit="${hr_base_commit}"
+    [[ -n "${commit_rank[${commit}]+present}" ]] || continue
+    rank="${commit_rank[${commit}]}"
+    if ((rank < selected_rank)); then
+      selected_rank="${rank}"
+      selected_target="${target}"
+      selected_commit="${commit}"
+      commits_at_rank=("${target}")
+    elif ((rank == selected_rank)); then
+      commits_at_rank+=("${target}")
+    fi
+  done
+  [[ -n "${selected_target}" ]] || {
+    printf 'No eligible completed feature candidate exists.\n' >&2
+    return 2
+  }
+  [[ "${#commits_at_rank[@]}" -eq 1 ]] || {
+    printf 'Newest human-review candidate boundary is ambiguous: %s\n' \
+      "${commits_at_rank[*]}" >&2
+    return 2
+  }
+  human_review_resolve_target "${selected_target}"
+  [[ "${hr_base_commit}" == "${selected_commit}" ]] || return 2
+  hr_created_at="0000-01-01T00:00:00Z"
+  human_review_validate_receipts
+  printf 'TARGET: %s\n' "${hr_target}"
+  if [[ -n "${hr_completion_receipt}" ]]; then
+    printf 'STATE: reviewed\nEXPLICIT_TARGET_REQUIRED: true\n'
+    printf 'RESULT_COMMIT: %s\n' "${hr_completion_result}"
+    printf 'COMPLETION_RECEIPT: %s\n' "${hr_completion_receipt}"
+  else
+    printf 'STATE: available\nEXPLICIT_TARGET_REQUIRED: false\n'
+  fi
+  printf 'PLAN: %s\nREPORT: %s\nFEATURE_COMMIT: %s\n' \
+    "${hr_plan}" "${hr_report}" "${hr_base_commit}"
 }
 
 human_review_port_is_free() {
@@ -340,6 +590,15 @@ human_review_initialize() {
 
 human_review_print_status() {
   local display_state="partial-${hr_state}" database_health server_health
+  if [[ "${hr_state}" == recording ]]; then
+    printf 'TARGET: %s\n' "${hr_target}"
+    printf 'STATE: completion-pending\n'
+    printf 'PLAN: %s\nREPORT: %s\nFEATURE_COMMIT: %s\n' \
+      "${hr_plan}" "${hr_report}" "${hr_base_commit}"
+    printf 'PROJECT: %s\nVOLUME: %s\n' \
+      "${human_review_project}" "${human_review_volume}"
+    return 0
+  fi
   if [[ "${hr_state}" == ready ]]; then
     database_health="$(podman inspect --format \
       '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}' \
@@ -411,8 +670,13 @@ human_review_start() {
 }
 
 human_review_status() {
-  require_tools podman stat sed curl
+  require_tools stat sed
   human_review_read_marker
+  if [[ "${hr_state}" == recording ]]; then
+    human_review_print_status
+    return 0
+  fi
+  require_tools podman curl
   human_review_reconcile
   human_review_print_status
 }
@@ -420,6 +684,10 @@ human_review_status() {
 human_review_reload() {
   require_tools podman npm node sed curl stat mktemp mv chmod ss
   human_review_read_marker
+  [[ "${hr_state}" != recording ]] || {
+    printf 'Human-review completion recording is pending; run complete after committing the receipt.\n' >&2
+    return 7
+  }
   [[ "${hr_state}" != finishing ]] || {
     printf 'Human-review teardown is pending; run finish to resume it.\n' >&2
     return 7
@@ -447,8 +715,13 @@ human_review_reload() {
 
 human_review_finish() {
   local resource_status
-  require_tools podman stat mktemp mv chmod
+  require_tools stat mktemp mv chmod
   human_review_read_marker
+  if [[ "${hr_state}" == recording ]]; then
+    human_review_print_status
+    return 0
+  fi
+  require_tools podman
   human_review_reconcile
   [[ "${hr_state}" == finishing ]] || podman volume exists "${human_review_volume}" || {
     printf 'Expected human-review volume is missing; teardown is not authorized.\n' >&2
@@ -476,9 +749,40 @@ human_review_finish() {
       return 7
     }
   fi
+  hr_state="recording"
+  human_review_write_marker
+  human_review_print_status
+}
+
+human_review_complete() {
+  local resource_status
+  require_tools podman git find awk grep sort stat date
+  [[ -f "${human_review_marker}" && ! -L "${human_review_marker}" ]] || {
+    printf 'No human-review completion is pending.\n' >&2
+    return 7
+  }
+  human_review_read_marker
+  [[ "${hr_state}" == recording ]] || {
+    printf 'No human-review completion is pending.\n' >&2
+    return 7
+  }
+  if human_review_resources_present; then
+    printf 'Human-review resources still exist; completion cannot be acknowledged.\n' >&2
+    return 7
+  else
+    resource_status=$?
+    [[ "${resource_status}" -eq 1 ]] || return "${resource_status}"
+  fi
+  human_review_validate_receipts
+  [[ -n "${hr_completion_receipt}" ]] || {
+    printf 'No valid committed completion record matches the pending session.\n' >&2
+    return 10
+  }
   rm -f -- "${human_review_marker}"
-  printf 'TARGET: %s\nSTATE: absent\nPROJECT: %s\nVOLUME: %s\n' \
-    "${hr_target}" "${human_review_project}" "${human_review_volume}"
+  printf 'TARGET: %s\nSTATE: complete\nFEATURE_COMMIT: %s\n' \
+    "${hr_target}" "${hr_base_commit}"
+  printf 'OUTCOME: %s\nRESULT_COMMIT: %s\nCOMPLETION_RECEIPT: %s\n' \
+    "${hr_completion_outcome}" "${hr_completion_result}" "${hr_completion_receipt}"
 }
 
 human_review_main() {
@@ -487,10 +791,12 @@ human_review_main() {
   shift
   human_review_lock_session
   case "${action}" in
+    candidate) [[ "$#" -eq 0 ]] || { human_review_usage >&2; return 2; }; human_review_candidate ;;
     start) [[ "$#" -eq 1 ]] || { human_review_usage >&2; return 2; }; human_review_start "$1" ;;
     status) [[ "$#" -eq 0 ]] || { human_review_usage >&2; return 2; }; human_review_status ;;
     reload) [[ "$#" -eq 0 ]] || { human_review_usage >&2; return 2; }; human_review_reload ;;
     finish) [[ "$#" -eq 0 ]] || { human_review_usage >&2; return 2; }; human_review_finish ;;
+    complete) [[ "$#" -eq 0 ]] || { human_review_usage >&2; return 2; }; human_review_complete ;;
     *) printf 'Unknown human-review action: %s\n' "${action}" >&2; human_review_usage >&2; return 2 ;;
   esac
 }

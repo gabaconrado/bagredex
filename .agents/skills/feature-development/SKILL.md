@@ -42,9 +42,11 @@ Use this workflow for every requested Bagredex feature. Read
 
 The ordinary cycle above remains complete at its local commit. Only an explicit `$human-review`
 invocation may begin the optional post-completion browser-feedback loop described by the
-`human-review` skill. Focused rounds may defer reviewers and full checks until explicit finish. An
-unchanged session finishes with teardown only; a changed session returns through matching review,
-architect integration review, full validation, a supplemental report, and a separate commit.
+`human-review` skill. Focused rounds may defer reviewers and full checks until explicit finish.
+Every successful teardown remains `completion-pending` until a committed per-target receipt is
+validated. An unchanged session creates only the completion-record commit. A changed session
+returns through matching review, architect integration review, full validation, a supplemental
+report and reviewed-result commit, then a narrow receipt/report-correction commit.
 
 ## Completion
 

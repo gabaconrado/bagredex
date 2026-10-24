@@ -60,5 +60,6 @@ None.
 
 ## Commits
 
-This report is included in the pending cycle commit. Existing user commit `0a80b2e` is preserved
-unchanged.
+The layout refinement was committed as
+`4b57ca970d7ec990529acc0811f70c2b9c28c348` (`feat(calc): refine calculator layout`). Existing user
+commit `0a80b2e` remains unchanged.

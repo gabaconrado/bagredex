@@ -1,6 +1,6 @@
 interface:
   display_name: "Human review"
   short_description: "Review a completed Bagredex feature locally"
-  default_prompt: "Use $human-review to review the most recently completed Bagredex feature."
+  default_prompt: "Use $human-review [TARGET] to review the newest eligible Bagredex feature or explicitly re-review TARGET."
 policy:
   allow_implicit_invocation: false

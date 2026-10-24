@@ -96,11 +96,18 @@ The explicit `$human-review` agent workflow uses a separate, resumable environme
 is complete and committed. Its deterministic lifecycle commands are:
 
 ```bash
+./bagredex.sh human-review candidate
 ./bagredex.sh human-review start FEATURE-SLUG
 ./bagredex.sh human-review status
 ./bagredex.sh human-review reload
 ./bagredex.sh human-review finish
+./bagredex.sh human-review complete
 ```
+
+`candidate` is a read-only Git/history query used by bare `$human-review`. It reports the newest
+eligible completed feature as `available`, or `reviewed` with `EXPLICIT_TARGET_REQUIRED: true` when
+that exact boundary already has a valid completion receipt. It never selects an older candidate in
+that case. An explicit `$human-review FEATURE-SLUG` may intentionally re-review a completed target.
 
 `start` publishes only at `http://127.0.0.1:8000/`, creates the fixed
 `bagredex-human-review` project and fresh `bagredex-human-review-database` volume, and prints stable
@@ -115,8 +122,14 @@ data. `status` is read-only. If startup or reload is interrupted, retain the mar
 `reload`; if teardown is interrupted, run `finish` again. Marker/resource disagreement fails closed
 instead of guessing which state may be deleted.
 
-Only explicit `finish` removes the exact human-review containers, network, and named volume. A
-later `start` therefore begins with a fresh database. These commands never target the ordinary
+Only explicit `finish` removes the exact human-review containers, network, and named volume. After
+confirmed teardown it keeps the private marker in `completion-pending` state; repeated `finish` and
+`status` are read-only and do not print stale credentials. `start` and `reload` refuse until the
+completion is recorded. Every session then adds an append-only tracked receipt under `docs/reports`.
+A changed session uses a reviewed-result commit followed by a narrow receipt/report-correction
+commit; an unchanged session uses only the narrow completion-record commit. `complete` validates
+the committed, unchanged, reachable receipt against the pending marker before removing that marker.
+A later `start` begins with a fresh database. These commands never target the ordinary
 `bagredex-local` review volume. Ordinary `./bagredex.sh review` remains configurable through
 `BAGREDEX_PORT`.
 
