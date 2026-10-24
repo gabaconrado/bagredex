@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
+import { MegaIcon } from "../icons";
 import type {
   Bootstrap,
   CalculatorData,
@@ -10,6 +11,7 @@ import type {
 } from "./contracts";
 import { parseCalculatorData } from "./contracts";
 import {
+  applyBattleStage,
   calculate,
   statIds,
   stats,
@@ -89,6 +91,16 @@ const stageLabels = {
   spd: "Sp. Def",
   spe: "Speed",
 } as const;
+const effectLabel = (value: string) => {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .split(" ")
+    .filter(Boolean)
+    .map(
+      (word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`,
+    )
+    .join(" ");
+};
 
 function newSide(data: CalculatorData, form?: Form): Side {
   const natureId =
@@ -135,6 +147,34 @@ function withClampedHp(
     currentHp: clampInteger(requested, 0, maxHp(data, side, form)),
   };
 }
+export const ratioScaledCurrentHp = (
+  currentHp: number,
+  oldMaxHp: number,
+  newMaxHp: number,
+) => {
+  const safeNewMaxHp =
+    Number.isFinite(newMaxHp) && newMaxHp > 0 ? Math.trunc(newMaxHp) : 0;
+  const oldCurrentHp = Number.isFinite(currentHp) ? Math.trunc(currentHp) : 0;
+  const requested =
+    Number.isFinite(oldMaxHp) && oldMaxHp > 0
+      ? Math.floor((oldCurrentHp * safeNewMaxHp) / oldMaxHp)
+      : oldCurrentHp;
+  return clampInteger(requested, 0, safeNewMaxHp);
+};
+function withRatioScaledHp(
+  data: CalculatorData,
+  previous: Side,
+  next: Side,
+  previousForm: Form,
+  nextForm: Form,
+): Side {
+  const oldMaxHp = maxHp(data, previous, previousForm);
+  const rawNewMaxHp = maxHp(data, next, nextForm);
+  return {
+    ...next,
+    currentHp: ratioScaledCurrentHp(previous.currentHp, oldMaxHp, rawNewMaxHp),
+  };
+}
 function displayedForm(data: CalculatorData, side: Side): Form | undefined {
   const base = data.forms.find(({ id }) => id === side.formId);
   const relation = data.mega_item_relations.find(
@@ -151,6 +191,7 @@ function Choice({
   value,
   choices,
   disabled,
+  className,
   onChange,
 }: {
   id: string;
@@ -158,6 +199,7 @@ function Choice({
   value: string | null;
   choices: Named[];
   disabled?: boolean;
+  className?: string;
   onChange: (value: string | null) => void;
 }) {
   const selected = choices.find((row) => row.id === value);
@@ -182,7 +224,9 @@ function Choice({
     setActive(0);
   };
   return (
-    <div class="damage-field damage-combobox">
+    <div
+      class={`damage-field damage-combobox${className ? ` ${className}` : ""}`}
+    >
       <label for={id}>{label}</label>
       <input
         id={id}
@@ -371,9 +415,29 @@ function PokemonPanel({
   const relation = data.mega_item_relations.find(
     (row) => row.base_form_id === side.formId && row.item_id === side.itemId,
   );
-  const abilityId =
-    side.mega && relation ? relation.locked_ability_id : side.abilityId;
-  const ability = data.abilities.find(({ id }) => id === abilityId);
+  const megaAction = relation
+    ? side.mega
+      ? "Use base form"
+      : `Preview ${data.forms.find(({ id }) => id === relation.mega_form_id)?.name ?? "Mega form"}`
+    : "";
+  const baseAbilityChoices = (base?.abilities ?? [])
+    .map(({ id }) => data.abilities.find((row) => row.id === id))
+    .filter(Boolean) as Named[];
+  const lockedAbility = relation
+    ? data.abilities.find(({ id }) => id === relation.locked_ability_id)
+    : undefined;
+  const activeMegaPreview = side.mega && Boolean(relation);
+  const abilityId = activeMegaPreview
+    ? (relation?.locked_ability_id ?? null)
+    : side.abilityId;
+  const ability = activeMegaPreview
+    ? lockedAbility
+    : data.abilities.find(({ id }) => id === side.abilityId);
+  const abilityChoices = activeMegaPreview
+    ? lockedAbility
+      ? [lockedAbility]
+      : []
+    : baseAbilityChoices;
   const item = data.items.find(({ id }) => id === side.itemId);
   const currentStats =
     form && nature ? stats({ form, nature, sp: side.sp }) : null;
@@ -384,7 +448,11 @@ function PokemonPanel({
       sp: { ...side.sp, [id]: clampInteger(raw, 0, 32) },
     };
     const nextForm = displayedForm(data, next);
-    onChange(nextForm ? withClampedHp(data, next, nextForm) : next);
+    onChange(
+      id === "hp" && form && nextForm
+        ? withRatioScaledHp(data, side, next, form, nextForm)
+        : next,
+    );
   };
   const opponentForm = displayedForm(data, opponent);
   const opponentNature =
@@ -411,22 +479,51 @@ function PokemonPanel({
         })
       : null;
   return (
-    <article class="damage-pokemon" aria-labelledby={`${sideId}-heading`}>
+    <article
+      class="damage-pokemon"
+      aria-label={`${sideId === "left" ? "Left" : "Right"} Pokémon`}
+    >
       <header class="damage-pokemon__header">
-        <div>
-          <p class="eyebrow">
-            {sideId === "left" ? "Left Pokémon" : "Right Pokémon"}
-          </p>
-          <h2 id={`${sideId}-heading`}>{form?.name ?? "Choose a Pokémon"}</h2>
-        </div>
+        <h2>{form?.name ?? "Choose a Pokémon"}</h2>
         {form && (
-          <img
-            src={data.sprite_url_template
-              .replace("__FORM__", form.sprite_form_id)
-              .replace("{sprite_form_id}", form.sprite_form_id)
-              .replace("__VARIANT__", "normal")}
-            alt=""
-          />
+          <div class="damage-pokemon__visual">
+            <span class="damage-pokemon__mega-slot">
+              {relation ? (
+                <button
+                  type="button"
+                  class={side.mega ? "mega-toggle is-active" : "mega-toggle"}
+                  aria-pressed={side.mega}
+                  aria-label={megaAction}
+                  title={megaAction}
+                  onClick={() =>
+                    (() => {
+                      const next = {
+                        ...side,
+                        mega: !side.mega,
+                        abilityContext: {},
+                      };
+                      const nextForm = displayedForm(data, next) ?? form;
+                      onChange(withClampedHp(data, next, nextForm));
+                    })()
+                  }
+                >
+                  <MegaIcon />
+                </button>
+              ) : (
+                <span
+                  class="damage-pokemon__mega-placeholder"
+                  aria-hidden="true"
+                />
+              )}
+            </span>
+            <img
+              src={data.sprite_url_template
+                .replace("__FORM__", form.sprite_form_id)
+                .replace("{sprite_form_id}", form.sprite_form_id)
+                .replace("__VARIANT__", "normal")}
+              alt=""
+            />
+          </div>
         )}
       </header>
       <Choice
@@ -443,7 +540,10 @@ function PokemonPanel({
         <>
           <div class="damage-choice-grid">
             {base.gender === "variable" && (
-              <label class="damage-field" for={`${sideId}-gender`}>
+              <label
+                class="damage-field damage-field--gender"
+                for={`${sideId}-gender`}
+              >
                 Gender
                 <select
                   id={`${sideId}-gender`}
@@ -463,13 +563,10 @@ function PokemonPanel({
             <Choice
               id={`${sideId}-ability`}
               label="Ability"
+              className="damage-field--ability"
               value={abilityId}
-              disabled={side.mega && Boolean(relation)}
-              choices={
-                base.abilities
-                  .map(({ id }) => data.abilities.find((row) => row.id === id))
-                  .filter(Boolean) as Named[]
-              }
+              disabled={activeMegaPreview}
+              choices={abilityChoices}
               onChange={(abilityId) =>
                 update({ abilityId, abilityContext: {} })
               }
@@ -477,6 +574,7 @@ function PokemonPanel({
             <Choice
               id={`${sideId}-item`}
               label="Item"
+              className="damage-field--item"
               value={side.itemId}
               choices={data.items}
               onChange={(itemId) =>
@@ -497,33 +595,58 @@ function PokemonPanel({
             <Choice
               id={`${sideId}-nature`}
               label="Nature"
+              className="damage-field--nature"
               value={side.natureId}
               choices={data.natures}
               onChange={(natureId) => natureId && update({ natureId })}
             />
+            <div class="damage-field damage-field--current-hp">
+              <label for={`${sideId}-current-hp`}>Current HP</label>
+              <span class="damage-hp-control">
+                <input
+                  id={`${sideId}-current-hp`}
+                  type="number"
+                  min="0"
+                  max={currentStats?.hp}
+                  value={side.currentHp}
+                  aria-describedby={`${sideId}-current-hp-percent`}
+                  onInput={(event) =>
+                    update({
+                      currentHp: clampInteger(
+                        event.currentTarget.valueAsNumber,
+                        0,
+                        currentStats?.hp ?? 0,
+                      ),
+                    })
+                  }
+                />
+                <span
+                  id={`${sideId}-current-hp-percent`}
+                  class="damage-hp-control__percentage"
+                >
+                  {currentStats
+                    ? ((side.currentHp / currentStats.hp) * 100).toFixed(1)
+                    : "0.0"}
+                  %
+                </span>
+              </span>
+            </div>
+            <label class="damage-field damage-field--status">
+              Status
+              <select
+                id={`${sideId}-status`}
+                value={side.status}
+                onChange={(event) =>
+                  update({ status: event.currentTarget.value })
+                }
+              >
+                <option value="">Healthy</option>
+                {data.capability.status_values.filter(Boolean).map((status) => (
+                  <option value={status}>{status.toUpperCase()}</option>
+                ))}
+              </select>
+            </label>
           </div>
-          {relation && (
-            <button
-              type="button"
-              class={side.mega ? "mega-toggle is-active" : "mega-toggle"}
-              aria-pressed={side.mega}
-              onClick={() =>
-                (() => {
-                  const next = {
-                    ...side,
-                    mega: !side.mega,
-                    abilityContext: {},
-                  };
-                  const nextForm = displayedForm(data, next) ?? base;
-                  onChange(withClampedHp(data, next, nextForm));
-                })()
-              }
-            >
-              {side.mega
-                ? "Use base form"
-                : `Preview ${data.forms.find(({ id }) => id === relation.mega_form_id)?.name ?? "Mega form"}`}
-            </button>
-          )}
           <section
             class="damage-stats"
             aria-labelledby={`${sideId}-stats-title`}
@@ -536,9 +659,16 @@ function PokemonPanel({
             </header>
             {statIds.map((id) => (
               <div class="damage-stat">
-                <label for={`${sideId}-sp-${id}`}>
-                  {statLabels[id]} <output>{currentStats?.[id] ?? "—"}</output>
+                <label class="damage-stat__label" for={`${sideId}-sp-${id}`}>
+                  {statLabels[id]}
                 </label>
+                <output class="damage-stat__value" for={`${sideId}-sp-${id}`}>
+                  {currentStats
+                    ? id === "hp"
+                      ? currentStats.hp
+                      : applyBattleStage(currentStats[id], side.stages[id])
+                    : "—"}
+                </output>
                 <input
                   id={`${sideId}-sp-${id}`}
                   type="range"
@@ -559,73 +689,35 @@ function PokemonPanel({
                     updateSp(id, event.currentTarget.valueAsNumber)
                   }
                 />
+                {id !== "hp" ? (
+                  <select
+                    id={`${sideId}-stage-${id}`}
+                    class="damage-stage"
+                    aria-label={`${stageLabels[id]} stage`}
+                    value={side.stages[id]}
+                    onChange={(event) =>
+                      update({
+                        stages: {
+                          ...side.stages,
+                          [id]: Number(event.currentTarget.value),
+                        },
+                      })
+                    }
+                  >
+                    {Array.from({ length: 13 }, (_, index) => index - 6).map(
+                      (value) => (
+                        <option value={value}>
+                          {value >= 0 ? `+${value}` : value}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                ) : (
+                  <span class="damage-stage-placeholder" aria-hidden="true" />
+                )}
               </div>
             ))}
           </section>
-          <div class="damage-battle-state">
-            <label class="damage-field">
-              Current HP{" "}
-              <span>
-                {currentStats
-                  ? ((side.currentHp / currentStats.hp) * 100).toFixed(1)
-                  : "0.0"}
-                %
-              </span>
-              <input
-                type="number"
-                min="0"
-                max={currentStats?.hp}
-                value={side.currentHp}
-                onInput={(event) =>
-                  update({
-                    currentHp: clampInteger(
-                      event.currentTarget.valueAsNumber,
-                      0,
-                      currentStats?.hp ?? 0,
-                    ),
-                  })
-                }
-              />
-            </label>
-            <label class="damage-field">
-              Status
-              <select
-                value={side.status}
-                onChange={(event) =>
-                  update({ status: event.currentTarget.value })
-                }
-              >
-                <option value="">Healthy</option>
-                {data.capability.status_values.filter(Boolean).map((status) => (
-                  <option value={status}>{status.toUpperCase()}</option>
-                ))}
-              </select>
-            </label>
-            {Object.entries(stageLabels).map(([id, label]) => (
-              <label class="damage-field">
-                {label} stage
-                <select
-                  value={side.stages[id as keyof Side["stages"]]}
-                  onChange={(event) =>
-                    update({
-                      stages: {
-                        ...side.stages,
-                        [id]: Number(event.currentTarget.value),
-                      },
-                    })
-                  }
-                >
-                  {Array.from({ length: 13 }, (_, index) => index - 6).map(
-                    (value) => (
-                      <option value={value}>
-                        {value > 0 ? `+${value}` : value}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-            ))}
-          </div>
           {Boolean(
             ability?.contextual_inputs.length || item?.contextual_inputs.length,
           ) && (
@@ -815,25 +907,30 @@ function FieldEffects({
   onChange: (value: FieldState) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const summary = [
-    value.weather,
-    value.terrain,
-    ...(["left", "right"] as SideId[]).flatMap((side) =>
-      Object.entries(value[side])
-        .filter(([, active]) => active)
-        .map(([name]) => `${side} ${name}`),
-    ),
+  const fieldSummary = [
+    value.weather && effectLabel(value.weather),
+    value.terrain && `${effectLabel(value.terrain)} Terrain`,
   ].filter(Boolean);
+  const sideSummary = (["left", "right"] as SideId[]).map((side) => ({
+    name: side === "left" ? "Left" : "Right",
+    values: Object.entries(value[side])
+      .filter(([, active]) => active)
+      .map(([name]) => effectLabel(name)),
+  }));
+  const summary = [
+    fieldSummary.length && `Field: ${fieldSummary.join(", ")}`,
+    ...sideSummary.map(
+      ({ name, values }) => values.length && `${name}: ${values.join(", ")}`,
+    ),
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const choices = {
     weather: ["sun", "rain", "sand", "snow"],
     terrain: ["electric", "grassy", "psychic", "misty"],
   } as const;
-  const label = (value: string) => {
-    const words = value.replace(/([A-Z])/g, " $1").toLowerCase();
-    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
-  };
   return (
-    <section class="field-effects">
+    <section class={`field-effects${open ? " field-effects--open" : ""}`}>
       <button
         type="button"
         class="field-effects__summary"
@@ -841,7 +938,7 @@ function FieldEffects({
         onClick={() => setOpen(!open)}
       >
         <span>Field Effects</span>
-        <small>{summary.length ? summary.join(" · ") : "None active"}</small>
+        <small>{summary || "None active"}</small>
       </button>
       {open && (
         <div class="field-effects__body">
@@ -867,7 +964,7 @@ function FieldEffects({
                       })
                     }
                   >
-                    {label(option)}
+                    {effectLabel(option)}
                   </button>
                 ))}
               </div>
@@ -890,7 +987,7 @@ function FieldEffects({
                       })
                     }
                   >
-                    {label(key)}
+                    {effectLabel(key)}
                   </button>
                 ))}
               </div>
@@ -908,6 +1005,56 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
   const [left, setLeft] = useState<Side | null>(null);
   const [right, setRight] = useState<Side | null>(null);
   const [field, setField] = useState(emptyField);
+  useEffect(() => {
+    const interactiveSelector =
+      'input, textarea, select, button, a[href], summary, [role="button"], [role="combobox"], [role="listbox"], [role="option"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"], [role="textbox"]';
+    const shortcuts = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      if (event.key === "Escape") {
+        const root = document.querySelector("[data-damage-calculator-root]");
+        const active = document.activeElement;
+        if (
+          !(root instanceof HTMLElement) ||
+          !(active instanceof HTMLElement) ||
+          !root.contains(active) ||
+          active.closest("dialog") ||
+          (!active.matches(interactiveSelector) &&
+            !active.isContentEditable &&
+            active.tabIndex < 0)
+        )
+          return;
+        event.preventDefault();
+        active.blur();
+        return;
+      }
+      if (event.key !== "1" && event.key !== "2") return;
+      const target = event.target;
+      if (target instanceof Element) {
+        if (target.closest(interactiveSelector)) return;
+        const editable = target.closest<HTMLElement>("[contenteditable]");
+        if (editable && editable.getAttribute("contenteditable") !== "false")
+          return;
+        const focusable = target.closest<HTMLElement>("[tabindex]");
+        if (focusable && focusable.tabIndex >= 0) return;
+      }
+      const sideId = event.key === "1" ? "left" : "right";
+      const destination = document.getElementById(`${sideId}-pokemon`);
+      if (!(destination instanceof HTMLInputElement) || destination.disabled)
+        return;
+      event.preventDefault();
+      destination.focus();
+    };
+    document.addEventListener("keydown", shortcuts);
+    return () => document.removeEventListener("keydown", shortcuts);
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     fetch(bootstrap.dataset_url, {
@@ -960,13 +1107,28 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
         <p>Loading calculation data…</p>
       </section>
     );
+  const hasUnavailableMegaAbility = [left, right].some((side) => {
+    if (!side.mega) return false;
+    const relation = data.mega_item_relations.find(
+      (row) => row.base_form_id === side.formId && row.item_id === side.itemId,
+    );
+    return relation
+      ? !data.abilities.some(({ id }) => id === relation.locked_ability_id)
+      : false;
+  });
+  if (hasUnavailableMegaAbility)
+    return (
+      <section class="damage-state damage-state--error" role="alert">
+        <h1>Damage Calculator unavailable</h1>
+        <p>The selected Mega form references unavailable ability data.</p>
+      </section>
+    );
   const changePokemon = (setter: (side: Side) => void) => (side: Side) => {
     setter(side);
     setField(emptyField());
   };
   return (
     <div class="damage-calculator">
-      <FieldEffects value={field} onChange={setField} />
       <div class="damage-matchup">
         <PokemonPanel
           sideId="left"
@@ -987,6 +1149,7 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
           onPokemonChange={changePokemon(setRight)}
         />
       </div>
+      <FieldEffects value={field} onChange={setField} />
       <p class="visually-hidden" aria-live="polite">
         Damage results update automatically.
       </p>

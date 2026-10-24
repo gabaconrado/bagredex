@@ -1,10 +1,27 @@
 .site-main--damage-calculator {
   width: 100%;
-  place-items: start center;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: start stretch;
 }
 .damage-calculator {
+  --field-effects-inset: max(var(--space-2), env(safe-area-inset-bottom));
+  --field-effects-collapsed-size: 4.5rem;
+  --field-effects-top-reserve: 7.5rem;
+  --field-effects-body-max: clamp(
+    0px,
+    calc(
+      100svh - var(--field-effects-top-reserve) - var(--field-effects-inset) -
+        var(--field-effects-collapsed-size)
+    ),
+    28rem
+  );
+  --field-effects-scroll-clearance: calc(
+    var(--field-effects-collapsed-size) + var(--field-effects-inset)
+  );
+
   display: grid;
-  width: min(100%, 1600px);
+  width: 100%;
+  max-width: 66rem;
   margin-inline: auto;
   gap: 1rem;
 }
@@ -16,7 +33,6 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1rem;
-  align-items: start;
 }
 .damage-pokemon,
 .field-effects {
@@ -28,25 +44,64 @@
 .damage-pokemon {
   padding: 1rem;
   display: grid;
+  align-content: start;
   gap: 1rem;
 }
 .damage-pokemon__header {
+  --damage-pokemon-sprite-size: clamp(5.5rem, 10vw, 7rem);
+
   display: flex;
-  min-height: 5rem;
+  min-height: var(--damage-pokemon-sprite-size);
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
 }
-.damage-pokemon__header img {
-  width: 5rem;
-  height: 5rem;
+.damage-pokemon__visual {
+  display: grid;
+  flex: none;
+  grid-template-columns: 2.75rem var(--damage-pokemon-sprite-size);
+  align-items: center;
+  justify-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.damage-pokemon__visual > img {
+  width: var(--damage-pokemon-sprite-size);
+  height: var(--damage-pokemon-sprite-size);
   object-fit: contain;
   image-rendering: pixelated;
 }
-.damage-choice-grid,
-.damage-battle-state {
+.damage-pokemon__mega-slot,
+.damage-pokemon__mega-placeholder {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+.damage-choice-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas:
+    "gender ability item"
+    "nature current-hp status";
+}
+.damage-field--gender {
+  grid-area: gender;
+}
+.damage-field--ability {
+  grid-area: ability;
+}
+.damage-field--item {
+  grid-area: item;
+}
+.damage-field--nature {
+  grid-area: nature;
+}
+.damage-field--current-hp {
+  grid-area: current-hp;
+}
+.damage-field--status {
+  grid-area: status;
 }
 .damage-field {
   display: grid;
@@ -66,21 +121,45 @@
   color: var(--color-text);
   padding: 0.5rem 0.65rem;
 }
-.damage-field span {
-  float: right;
+.damage-hp-control {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.damage-hp-control input {
+  padding-inline-end: 4.75rem;
+}
+.damage-hp-control__percentage {
+  position: absolute;
+  top: 50%;
+  right: 0.65rem;
+  color: var(--color-text-muted);
   font-weight: 500;
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .mega-toggle {
-  justify-self: start;
-  border: 1px solid var(--color-accent);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.4rem;
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 0.45rem 0.75rem;
-  background: transparent;
-  color: var(--color-accent);
+  background: var(--color-canvas);
+  color: var(--color-text);
+  cursor: pointer;
 }
 .mega-toggle.is-active {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+.mega-toggle .icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 .damage-stats {
   border-block: 1px solid var(--color-border);
@@ -94,18 +173,44 @@
 }
 .damage-stat {
   display: grid;
-  grid-template-columns: minmax(6.5rem, 0.8fr) minmax(8rem, 1.6fr) 4.25rem;
-  gap: 0.65rem;
+  grid-template-columns: 5rem 3.25rem minmax(0, 1fr) 3.25rem 3.75rem;
+  gap: 0.45rem;
   align-items: center;
 }
-.damage-stat label {
-  display: flex;
-  justify-content: space-between;
+.damage-stat__label {
   font-size: 0.82rem;
   font-weight: 700;
 }
-.damage-stat input[type="number"] {
+.damage-stat__value {
+  justify-self: end;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.damage-stat input[type="range"] {
   width: 100%;
+  min-width: 0;
+}
+.damage-stat input[type="number"],
+.damage-stage {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.3rem 0.35rem;
+  align-self: center;
+}
+.damage-stage-placeholder {
+  display: block;
+  width: 100%;
+  height: 2.25rem;
+  align-self: center;
 }
 .damage-context {
   display: flex;
@@ -131,6 +236,13 @@
   grid-template-columns: minmax(11rem, 0.85fr) minmax(10rem, 1.15fr);
   gap: 0.65rem;
   align-items: end;
+}
+.damage-move,
+.damage-result,
+.damage-context,
+.damage-combobox,
+.damage-move :is(button, input, select, [tabindex]) {
+  scroll-margin-block-end: var(--field-effects-scroll-clearance);
 }
 .damage-result {
   position: relative;
@@ -205,9 +317,10 @@
 }
 .field-effects__summary {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   width: 100%;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.15rem;
   border: 0;
   border-radius: inherit;
   padding: 0.9rem 1rem;
@@ -215,21 +328,45 @@
   color: var(--color-text);
   text-align: left;
 }
+.field-effects {
+  position: sticky;
+  z-index: 15;
+  inset-block-end: var(--field-effects-inset);
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  box-shadow: 0 0.85rem 2.25rem
+    color-mix(in srgb, var(--color-text) 22%, transparent);
+}
 .field-effects__summary span {
   font-weight: 800;
 }
 .field-effects__summary small {
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 .field-effects__body {
   display: grid;
+  box-sizing: border-box;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1rem;
+  max-block-size: var(--field-effects-body-max);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0 1rem 1rem;
   border-top: 1px solid var(--color-border);
+}
+@supports (height: 100dvh) {
+  .damage-calculator {
+    --field-effects-body-max: clamp(
+      0px,
+      calc(
+        100dvh - var(--field-effects-top-reserve) - var(--field-effects-inset) -
+          var(--field-effects-collapsed-size)
+      ),
+      28rem
+    );
+  }
 }
 .field-effects__group {
   border: 0;
@@ -281,10 +418,6 @@
   border: 1px solid var(--color-error);
 }
 @media (max-width: 1000px) {
-  .damage-choice-grid,
-  .damage-battle-state {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .field-effects__body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -293,16 +426,28 @@
   }
 }
 @media (max-width: 720px) {
+  .damage-calculator {
+    --field-effects-top-reserve: 6.5rem;
+  }
   .damage-matchup {
     grid-template-columns: 1fr;
+    align-items: start;
   }
-  .damage-choice-grid,
-  .damage-battle-state,
+  .damage-choice-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "gender"
+      "ability"
+      "item"
+      "nature"
+      "current-hp"
+      "status";
+  }
   .field-effects__body {
     grid-template-columns: 1fr;
   }
   .damage-stat {
-    grid-template-columns: 6rem minmax(6rem, 1fr) 4rem;
+    grid-template-columns: 4.75rem 3rem minmax(0, 1fr) 3rem 3.5rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

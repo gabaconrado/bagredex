@@ -49,7 +49,7 @@ test("calculates in both directions and resets field effects", async ({
   await page.getByRole("button", { name: /Field Effects/ }).click();
   await page
     .getByRole("group", { name: "Left" })
-    .getByRole("button", { name: "Single target" })
+    .getByRole("button", { name: "Single Target" })
     .click();
   await page
     .getByRole("group", { name: "Left" })
@@ -57,7 +57,7 @@ test("calculates in both directions and resets field effects", async ({
     .click();
   await expect(
     page.getByRole("button", { name: /Field Effects/ }),
-  ).toContainText("left singleTarget");
+  ).toContainText("Left: Single Target");
   await page
     .getByRole("combobox", { name: "Pokémon", exact: true })
     .nth(0)
@@ -188,8 +188,17 @@ test("preserves combobox focus through navigation, commit, and Escape", async ({
   await input.press("Enter");
   await expect(input).toBeFocused();
   await input.fill("partial");
+  await expect(page.getByRole("listbox")).toBeVisible();
   await input.press("Escape");
   await expect(input).toHaveValue("Charizard");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(input).not.toBeFocused();
+  await page.keyboard.press("2");
+  await expect(
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(1),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("1");
   await expect(input).toBeFocused();
 });
 
@@ -340,6 +349,261 @@ test("keeps directional fields independent and resets on Pokémon change", async
   ).toContainText("None active");
 });
 
+test("groups readable field summaries without changing toggle labels", async ({
+  page,
+}) => {
+  const summary = page.getByRole("button", { name: /Field Effects/ });
+  await expect(summary).toContainText("None active");
+  await summary.click();
+  await page
+    .getByRole("group", { name: "Weather" })
+    .getByRole("button", { name: "Sun" })
+    .click();
+  const grassy = page
+    .getByRole("group", { name: "Terrain" })
+    .getByRole("button", { name: "Grassy" });
+  await grassy.click();
+  await page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Aurora Veil" })
+    .click();
+  await page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Friend Guard" })
+    .click();
+  await page
+    .getByRole("group", { name: "Right" })
+    .getByRole("button", { name: "Helping Hand" })
+    .click();
+  await expect(summary.locator("small")).toHaveText(
+    "Field: Sun, Grassy Terrain · Left: Aurora Veil, Friend Guard · Right: Helping Hand",
+  );
+  await expect(grassy).toHaveText("Grassy");
+  const [labelBox, textBox] = await Promise.all([
+    summary.locator("span").boundingBox(),
+    summary.locator("small").boundingBox(),
+  ]);
+  if (!labelBox || !textBox)
+    throw new Error("Field summary geometry unavailable.");
+  expect(textBox.x).toBeCloseTo(labelBox.x, 0);
+  expect(
+    await summary.evaluate(
+      (button) => button.scrollWidth <= button.clientWidth,
+    ),
+  ).toBe(true);
+});
+
+test("keeps paired panels aligned and compacts the control workflow", async ({
+  page,
+}) => {
+  await commitChoice(
+    page,
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).first(),
+    "Charizard",
+  );
+  const left = page.getByRole("article", { name: "Left Pokémon" });
+  const right = page.getByRole("article", { name: "Right Pokémon" });
+  await expect(left).toBeVisible();
+  await expect(right).toBeVisible();
+  await expect(page.getByText("Left Pokémon", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Right Pokémon", { exact: true })).toHaveCount(0);
+
+  const [leftBox, rightBox] = await Promise.all([
+    left.boundingBox(),
+    right.boundingBox(),
+  ]);
+  const viewport = page.viewportSize();
+  if (!leftBox || !rightBox || !viewport)
+    throw new Error("Pokémon panel geometry unavailable.");
+  if (viewport.width > 720) {
+    expect(leftBox.height).toBeCloseTo(rightBox.height, 0);
+  } else {
+    expect(leftBox.height).toBeGreaterThan(rightBox.height + 100);
+  }
+
+  const nature = left.getByRole("combobox", { name: "Nature", exact: true });
+  const currentHp = left.getByLabel(/Current HP/);
+  await expect(currentHp).toHaveAccessibleName("Current HP");
+  await expect(currentHp).toHaveAccessibleDescription("100.0%");
+  const status = left.getByLabel("Status");
+  const stats = left.getByRole("heading", { name: "Stats" });
+  expect(
+    await left.evaluate(
+      (panel, selectors) => {
+        const elements = selectors.map((selector) =>
+          panel.querySelector(selector),
+        );
+        if (elements.some((element) => !element)) return false;
+        return elements.every(
+          (element, index) =>
+            index === elements.length - 1 ||
+            Boolean(
+              element!.compareDocumentPosition(elements[index + 1]!) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+        );
+      },
+      ["#left-nature", "#left-current-hp", "#left-status", ".damage-stats"],
+    ),
+  ).toBe(true);
+  await expect(nature).toBeVisible();
+  await expect(currentHp).toBeVisible();
+  await expect(status).toBeVisible();
+  await expect(stats).toBeVisible();
+
+  const attackSp = left.getByLabel("Attack SP");
+  const attackStage = left.getByLabel("Attack stage");
+  const attackStageId = await attackStage.getAttribute("id");
+  expect(
+    await attackSp.evaluate((input, stageId) => {
+      const stage = document.getElementById(stageId ?? "");
+      if (!stage || input.parentElement !== stage.parentElement) return false;
+      const tracks = Array.from(input.parentElement!.children);
+      return (
+        input.nextElementSibling === stage &&
+        tracks.indexOf(input) === 3 &&
+        tracks.indexOf(stage) === 4
+      );
+    }, attackStageId),
+  ).toBe(true);
+  await expect(attackStage.locator("option")).toHaveCount(13);
+  await expect(left.getByLabel("HP stage")).toHaveCount(0);
+});
+
+test("keeps native stat tracks aligned and constrained", async ({ page }) => {
+  for (const pokemon of [
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(0),
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(1),
+  ])
+    await commitChoice(page, pokemon, "Charizard");
+  const geometry = await page
+    .getByRole("article", { name: "Left Pokémon" })
+    .locator(".damage-stat")
+    .evaluateAll((rows) =>
+      rows.slice(1).map((row) => {
+        const input =
+          row.querySelector<HTMLInputElement>("input[type=number]")!;
+        const select = row.querySelector<HTMLSelectElement>("select")!;
+        const inputBox = input.getBoundingClientRect();
+        const selectBox = select.getBoundingClientRect();
+        const inputStyle = getComputedStyle(input);
+        const selectStyle = getComputedStyle(select);
+        return {
+          inputX: inputBox.x,
+          inputWidth: inputBox.width,
+          inputHeight: inputBox.height,
+          selectX: selectBox.x,
+          selectWidth: selectBox.width,
+          selectHeight: selectBox.height,
+          inputBoxSizing: inputStyle.boxSizing,
+          selectBoxSizing: selectStyle.boxSizing,
+          inputMinWidth: inputStyle.minWidth,
+          selectMinWidth: selectStyle.minWidth,
+          rowRight: row.getBoundingClientRect().right,
+        };
+      }),
+    );
+  for (const row of geometry) {
+    expect(row.inputHeight).toBeCloseTo(row.selectHeight, 0);
+    expect(row.inputBoxSizing).toBe("border-box");
+    expect(row.selectBoxSizing).toBe("border-box");
+    expect(row.inputMinWidth).toBe("0px");
+    expect(row.selectMinWidth).toBe("0px");
+    expect(row.selectX + row.selectWidth).toBeLessThanOrEqual(row.rowRight + 1);
+  }
+  expect(new Set(geometry.map(({ inputX }) => Math.round(inputX))).size).toBe(
+    1,
+  );
+  expect(new Set(geometry.map(({ selectX }) => Math.round(selectX))).size).toBe(
+    1,
+  );
+});
+
+test("keeps Mega geometry stable and restores the base ability", async ({
+  page,
+}) => {
+  const pokemon = page
+    .getByRole("combobox", { name: "Pokémon", exact: true })
+    .first();
+  await commitChoice(page, pokemon, "Charizard");
+  const panel = page.getByRole("article", { name: "Left Pokémon" });
+  const sprite = panel.locator(".damage-pokemon__visual > img");
+  const header = panel.locator(".damage-pokemon__header");
+  const initialSprite = await sprite.boundingBox();
+  const initialHeader = await header.boundingBox();
+  const ability = panel.getByRole("combobox", { name: "Ability" });
+  await commitChoice(page, ability, "Solar Power");
+  await commitChoice(
+    page,
+    panel.getByRole("combobox", { name: "Item" }),
+    "Charizardite X",
+  );
+  const relatedSprite = await sprite.boundingBox();
+  const relatedHeader = await header.boundingBox();
+  if (!initialSprite || !initialHeader || !relatedSprite || !relatedHeader)
+    throw new Error("Mega geometry is unavailable.");
+  expect(relatedSprite).toEqual(initialSprite);
+  expect(relatedHeader.height).toBeCloseTo(initialHeader.height, 0);
+  const mega = panel.getByRole("button", { name: "Preview Charizard-Mega-X" });
+  await mega.click();
+  await expect(ability).toBeDisabled();
+  await expect(ability).toHaveValue("Tough Claws");
+  const megaSprite = await sprite.boundingBox();
+  expect(megaSprite).toEqual(initialSprite);
+  await panel.getByRole("button", { name: "Use base form" }).click();
+  await expect(ability).toBeEnabled();
+  await expect(ability).toHaveValue("Solar Power");
+});
+
+test("keeps sticky field effects bounded without duplicate page whitespace", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 560 });
+  for (const pokemon of [
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(0),
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(1),
+  ])
+    await commitChoice(page, pokemon, "Charizard");
+  const field = page.locator(".field-effects");
+  await expect(field).toHaveCSS("position", "sticky");
+  const summary = page.getByRole("button", { name: /Field Effects/ });
+  await summary.click();
+  await expect(field).toHaveClass(/field-effects--open/);
+  const body = field.locator(".field-effects__body");
+  expect(
+    await body.evaluate(
+      (element) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  await body.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await expect(
+    page.getByRole("group", { name: "Right" }).getByRole("button", {
+      name: "Tailwind",
+    }),
+  ).toBeVisible();
+
+  const move6 = page
+    .getByRole("combobox", { name: "Move 6", exact: true })
+    .last();
+  await move6.scrollIntoViewIfNeeded();
+  await commitChoice(page, move6, "Dragon Claw");
+  await expect(move6).toHaveValue("Dragon Claw");
+  await summary.click();
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const gap = await page
+    .locator(".damage-calculator")
+    .evaluate((calculator) => {
+      const matchup = calculator.querySelector(".damage-matchup")!;
+      const fieldEffects = calculator.querySelector(".field-effects")!;
+      return (
+        fieldEffects.getBoundingClientRect().top -
+        matchup.getBoundingClientRect().bottom
+      );
+    });
+  expect(gap).toBeGreaterThan(8);
+  expect(gap).toBeLessThan(32);
+});
+
 test("uses pressed cells for mutually exclusive field conditions", async ({
   page,
 }) => {
@@ -423,7 +687,7 @@ test("recalculates and restores damage when field cells toggle", async ({
 
   const helpingHand = page
     .getByRole("group", { name: "Left" })
-    .getByRole("button", { name: "Helping hand" });
+    .getByRole("button", { name: "Helping Hand" });
   await helpingHand.click();
   await expect(fireResult).not.toHaveText(fireBaseline);
   await helpingHand.click();

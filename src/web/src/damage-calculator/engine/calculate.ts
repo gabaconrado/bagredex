@@ -76,7 +76,7 @@ export function stats(
   }
   return result;
 }
-const stage = (value: number, amount: number) =>
+export const applyBattleStage = (value: number, amount: number) =>
   amount >= 0
     ? Math.floor((value * (2 + amount)) / 2)
     : Math.floor((value * 2) / (2 - amount));
@@ -476,7 +476,7 @@ export function calculate(
   const defenseStage = critical
     ? Math.min(0, defender.stages[defenseId])
     : defender.stages[defenseId];
-  let attack = stage(sourceStats[sourceAttackId], attackStage);
+  let attack = applyBattleStage(sourceStats[sourceAttackId], attackStage);
   const overriddenDefense = move.calculation.override_defensive_stat;
   const actualDefenseId =
     overriddenDefense === "def" || overriddenDefense === "spd"
@@ -484,7 +484,7 @@ export function calculate(
       : defenseId;
   let defense = Math.max(
     1,
-    stage(
+    applyBattleStage(
       defenderStats[actualDefenseId],
       move.calculation.ignore_defensive || attacker.ability?.id === "unaware"
         ? 0
@@ -1184,7 +1184,7 @@ function effectiveSpeed(
   terrain: string,
   tailwind: boolean,
 ): number {
-  let speed = stage(raw, combatant.stages.spe);
+  let speed = applyBattleStage(raw, combatant.stages.spe);
   if (tailwind) speed = applyMod(speed, 8192);
   if (combatant.ability?.id === "slowstart" && combatant.context.ability_active)
     speed = applyMod(speed, 2048);
