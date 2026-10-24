@@ -19,6 +19,17 @@ blocked by the sandbox, but only after confirming required images are already lo
 cannot pull. Scope escalated Podman work to Bagredex resources; never log in, pull, push, contact a
 registry, prune account-wide state, or mutate unrelated containers, images, networks, or volumes.
 
+Run planned project-pinned Playwright validation normally first. If the browser cannot launch
+because the managed sandbox denies permissions, IPC, or browser startup, confirm the Playwright
+package and requested browser executable are already local and the configured base URL targets the
+local Bagredex runtime. Then request approval to retry the exact same command from the same working
+directory with direct sandbox elevation. Preserve its arguments, environment, paths, browser
+project selection, and security settings. Never install or download tooling, use a package runner
+that can obtain missing packages, contact an external service, add insecure browser flags, or
+otherwise change command semantics to qualify for elevation. Stop if approval is denied, the retry
+fails for a different reason, or the original failure is an assertion, server, credential, missing
+browser, or ordinary test failure. No other agent may request Playwright elevation.
+
 Before committing, inspect local status and full diff, ensure reviews have no blocking findings,
 run .codex/lint.sh and all plan-required checks, verify staged content, and use Conventional
 Commits with the trailer required by git-standards. Stage only intended files. Fix owned ordinary

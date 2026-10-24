@@ -13,8 +13,9 @@ Use this workflow for every requested Bagredex feature. Read
 - Fix ordinary implementation and validation failures within the owning scope, then rerun checks.
 - Stop and report missing host tools or permission restrictions. Do not install tools or change
   environment/security behavior to bypass failures. Only the deployment agent may retry an
-  approved local Git mutation or local Bagredex Podman validation command with direct sandbox
-  elevation, as defined by `git-standards` and `bash-standards`.
+  approved local Git mutation, local Bagredex Podman validation command, or qualifying
+  already-local Playwright validation command with direct sandbox elevation, as defined by
+  `git-standards` and `bash-standards`.
 - Never perform any Git remote operation or access an operational external service.
 - Public documentation may be browsed when relevant. Data updates consume user-supplied local
   source snapshots rather than contacting upstream repositories.

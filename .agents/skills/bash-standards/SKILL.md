@@ -35,8 +35,10 @@ Apply these standards to maintained shell scripts and shell fragments.
   non-operational paths.
 - Stop and report permission failures in shell work. The deployment agent may retry an approved,
   exact local Bagredex Podman validation command with direct sandbox elevation after the sandbox
-  blocks it. No other agent may request Podman elevation. Approved local Git mutation is governed
-  separately by `git-standards`.
+  blocks it. The deployment agent may also retry an approved, exact, project-pinned Playwright
+  validation command after a normal attempt fails before test execution because the managed
+  sandbox prevents the browser from launching. No other agent may request Podman or Playwright
+  elevation. Approved local Git mutation is governed separately by `git-standards`.
 
 ## Podman and verification
 
@@ -48,5 +50,11 @@ Apply these standards to maintained shell scripts and shell fragments.
   registry, use account-wide prune commands, or mutate unrelated container state.
 - Retry only the exact command blocked by the sandbox. Stop if approval is denied or the elevated
   command fails for another permission or environment reason.
+- Before an escalated Playwright retry, confirm the pinned package and requested browser executable
+  are already local and the configured base URL targets the local Bagredex runtime. Preserve the
+  command, working directory, arguments, environment, paths, browser project selection, and
+  security settings. Never install or download missing tooling, contact an external service, add
+  insecure browser flags, or elevate assertion, server, credential, missing-browser, or ordinary
+  test failures.
 - Run `bash -n` and `shellcheck` for changed Bash scripts.
 - Exercise safe dry-run or read-only paths when available and report checks not run.

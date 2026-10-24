@@ -28,12 +28,18 @@ packaging.
   backend-local `src/backend/.cache/uv` cache. Do not set `UV_CACHE_DIR` or add a command-specific
   cache override; changing cache paths remains prohibited as a restriction bypass.
 - Stop and report permission or sandbox failures except for these `deployment_agent` operations:
-  an approved local Git mutation, or an approved local Bagredex Podman validation command. Retry
-  only the exact blocked operation with direct sandbox elevation and stop if it is denied.
+  an approved local Git mutation, an approved local Bagredex Podman validation command, or an
+  approved retry of an already-local Playwright validation command after the managed sandbox
+  prevents the browser from launching. Retry only the exact blocked operation with direct sandbox
+  elevation and stop if it is denied or fails for a different reason.
   Escalated Podman work must target only Bagredex containers, images, networks, and volumes; must
   use already-local images; and must never log in, pull, push, prune account-wide state, or contact
-  a registry or other operational service. Never change environment variables, paths, registries,
-  command semantics, security controls, or tool configuration to bypass a restriction.
+  a registry or other operational service. Before a Playwright retry, confirm the project-pinned
+  package and requested browser are already local and the configured base URL targets the local
+  Bagredex runtime. Preserve the failed command's working directory, arguments, environment,
+  paths, project selection, and browser security settings. Never install or download tooling,
+  contact an external service, add insecure browser flags, or change environment variables, paths,
+  registries, command semantics, security controls, or tool configuration to bypass a restriction.
 - Treat syntax, formatting, lint, type, test, build, and validation failures as ordinary feedback.
   Diagnose them, fix owned files, and rerun the failed check.
 - Preserve unrelated user changes. Never perform destructive cleanup without explicit approval.
