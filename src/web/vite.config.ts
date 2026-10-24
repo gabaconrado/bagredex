@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         pokedex: "src/pokedex.tsx",
         "team-builder": "src/team-builder.tsx",
+        "damage-calculator": "src/damage-calculator.tsx",
       },
     },
   },

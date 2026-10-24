@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/bundle-v5.schema.json",
+  "title": "Bagredex damage-calculator Pokémon bundle manifest",
+  "description": "Pinned schema-5 manifest with normalized Showdown damage facts and calculator capability metadata.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown_sources",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": {"const": "showdown-multi-s5-i6-215ea62bf67e"},
+    "bundle_hash": {"const": "215ea62bf67e00ffb7547eb6d0f6f22b87afed198a48d55691ee3bf63ceac592"},
+    "bundle_schema_version": {"const": "5"},
+    "importer_version": {"const": "6"},
+    "source_shape_version": {"const": "showdown-champions-multi-revision-5"},
+    "showdown_sources": {"type": "array", "minItems": 2, "maxItems": 2},
+    "counts": {
+      "type": "object",
+      "required": ["type_effectiveness", "calculator_capabilities"],
+      "properties": {
+        "type_effectiveness": {"const": 324},
+        "calculator_capabilities": {"const": 1}
+      }
+    },
+    "files": {"type": "array", "minItems": 34}
+  },
+  "additionalProperties": true
+}

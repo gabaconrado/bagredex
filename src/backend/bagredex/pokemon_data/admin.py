@@ -7,12 +7,14 @@ from django.http import HttpRequest
 
 from .models import (
     ActiveDataVersion,
+    CalculatorCapability,
     DataActivation,
     DataVersion,
     Item,
     ItemProfile,
     MegaItemRelation,
     Nature,
+    TypeEffectiveness,
 )
 
 
@@ -63,4 +65,6 @@ class ItemProfileAdmin(ReadOnlyAdmin):
     )
 
 
-admin.site.register((Item, Nature, MegaItemRelation), ReadOnlyAdmin)
+admin.site.register(
+    (Item, Nature, MegaItemRelation, TypeEffectiveness, CalculatorCapability), ReadOnlyAdmin
+)

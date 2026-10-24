@@ -25,8 +25,8 @@ packaging.
   other operational external service. Public documentation browsing is allowed when relevant.
 - Never download or install a missing host tool. Stop and report missing capabilities.
 - Run backend uv commands through `src/backend/pyproject.toml` so uv uses its configured
-  repository-root `.cache/uv` cache. Do not set `UV_CACHE_DIR` or add a command-specific cache
-  override; changing cache paths remains prohibited as a restriction bypass.
+  backend-local `src/backend/.cache/uv` cache. Do not set `UV_CACHE_DIR` or add a command-specific
+  cache override; changing cache paths remains prohibited as a restriction bypass.
 - Stop and report permission or sandbox failures except for these `deployment_agent` operations:
   an approved local Git mutation, or an approved local Bagredex Podman validation command. Retry
   only the exact blocked operation with direct sandbox elevation and stop if it is denied.

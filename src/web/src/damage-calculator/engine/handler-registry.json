@@ -1,0 +1,10 @@
+{
+  "status": { "evidence": "engine-status-no-damage" },
+  "core-formula": { "evidence": "pinned-ordered-roll-golden" },
+  "variable-power": { "evidence": "variable-and-fixed-power-golden" },
+  "per-hit": { "evidence": "progressive-multihit-golden" },
+  "move-special": { "evidence": "pinned-move-handler-audit" },
+  "ability-modifier": { "evidence": "ability-handler-group-tests" },
+  "item-modifier": { "evidence": "item-handler-group-tests" },
+  "state-neutral": { "evidence": "reviewed-user-state-or-post-damage-proof" }
+}

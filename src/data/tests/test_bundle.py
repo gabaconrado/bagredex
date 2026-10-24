@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -10,11 +11,11 @@ from pathlib import Path
 from unittest import mock
 
 from src.data.importer.bundle import (
-    BundleError,
     EXPECTED_REVISION,
     M_A_ITEM_TEXT_OVERLAY_IDS,
-    _apply_overlays,
+    BundleError,
     _apply_m_a_item_text_overlay,
+    _apply_overlays,
     _canonical_bytes,
     _combine_extractions,
     _extract,
@@ -57,9 +58,14 @@ class MultiRevisionSourceTests(unittest.TestCase):
             value["id"]: value for value in historical["regulations"]["m-a"]["items"]
         }
         self.assertTrue(
-            all(profiles[item_id]["short_description"] for item_id in M_A_ITEM_TEXT_OVERLAY_IDS)
+            all(
+                profiles[item_id]["short_description"]
+                for item_id in M_A_ITEM_TEXT_OVERLAY_IDS
+            )
         )
-        self.assertEqual(historical["regulations"]["m-a"]["memberships"], before_memberships)
+        self.assertEqual(
+            historical["regulations"]["m-a"]["memberships"], before_memberships
+        )
         self.assertEqual(historical["mega_relations"], before_mega)
 
     def test_m_a_item_text_compatibility_rejects_wrong_target_set(self) -> None:
@@ -87,8 +93,11 @@ class MultiRevisionSourceTests(unittest.TestCase):
         if not (repository / ".git").exists():
             self.skipTest("local Pokémon Showdown checkout is unavailable")
         before = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repository, check=True,
-            capture_output=True, text=True,
+            ["git", "status", "--porcelain"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
         with tempfile.TemporaryDirectory() as name:
             tree = Path(name) / "tree"
@@ -100,58 +109,80 @@ class MultiRevisionSourceTests(unittest.TestCase):
                 "[Gen 9 Champions] VGC 2026 Reg M-A",
             )
         after = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=repository, check=True,
-            capture_output=True, text=True,
+            ["git", "status", "--porcelain"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout
         self.assertEqual(after, before)
 
     def test_missing_historical_object_fails_closed(self) -> None:
         repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
-        with tempfile.TemporaryDirectory() as name, mock.patch(
-            "src.data.importer.bundle._run", return_value="0" * 40
+        with (
+            tempfile.TemporaryDirectory() as name,
+            mock.patch("src.data.importer.bundle._run", return_value="0" * 40),
+            self.assertRaisesRegex(BundleError, "historical Showdown object resolved"),
         ):
-            with self.assertRaisesRegex(BundleError, "historical Showdown object resolved"):
-                _materialize_historical_tree(repository, Path(name) / "tree")
+            _materialize_historical_tree(repository, Path(name) / "tree")
 
     def test_wrong_historical_commit_date_fails_closed(self) -> None:
         repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
-        with tempfile.TemporaryDirectory() as name, mock.patch(
-            "src.data.importer.bundle._run",
-            side_effect=[
-                "b555f4d8ce7250e72939fe0c12cc5b303741d203",
-                "2026-04-11",
-            ],
+        with (
+            tempfile.TemporaryDirectory() as name,
+            mock.patch(
+                "src.data.importer.bundle._run",
+                side_effect=[
+                    "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+                    "2026-04-11",
+                ],
+            ),
+            self.assertRaisesRegex(BundleError, "commit date changed"),
         ):
-            with self.assertRaisesRegex(BundleError, "commit date changed"):
-                _materialize_historical_tree(repository, Path(name) / "tree")
+            _materialize_historical_tree(repository, Path(name) / "tree")
 
     def test_invalid_historical_archive_fails_closed(self) -> None:
         repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
         completed = subprocess.CompletedProcess([], 0, stdout=b"not a tar", stderr=b"")
-        with tempfile.TemporaryDirectory() as name, mock.patch(
-            "src.data.importer.bundle._run",
-            side_effect=[
-                "b555f4d8ce7250e72939fe0c12cc5b303741d203",
-                "2026-04-10",
-            ],
-        ), mock.patch("src.data.importer.bundle.subprocess.run", return_value=completed):
-            with self.assertRaisesRegex(BundleError, "archive is invalid"):
-                _materialize_historical_tree(repository, Path(name) / "tree")
+        with (
+            tempfile.TemporaryDirectory() as name,
+            mock.patch(
+                "src.data.importer.bundle._run",
+                side_effect=[
+                    "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+                    "2026-04-10",
+                ],
+            ),
+            mock.patch(
+                "src.data.importer.bundle.subprocess.run", return_value=completed
+            ),
+            self.assertRaisesRegex(BundleError, "archive is invalid"),
+        ):
+            _materialize_historical_tree(repository, Path(name) / "tree")
 
     def test_cross_revision_identity_conflict_fails_closed(self) -> None:
         form = {
-            "id": "pikachu", "name": "Pikachu", "national_dex_number": 25,
-            "base_form_id": "pikachu", "form_label": "", "is_mega": False,
+            "id": "pikachu",
+            "name": "Pikachu",
+            "national_dex_number": 25,
+            "base_form_id": "pikachu",
+            "form_label": "",
+            "is_mega": False,
             "sprite_id": "pikachu",
         }
         historical = {
-            "formats": [{"id": "m-a"}], "forms": [form], "mega_relations": [],
-            "regulations": {"m-a": {}}, "source_counts": {},
+            "formats": [{"id": "m-a"}],
+            "forms": [form],
+            "mega_relations": [],
+            "regulations": {"m-a": {}},
+            "source_counts": {},
         }
         current = {
             "formats": [{"id": "m-b"}, {"id": "m-c"}],
-            "forms": [{**form, "name": "Pikachu conflict"}], "mega_relations": [],
-            "regulations": {"m-b": {}, "m-c": {}}, "source_counts": {},
+            "forms": [{**form, "name": "Pikachu conflict"}],
+            "mega_relations": [],
+            "regulations": {"m-b": {}, "m-c": {}},
+            "source_counts": {},
         }
         with self.assertRaisesRegex(BundleError, "form identity conflict"):
             _combine_extractions(current, historical)
@@ -159,7 +190,10 @@ class MultiRevisionSourceTests(unittest.TestCase):
 
 class CanonicalEncodingTests(unittest.TestCase):
     def test_encoding_is_sorted_compact_utf8_with_final_newline(self) -> None:
-        self.assertEqual(_canonical_bytes({"z": 1, "a": "Flabébé"}), b'{"a":"Flab\xc3\xa9b\xc3\xa9","z":1}\n')
+        self.assertEqual(
+            _canonical_bytes({"z": 1, "a": "Flabébé"}),
+            b'{"a":"Flab\xc3\xa9b\xc3\xa9","z":1}\n',
+        )
 
     def test_duplicate_composite_key_is_rejected(self) -> None:
         records = [{"regulation_id": "m-c", "id": "move"}] * 2
@@ -170,7 +204,15 @@ class CanonicalEncodingTests(unittest.TestCase):
 class SpriteSelectionTests(unittest.TestCase):
     def test_both_home_variants_are_converted_and_hashed(self) -> None:
         repository = Path(__file__).parents[3]
-        source = repository / "references" / "sprites" / "sprites" / "pokemon" / "other" / "home"
+        source = (
+            repository
+            / "references"
+            / "sprites"
+            / "sprites"
+            / "pokemon"
+            / "other"
+            / "home"
+        )
         if not source.is_dir() or shutil.which("cwebp") is None:
             self.skipTest("local PokeAPI sprites or cwebp are unavailable")
         with tempfile.TemporaryDirectory() as name:
@@ -194,11 +236,23 @@ class SpriteSelectionTests(unittest.TestCase):
             records = _sprite_records(
                 [{"id": "pikachu", "national_dex_number": 25}], sprites, pokeapi, output
             )
-            self.assertEqual([record["variant"] for record in records], ["normal", "shiny"])
+            self.assertEqual(
+                [record["variant"] for record in records], ["normal", "shiny"]
+            )
             self.assertTrue(all(len(record["sha256"]) == 64 for record in records))
-            self.assertEqual({(record["width"], record["height"]) for record in records}, {(384, 384)})
-            self.assertTrue(all(_parse_webp(output / record["path"])["has_alpha"] for record in records))
-            normal_record = next(record for record in records if record["variant"] == "normal")
+            self.assertEqual(
+                {(record["width"], record["height"]) for record in records},
+                {(384, 384)},
+            )
+            self.assertTrue(
+                all(
+                    _parse_webp(output / record["path"])["has_alpha"]
+                    for record in records
+                )
+            )
+            normal_record = next(
+                record for record in records if record["variant"] == "normal"
+            )
             self.assertEqual(
                 normal_record["sha256"],
                 "a9d1ab2ab66a1be440143caedbef08f3a0d373a1c0d936a715d6a8fdff40db92",
@@ -206,7 +260,15 @@ class SpriteSelectionTests(unittest.TestCase):
 
     def test_missing_shiny_sprite_fails_closed(self) -> None:
         repository = Path(__file__).parents[3]
-        source = repository / "references" / "sprites" / "sprites" / "pokemon" / "other" / "home"
+        source = (
+            repository
+            / "references"
+            / "sprites"
+            / "sprites"
+            / "pokemon"
+            / "other"
+            / "home"
+        )
         if not source.is_dir() or shutil.which("cwebp") is None:
             self.skipTest("local PokeAPI sprites or cwebp are unavailable")
         with tempfile.TemporaryDirectory() as name:
@@ -221,10 +283,14 @@ class SpriteSelectionTests(unittest.TestCase):
                 "25,pikachu,25,4,60,112,35,1\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(BundleError, "required shiny PokeAPI HOME sprite"):
+            with self.assertRaisesRegex(
+                BundleError, "required shiny PokeAPI HOME sprite"
+            ):
                 _sprite_records(
                     [{"id": "pikachu", "national_dex_number": 25}],
-                    root / "sprites", root / "pokeapi", root / "output",
+                    root / "sprites",
+                    root / "pokeapi",
+                    root / "output",
                 )
 
     def test_complete_mapping_is_unique_and_covers_reviewed_exceptions(self) -> None:
@@ -238,15 +304,32 @@ class SpriteSelectionTests(unittest.TestCase):
         self.assertEqual(len(mapping), 350)
         self.assertEqual(len({value["pokemon_id"] for value in mapping.values()}), 350)
         self.assertEqual(mapping["aegislash"]["pokemon_identifier"], "aegislash-shield")
-        self.assertEqual(mapping["meowsticfmega"]["pokemon_identifier"], "meowstic-female-mega")
+        self.assertEqual(
+            mapping["meowsticfmega"]["pokemon_identifier"], "meowstic-female-mega"
+        )
 
     def test_home_source_png_has_exact_approved_structure(self) -> None:
-        path = Path(__file__).parents[3] / "references" / "sprites" / "sprites" / "pokemon" / "other" / "home" / "59.png"
+        path = (
+            Path(__file__).parents[3]
+            / "references"
+            / "sprites"
+            / "sprites"
+            / "pokemon"
+            / "other"
+            / "home"
+            / "59.png"
+        )
         if not path.is_file():
             self.skipTest("local PokeAPI sprites are unavailable")
         self.assertEqual(
             _parse_png(path),
-            {"width": 512, "height": 512, "bit_depth": 8, "color_type": 6, "interlace": 0},
+            {
+                "width": 512,
+                "height": 512,
+                "bit_depth": 8,
+                "color_type": 6,
+                "interlace": 0,
+            },
         )
 
     def test_duplicate_exact_mapping_is_rejected(self) -> None:
@@ -259,7 +342,9 @@ class SpriteSelectionTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(BundleError, "maps to 2"):
-                _load_sprite_mapping([{"id": "pikachu", "national_dex_number": 25}], Path(name))
+                _load_sprite_mapping(
+                    [{"id": "pikachu", "national_dex_number": 25}], Path(name)
+                )
 
     def test_malformed_numeric_mapping_is_contextual(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -270,8 +355,12 @@ class SpriteSelectionTests(unittest.TestCase):
                 "oops,pikachu,25,4,60,112,35,1\n",
                 encoding="utf-8",
             )
-            with self.assertRaisesRegex(BundleError, "pokemon.csv:2: id and species_id"):
-                _load_sprite_mapping([{"id": "pikachu", "national_dex_number": 25}], Path(name))
+            with self.assertRaisesRegex(
+                BundleError, "pokemon.csv:2: id and species_id"
+            ):
+                _load_sprite_mapping(
+                    [{"id": "pikachu", "national_dex_number": 25}], Path(name)
+                )
 
 
 class OverlayTests(unittest.TestCase):
@@ -287,14 +376,20 @@ class OverlayTests(unittest.TestCase):
             before = {"id": "pikachu", "name": "Pikachu"}
             after = {"id": "pikachu", "name": "Pikachu corrected"}
             overlay = {
-                "id": "pikachu-name", "showdown_revision": EXPECTED_REVISION,
-                "record": "forms.json:pikachu", "rationale": "Fixture proves the defect.",
-                "authoring_date": "2026-10-15", "before": before, "after": after,
+                "id": "pikachu-name",
+                "showdown_revision": EXPECTED_REVISION,
+                "record": "forms.json:pikachu",
+                "rationale": "Fixture proves the defect.",
+                "authoring_date": "2026-10-15",
+                "before": before,
+                "after": after,
                 "fixture": "proof.json",
             }
             fixture = {
-                "overlay_id": "pikachu-name", "record": "forms.json:pikachu",
-                "expected_before": before, "expected_after": after,
+                "overlay_id": "pikachu-name",
+                "record": "forms.json:pikachu",
+                "expected_before": before,
+                "expected_after": after,
             }
             (fixtures / "proof.json").write_bytes(_canonical_bytes(fixture))
             (overrides / "pikachu-name.json").write_bytes(_canonical_bytes(overlay))
@@ -310,21 +405,29 @@ class OverlayTests(unittest.TestCase):
             (root / "fixtures").mkdir()
             (root / "output").mkdir()
             overlay = {
-                "id": "stale", "showdown_revision": EXPECTED_REVISION,
-                "record": "forms.json:pikachu", "rationale": "Regression.",
-                "authoring_date": "2026-10-15", "before": {"id": "pikachu", "name": "Old"},
-                "after": {"id": "pikachu", "name": "New"}, "fixture": "proof.json",
+                "id": "stale",
+                "showdown_revision": EXPECTED_REVISION,
+                "record": "forms.json:pikachu",
+                "rationale": "Regression.",
+                "authoring_date": "2026-10-15",
+                "before": {"id": "pikachu", "name": "Old"},
+                "after": {"id": "pikachu", "name": "New"},
+                "fixture": "proof.json",
             }
             fixture = {
-                "overlay_id": "stale", "record": "forms.json:pikachu",
-                "expected_before": overlay["before"], "expected_after": overlay["after"],
+                "overlay_id": "stale",
+                "record": "forms.json:pikachu",
+                "expected_before": overlay["before"],
+                "expected_after": overlay["after"],
             }
             (root / "fixtures" / "proof.json").write_bytes(_canonical_bytes(fixture))
             (root / "overrides" / "stale.json").write_bytes(_canonical_bytes(overlay))
             with self.assertRaisesRegex(BundleError, "before value no longer matches"):
                 _apply_overlays(
                     {"forms.json": [{"id": "pikachu", "name": "Current"}]},
-                    root / "overrides", root / "fixtures", root / "output",
+                    root / "overrides",
+                    root / "fixtures",
+                    root / "output",
                 )
 
 
@@ -355,15 +458,23 @@ class SchemaArtifactTests(unittest.TestCase):
         schema_root = Path(__file__).parents[1] / "schema"
         for path in sorted(schema_root.glob("*.json")):
             with self.subTest(path=path.name):
-                self.assertIsInstance(json.loads(path.read_text(encoding="utf-8")), dict)
+                self.assertIsInstance(
+                    json.loads(path.read_text(encoding="utf-8")), dict
+                )
 
-    def test_v2_schema_pins_complete_published_manifest_and_rejects_mutations(self) -> None:
+    def test_v2_schema_pins_complete_published_manifest_and_rejects_mutations(
+        self,
+    ) -> None:
         data_root = Path(__file__).parents[1]
-        schema = json.loads((data_root / "schema" / "bundle-v2.schema.json").read_text())
+        schema = json.loads(
+            (data_root / "schema" / "bundle-v2.schema.json").read_text()
+        )
         manifest = json.loads(
             (
-                data_root / "releases" / "showdown-multi-s2-i3-fc85b358deaa" /
-                "manifest.json"
+                data_root
+                / "releases"
+                / "showdown-multi-s2-i3-fc85b358deaa"
+                / "manifest.json"
             ).read_text()
         )
 
@@ -402,30 +513,51 @@ class SchemaArtifactTests(unittest.TestCase):
 
     def test_record_schema_exposes_every_portable_file_root(self) -> None:
         schema = json.loads(
-            (Path(__file__).parents[1] / "schema" / "records-v1.schema.json").read_text()
+            (
+                Path(__file__).parents[1] / "schema" / "records-v1.schema.json"
+            ).read_text()
         )
         roots = schema["$defs"]["file_roots"]["properties"]
         self.assertEqual(
             set(roots),
             {
-                "mechanics_profiles.json", "regulations.json", "forms.json", "types.json",
-                "abilities.json", "moves.json", "move_flags.json",
-                "regulation_memberships.json", "profiles.json", "ability_profiles.json",
-                "move_profiles.json", "move_flag_relations.json", "mega_relations.json",
-                "learnsets.json", "sprite_mappings.json", "sprites.json",
+                "mechanics_profiles.json",
+                "regulations.json",
+                "forms.json",
+                "types.json",
+                "abilities.json",
+                "moves.json",
+                "move_flags.json",
+                "regulation_memberships.json",
+                "profiles.json",
+                "ability_profiles.json",
+                "move_profiles.json",
+                "move_flag_relations.json",
+                "mega_relations.json",
+                "learnsets.json",
+                "sprite_mappings.json",
+                "sprites.json",
             },
         )
         self.assertTrue(all("$ref" in value["items"] for value in roots.values()))
 
-    def test_manifest_schema_accepts_only_coherent_importer_release_contracts(self) -> None:
+    def test_manifest_schema_accepts_only_coherent_importer_release_contracts(
+        self,
+    ) -> None:
         data_root = Path(__file__).parents[1]
-        schema = json.loads((data_root / "schema" / "bundle-v1.schema.json").read_text())
+        schema = json.loads(
+            (data_root / "schema" / "bundle-v1.schema.json").read_text()
+        )
         releases = data_root / "releases"
         legacy = json.loads(
-            (releases / "showdown-3a766f2c-s1-i1-923ba416555c" / "manifest.json").read_text()
+            (
+                releases / "showdown-3a766f2c-s1-i1-923ba416555c" / "manifest.json"
+            ).read_text()
         )
         current = json.loads(
-            (releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d" / "manifest.json").read_text()
+            (
+                releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d" / "manifest.json"
+            ).read_text()
         )
         self.assertEqual(self._matching_manifest_schema_branches(schema, legacy), 1)
         self.assertEqual(self._matching_manifest_schema_branches(schema, current), 1)
@@ -443,7 +575,9 @@ class SchemaArtifactTests(unittest.TestCase):
         mismatches.append(mapping_mismatch)
         for value in mismatches:
             with self.subTest(mismatch=value):
-                self.assertEqual(self._matching_manifest_schema_branches(schema, value), 0)
+                self.assertEqual(
+                    self._matching_manifest_schema_branches(schema, value), 0
+                )
 
 
 class LocalSnapshotIntegrationTests(unittest.TestCase):
@@ -458,21 +592,40 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             "process.stdout.write(JSON.stringify(values));"
         )
         result = subprocess.run(
-            ["node", "--input-type=module", "--eval", script], check=True,
-            capture_output=True, text=True,
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
         )
         self.assertEqual(
             json.loads(result.stdout),
             [
-                {"short_description": "short", "description": "full", "description_source": "desc"},
-                {"short_description": "fallback", "description": "fallback", "description_source": "shortDesc"},
-                {"short_description": "absent", "description": "absent", "description_source": "shortDesc"},
+                {
+                    "short_description": "short",
+                    "description": "full",
+                    "description_source": "desc",
+                },
+                {
+                    "short_description": "fallback",
+                    "description": "fallback",
+                    "description_source": "shortDesc",
+                },
+                {
+                    "short_description": "absent",
+                    "description": "absent",
+                    "description_source": "shortDesc",
+                },
             ],
         )
 
     def test_item_text_resolution_rejects_malformed_text(self) -> None:
         module = (Path(__file__).parents[1] / "importer" / "item-text.mjs").as_uri()
-        cases = ({}, {"shortDesc": ""}, {"shortDesc": 3}, {"shortDesc": "ok", "desc": 3})
+        cases = (
+            {},
+            {"shortDesc": ""},
+            {"shortDesc": 3},
+            {"shortDesc": "ok", "desc": 3},
+        )
         for value in cases:
             script = (
                 f"import {{resolveItemDescription}} from {json.dumps(module)};"
@@ -480,8 +633,10 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             )
             with self.subTest(value=value):
                 result = subprocess.run(
-                    ["node", "--input-type=module", "--eval", script], check=False,
-                    capture_output=True, text=True,
+                    ["node", "--input-type=module", "--eval", script],
+                    check=False,
+                    capture_output=True,
+                    text=True,
                 )
                 self.assertNotEqual(result.returncode, 0)
 
@@ -540,7 +695,9 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(json.loads(result.stdout), [expected for _, expected in cases])
 
-    def test_standard_formats_entry_rejects_malformed_records_with_context(self) -> None:
+    def test_standard_formats_entry_rejects_malformed_records_with_context(
+        self,
+    ) -> None:
         legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
         script = (
             f"import {{isStandardFormatsEntry}} from {json.dumps(legality)};"
@@ -589,7 +746,9 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             {"memberships": ["base"], "profiles": ["base", "basemega"]},
         )
 
-    def test_current_future_membership_candidates_are_exactly_magearna_megas(self) -> None:
+    def test_current_future_membership_candidates_are_exactly_magearna_megas(
+        self,
+    ) -> None:
         showdown = Path(__file__).parents[3] / "references" / "pokemon-showdown"
         if not showdown.is_dir():
             self.skipTest("user-supplied Showdown snapshot is not present")
@@ -617,7 +776,9 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
 
     def test_synthetic_pre_evolution_fallback_records_resolution(self) -> None:
         data_root = Path(__file__).parents[1]
-        fixture = json.loads((data_root / "fixtures" / "pre-evolution-learnset.json").read_text())
+        fixture = json.loads(
+            (data_root / "fixtures" / "pre-evolution-learnset.json").read_text()
+        )
         module = (data_root / "importer" / "learnset-resolution.mjs").as_uri()
         script = (
             f"import {{resolveLearnset}} from {json.dumps(module)};"
@@ -627,8 +788,10 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             "process.stdout.write(JSON.stringify(result));"
         )
         result = subprocess.run(
-            ["node", "--input-type=module", "--eval", script], check=True,
-            capture_output=True, text=True,
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
         )
         relation = json.loads(result.stdout)[0][1]
         self.assertEqual(relation["form_resolution"], "pre-evolution")
@@ -646,7 +809,8 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         self.assertEqual(len(first["regulations"]["m-b"]["memberships"]), 314)
         for regulation_id in ("m-c", "m-b"):
             membership_ids = {
-                value["form_id"] for value in first["regulations"][regulation_id]["memberships"]
+                value["form_id"]
+                for value in first["regulations"][regulation_id]["memberships"]
             }
             self.assertNotIn("magearnamega", membership_ids)
             self.assertNotIn("magearnaoriginalmega", membership_ids)
@@ -655,9 +819,19 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         self.assertTrue(forms["absolmegaz"]["is_mega"])
         self.assertEqual(
             forms["arcaninehisui"],
-            {"id": "arcaninehisui", "name": "Arcanine-Hisui", "national_dex_number": 59,
-             "base_form_id": "arcanine", "form_label": "Hisui", "is_mega": False,
-             "sprite_id": "arcanine-hisui"},
+            {
+                "id": "arcaninehisui",
+                "name": "Arcanine-Hisui",
+                "national_dex_number": 59,
+                "base_form_id": "arcanine",
+                "form_label": "Hisui",
+                "is_mega": False,
+                "is_nfe": False,
+                "gender": "variable",
+                "gender_options": ["M", "F"],
+                "default_gender": "M",
+                "sprite_id": "arcanine-hisui",
+            },
         )
         self.assertEqual(forms["indeedeef"]["form_label"], "F")
         self.assertEqual(forms["indeedeef"]["base_form_id"], "indeedee")
@@ -667,24 +841,63 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         self.assertEqual(profiles["charizardmegax"]["types"], ["Fire", "Dragon"])
         self.assertEqual(profiles["charizardmegax"]["bst"], 634)
         self.assertEqual(profiles["arcaninehisui"]["types"], ["Fire", "Rock"])
-        self.assertEqual(profiles["arcaninehisui"]["stats"], {
-            "hp": 95, "atk": 115, "def": 80, "spa": 95, "spd": 80, "spe": 90,
-        })
-        mc_moves = {value["id"]: value for value in first["regulations"]["m-c"]["moves"]}
-        mb_moves = {value["id"]: value for value in first["regulations"]["m-b"]["moves"]}
+        self.assertEqual(
+            profiles["arcaninehisui"]["stats"],
+            {
+                "hp": 95,
+                "atk": 115,
+                "def": 80,
+                "spa": 95,
+                "spd": 80,
+                "spe": 90,
+            },
+        )
+        mc_moves = {
+            value["id"]: value for value in first["regulations"]["m-c"]["moves"]
+        }
+        mb_moves = {
+            value["id"]: value for value in first["regulations"]["m-b"]["moves"]
+        }
         self.assertEqual(mc_moves["strengthsap"]["pp"], 5)
         self.assertEqual(mb_moves["strengthsap"]["pp"], 10)
         self.assertIn("Lowers Atk by 1", mc_moves["strengthsap"]["short_description"])
         self.assertEqual(
-            {key: mc_moves["flamethrower"][key] for key in ("type", "category", "base_power", "accuracy", "pp", "priority", "target", "flags")},
-            {"type": "Fire", "category": "Special", "base_power": 90, "accuracy": 100,
-             "pp": 15, "priority": 0, "target": "normal",
-             "flags": ["metronome", "mirror", "protect"]},
+            {
+                key: mc_moves["flamethrower"][key]
+                for key in (
+                    "type",
+                    "category",
+                    "base_power",
+                    "accuracy",
+                    "pp",
+                    "priority",
+                    "target",
+                    "flags",
+                )
+            },
+            {
+                "type": "Fire",
+                "category": "Special",
+                "base_power": 90,
+                "accuracy": 100,
+                "pp": 15,
+                "priority": 0,
+                "target": "normal",
+                "flags": ["metronome", "mirror", "protect"],
+            },
         )
         self.assertEqual(
-            {key: mc_moves["protect"][key] for key in ("category", "base_power", "accuracy", "priority", "target")},
-            {"category": "Status", "base_power": 0, "accuracy": "always", "priority": 4,
-             "target": "self"},
+            {
+                key: mc_moves["protect"][key]
+                for key in ("category", "base_power", "accuracy", "priority", "target")
+            },
+            {
+                "category": "Status",
+                "base_power": 0,
+                "accuracy": "always",
+                "priority": 4,
+                "target": "self",
+            },
         )
         self.assertEqual(mc_moves["aerialace"]["category"], "Physical")
         self.assertEqual(mc_moves["aerialace"]["accuracy"], "always")
@@ -693,7 +906,9 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             mc_moves["drainpunch"]["flags"],
             ["contact", "heal", "metronome", "mirror", "protect", "punch"],
         )
-        mc_abilities = {value["id"]: value for value in first["regulations"]["m-c"]["abilities"]}
+        mc_abilities = {
+            value["id"]: value for value in first["regulations"]["m-c"]["abilities"]
+        }
         self.assertEqual(
             mc_abilities["intimidate"]["short_description"],
             "On switch-in, this Pokemon lowers the Attack of opponents by 1 stage.",
@@ -705,52 +920,71 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             "Pokemon behind a substitute are immune.",
         )
         charizard_mega_moves = [
-            value for value in first["regulations"]["m-c"]["learnsets"]
+            value
+            for value in first["regulations"]["m-c"]["learnsets"]
             if value["form_id"] == "charizardmegax"
         ]
         self.assertTrue(charizard_mega_moves)
-        self.assertEqual({value["form_resolution"] for value in charizard_mega_moves}, {"base-to-mega"})
-        self.assertEqual({value["source_form_id"] for value in charizard_mega_moves}, {"charizard"})
+        self.assertEqual(
+            {value["form_resolution"] for value in charizard_mega_moves},
+            {"base-to-mega"},
+        )
+        self.assertEqual(
+            {value["source_form_id"] for value in charizard_mega_moves}, {"charizard"}
+        )
         mb_archaludon = [
-            value for value in first["regulations"]["m-b"]["learnsets"]
+            value
+            for value in first["regulations"]["m-b"]["learnsets"]
             if value["form_id"] == "archaludon"
         ]
         self.assertTrue(mb_archaludon)
-        self.assertEqual({value["source_mod"] for value in mb_archaludon}, {"championsregmb"})
-        self.assertEqual({value["source_kind"] for value in mb_archaludon}, {"override"})
+        self.assertEqual(
+            {value["source_mod"] for value in mb_archaludon}, {"championsregmb"}
+        )
+        self.assertEqual(
+            {value["source_kind"] for value in mb_archaludon}, {"override"}
+        )
         mb_charizard = [
-            value for value in first["regulations"]["m-b"]["learnsets"]
+            value
+            for value in first["regulations"]["m-b"]["learnsets"]
             if value["form_id"] == "charizard"
         ]
-        self.assertEqual({value["source_kind"] for value in mb_charizard}, {"inherited"})
+        self.assertEqual(
+            {value["source_kind"] for value in mb_charizard}, {"inherited"}
+        )
         aegislash_blade = [
-            value for value in first["regulations"]["m-c"]["learnsets"]
+            value
+            for value in first["regulations"]["m-c"]["learnsets"]
             if value["form_id"] == "aegislashblade"
         ]
         self.assertEqual(len(aegislash_blade), 46)
-        self.assertEqual({value["form_resolution"] for value in aegislash_blade}, {"changed-form"})
-        self.assertEqual({value["source_form_id"] for value in aegislash_blade}, {"aegislash"})
+        self.assertEqual(
+            {value["form_resolution"] for value in aegislash_blade}, {"changed-form"}
+        )
+        self.assertEqual(
+            {value["source_form_id"] for value in aegislash_blade}, {"aegislash"}
+        )
         mawile_relations = [
-            value for value in first["mega_relations"] if value["base_form_id"] == "mawile"
+            value
+            for value in first["mega_relations"]
+            if value["base_form_id"] == "mawile"
         ]
-        self.assertEqual(mawile_relations, [{"base_form_id": "mawile", "mega_form_id": "mawilemega"}])
+        self.assertEqual(
+            mawile_relations, [{"base_form_id": "mawile", "mega_form_id": "mawilemega"}]
+        )
 
 
 class PublishedBundleMutationTests(unittest.TestCase):
     @property
     def team_builder_bundle(self) -> Path:
         return (
-            Path(__file__).parents[1]
-            / "releases"
-            / "showdown-multi-s3-i4-5073b2ab1402"
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s3-i4-5073b2ab1402"
         )
 
     @property
     def item_information_bundle(self) -> Path:
         return (
-            Path(__file__).parents[1]
-            / "releases"
-            / "showdown-multi-s4-i5-7205fa48044e"
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s4-i5-7205fa48044e"
         )
 
     def test_item_information_release_goldens_and_semantic_diff(self) -> None:
@@ -777,7 +1011,9 @@ class PublishedBundleMutationTests(unittest.TestCase):
             summary["overlays"][0]["target_keys"], sorted(M_A_ITEM_TEXT_OVERLAY_IDS)
         )
         profiles = json.loads(
-            (self.item_information_bundle / "item_profiles.json").read_text(encoding="utf-8")
+            (self.item_information_bundle / "item_profiles.json").read_text(
+                encoding="utf-8"
+            )
         )
         self.assertTrue(
             all(
@@ -785,7 +1021,9 @@ class PublishedBundleMutationTests(unittest.TestCase):
                 for value in profiles
             )
         )
-        difference = compare_bundles(self.team_builder_bundle, self.item_information_bundle)
+        difference = compare_bundles(
+            self.team_builder_bundle, self.item_information_bundle
+        )
         self.assertEqual(difference["files"]["item_profiles.json"]["changed"], 431)
         self.assertTrue(
             all(
@@ -831,16 +1069,28 @@ class PublishedBundleMutationTests(unittest.TestCase):
     def test_team_builder_release_item_nature_and_mega_goldens(self) -> None:
         summary = validate_bundle(self.team_builder_bundle)
         self.assertEqual(
-            {key: summary["counts"][key] for key in (
-                "items", "item_profiles", "natures", "mega_item_relations"
-            )},
-            {"items": 166, "item_profiles": 431, "natures": 21, "mega_item_relations": 214},
+            {
+                key: summary["counts"][key]
+                for key in ("items", "item_profiles", "natures", "mega_item_relations")
+            },
+            {
+                "items": 166,
+                "item_profiles": 431,
+                "natures": 21,
+                "mega_item_relations": 214,
+            },
         )
         profiles = json.loads(
-            (self.team_builder_bundle / "item_profiles.json").read_text(encoding="utf-8")
+            (self.team_builder_bundle / "item_profiles.json").read_text(
+                encoding="utf-8"
+            )
         )
         by_regulation = {
-            regulation_id: {record["id"] for record in profiles if record["regulation_id"] == regulation_id}
+            regulation_id: {
+                record["id"]
+                for record in profiles
+                if record["regulation_id"] == regulation_id
+            }
             for regulation_id in ("m-a", "m-b", "m-c")
         }
         self.assertTrue(all("leftovers" in values for values in by_regulation.values()))
@@ -851,26 +1101,38 @@ class PublishedBundleMutationTests(unittest.TestCase):
             (self.team_builder_bundle / "natures.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            {(record["increased_stat"], record["decreased_stat"]) for record in natures},
-            {(plus, minus) for plus in ("atk", "def", "spa", "spd", "spe")
-             for minus in ("atk", "def", "spa", "spd", "spe") if plus != minus}
+            {
+                (record["increased_stat"], record["decreased_stat"])
+                for record in natures
+            },
+            {
+                (plus, minus)
+                for plus in ("atk", "def", "spa", "spd", "spe")
+                for minus in ("atk", "def", "spa", "spd", "spe")
+                if plus != minus
+            }
             | {(None, None)},
         )
 
         relations = json.loads(
-            (self.team_builder_bundle / "mega_item_relations.json").read_text(encoding="utf-8")
+            (self.team_builder_bundle / "mega_item_relations.json").read_text(
+                encoding="utf-8"
+            )
         )
         charizard = {
             (record["item_id"], record["mega_form_id"])
             for record in relations
-            if record["regulation_id"] == "m-c" and record["base_form_id"] == "charizard"
+            if record["regulation_id"] == "m-c"
+            and record["base_form_id"] == "charizard"
         }
         self.assertEqual(
             charizard,
             {("charizarditex", "charizardmegax"), ("charizarditey", "charizardmegay")},
         )
 
-    def test_team_builder_release_rejects_invalid_nature_and_mega_relations(self) -> None:
+    def test_team_builder_release_rejects_invalid_nature_and_mega_relations(
+        self,
+    ) -> None:
         mutations = (
             ("natures.json", lambda values: values[0].update(decreased_stat=None)),
             ("mega_item_relations.json", lambda values: values.pop()),
@@ -913,29 +1175,47 @@ class PublishedBundleMutationTests(unittest.TestCase):
         memberships = json.loads(
             (bundle / "regulation_memberships.json").read_text(encoding="utf-8")
         )
-        ma = {value["form_id"] for value in memberships if value["regulation_id"] == "m-a"}
+        ma = {
+            value["form_id"] for value in memberships if value["regulation_id"] == "m-a"
+        }
         self.assertTrue({"pikachu", "charizard", "charizardmegax", "aegislash"} <= ma)
         self.assertTrue({"cinderace", "magearnamega"}.isdisjoint(ma))
         learnsets = json.loads((bundle / "learnsets.json").read_text(encoding="utf-8"))
         self.assertTrue(any(value["regulation_id"] == "m-a" for value in learnsets))
         self.assertEqual(
-            {value["source_mod"] for value in learnsets if value["regulation_id"] == "m-a"},
+            {
+                value["source_mod"]
+                for value in learnsets
+                if value["regulation_id"] == "m-a"
+            },
             {"base", "champions"},
         )
         difference = compare_bundles(old, bundle)["files"]
-        self.assertTrue(all(value["removed"] == value["changed"] == 0 for value in difference.values()))
+        self.assertTrue(
+            all(
+                value["removed"] == value["changed"] == 0
+                for value in difference.values()
+            )
+        )
         for filename in (
-            "regulation_memberships.json", "profiles.json", "ability_profiles.json",
-            "move_profiles.json", "move_flag_relations.json", "learnsets.json",
+            "regulation_memberships.json",
+            "profiles.json",
+            "ability_profiles.json",
+            "move_profiles.json",
+            "move_flag_relations.json",
+            "learnsets.json",
         ):
-            self.assertTrue(all(key.startswith("m-a:") for key in difference[filename]["added_keys"]))
+            self.assertTrue(
+                all(
+                    key.startswith("m-a:") for key in difference[filename]["added_keys"]
+                )
+            )
         self.assertEqual(difference["moves.json"]["added_keys"], ["pound"])
         self.assertEqual(difference["sprites.json"]["added"], 0)
 
     def test_multi_revision_provenance_container_mutations_fail_closed(self) -> None:
         reviewed = (
-            Path(__file__).parents[1] / "releases" /
-            "showdown-multi-s2-i3-fc85b358deaa"
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s2-i3-fc85b358deaa"
         )
         with tempfile.TemporaryDirectory() as name:
             bundle = Path(name) / reviewed.name
@@ -944,7 +1224,10 @@ class PublishedBundleMutationTests(unittest.TestCase):
             original = path.read_bytes()
             valid = json.loads(original)["showdown_sources"]
             for sources in (
-                [], [{}], [None, None], list(reversed(valid)),
+                [],
+                [{}],
+                [None, None],
+                list(reversed(valid)),
                 [{**valid[0], "regulations": ["m-b"]}, valid[1]],
             ):
                 value = json.loads(original)
@@ -960,14 +1243,21 @@ class PublishedBundleMutationTests(unittest.TestCase):
         for bundle in releases.glob("showdown-*"):
             if not bundle.is_dir():
                 continue
-            manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
-            if manifest["importer_version"] == "2" and manifest["counts"]["memberships"] == 663:
+            manifest = json.loads(
+                (bundle / "manifest.json").read_text(encoding="utf-8")
+            )
+            if (
+                manifest["importer_version"] == "2"
+                and manifest["counts"]["memberships"] == 663
+            ):
                 candidates.append(bundle)
         self.assertEqual(len(candidates), 1)
         bundle = candidates[0]
         self.assertEqual(bundle.name, "showdown-3a766f2c-s1-i2-4bedbf1eb44d")
         summary = validate_bundle(bundle)
-        self.assertEqual(summary["counts"]["legal_forms_by_regulation"], {"m-b": 314, "m-c": 349})
+        self.assertEqual(
+            summary["counts"]["legal_forms_by_regulation"], {"m-b": 314, "m-c": 349}
+        )
         self.assertEqual(summary["counts"]["forms"], 350)
         self.assertEqual(summary["counts"]["profiles"], 700)
         self.assertEqual(summary["counts"]["mega_relations"], 82)
@@ -976,14 +1266,19 @@ class PublishedBundleMutationTests(unittest.TestCase):
         memberships = json.loads(
             (bundle / "regulation_memberships.json").read_text(encoding="utf-8")
         )
-        membership_ids = {(value["regulation_id"], value["form_id"]) for value in memberships}
+        membership_ids = {
+            (value["regulation_id"], value["form_id"]) for value in memberships
+        }
         for regulation_id in ("m-b", "m-c"):
             self.assertNotIn((regulation_id, "magearnamega"), membership_ids)
             self.assertNotIn((regulation_id, "magearnaoriginalmega"), membership_ids)
-        forms = {value["id"] for value in json.loads(
-            (bundle / "forms.json").read_text(encoding="utf-8")
-        )}
-        self.assertTrue({"magearna", "magearnamega", "magearnaoriginalmega"}.isdisjoint(forms))
+        forms = {
+            value["id"]
+            for value in json.loads((bundle / "forms.json").read_text(encoding="utf-8"))
+        }
+        self.assertTrue(
+            {"magearna", "magearnamega", "magearnaoriginalmega"}.isdisjoint(forms)
+        )
 
         old_bundle = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
         difference = compare_bundles(old_bundle, bundle)["files"]
@@ -1034,7 +1329,10 @@ class PublishedBundleMutationTests(unittest.TestCase):
         ):
             with self.subTest(dependent_removals=filename):
                 self.assertTrue(
-                    all("magearna" in key for key in difference[filename]["removed_keys"])
+                    all(
+                        "magearna" in key
+                        for key in difference[filename]["removed_keys"]
+                    )
                 )
 
     def test_published_release_preserves_representative_real_goldens(self) -> None:
@@ -1089,8 +1387,12 @@ class PublishedBundleMutationTests(unittest.TestCase):
             if value["regulation_id"] == "m-c" and value["form_id"] == "aegislashblade"
         ]
         self.assertEqual(len(blade_moves), 46)
-        self.assertEqual({value["form_resolution"] for value in blade_moves}, {"changed-form"})
-        self.assertEqual({value["source_form_id"] for value in blade_moves}, {"aegislash"})
+        self.assertEqual(
+            {value["form_resolution"] for value in blade_moves}, {"changed-form"}
+        )
+        self.assertEqual(
+            {value["source_form_id"] for value in blade_moves}, {"aegislash"}
+        )
 
         move_profiles = {
             (value["regulation_id"], value["id"]): value
@@ -1098,13 +1400,13 @@ class PublishedBundleMutationTests(unittest.TestCase):
         }
         mc_moves = {
             move_id: move_profiles[("m-c", move_id)]
-            for move_id in {
+            for move_id in (
                 "aerialace",
                 "drainpunch",
                 "fakeout",
                 "flamethrower",
                 "protect",
-            }
+            )
         }
         self.assertEqual(
             (mc_moves["aerialace"]["category"], mc_moves["aerialace"]["accuracy"]),
@@ -1164,11 +1466,27 @@ class PublishedBundleMutationTests(unittest.TestCase):
 
             rejected("forms.json", lambda value: value[0].pop("name"))
             rejected("forms.json", lambda value: value[0].update({"unexpected": True}))
-            rejected("forms.json", lambda value: value[0].update({"national_dex_number": "one"}))
-            rejected("sprites.json", lambda value: value[0].update({"variant": "sparkle"}))
-            rejected("mega_relations.json", lambda value: value[0].update({"base_form_id": value[0]["mega_form_id"]}))
-            rejected("learnsets.json", lambda value: value[0].update({"source_form_id": "pikachu"}))
-            rejected("sprite_mappings.json", lambda value: value[0].update({"pokeapi_pokemon_id": 1}))
+            rejected(
+                "forms.json",
+                lambda value: value[0].update({"national_dex_number": "one"}),
+            )
+            rejected(
+                "sprites.json", lambda value: value[0].update({"variant": "sparkle"})
+            )
+            rejected(
+                "mega_relations.json",
+                lambda value: value[0].update(
+                    {"base_form_id": value[0]["mega_form_id"]}
+                ),
+            )
+            rejected(
+                "learnsets.json",
+                lambda value: value[0].update({"source_form_id": "pikachu"}),
+            )
+            rejected(
+                "sprite_mappings.json",
+                lambda value: value[0].update({"pokeapi_pokemon_id": 1}),
+            )
             notice = bundle / "POKEMON-SHOWDOWN-LICENSE.txt"
             original_notice = notice.read_bytes()
             notice.write_bytes(original_notice + b"altered\n")
@@ -1176,7 +1494,9 @@ class PublishedBundleMutationTests(unittest.TestCase):
                 validate_bundle(bundle)
             notice.write_bytes(original_notice)
             rejected("manifest.json", lambda value: value.update({"unexpected": True}))
-            rejected("manifest.json", lambda value: value.update({"validation_status": 1}))
+            rejected(
+                "manifest.json", lambda value: value.update({"validation_status": 1})
+            )
             rejected(
                 "manifest.json",
                 lambda value: value.update(
@@ -1186,6 +1506,280 @@ class PublishedBundleMutationTests(unittest.TestCase):
                     }
                 ),
             )
+
+
+class DamageCalculatorContractTests(unittest.TestCase):
+    RIVALRY_GENDER_CASES = frozenset(
+        {
+            ("M", "M", "same"),
+            ("M", "F", "opposite"),
+            ("M", "N", "genderless"),
+        }
+    )
+
+    def test_schema_five_release_and_consumer_fixture_match(self) -> None:
+        data_root = Path(__file__).parents[1]
+        release = data_root / "releases" / "showdown-multi-s5-i6-38ee90625b30"
+        fixture = json.loads(
+            (data_root / "fixtures" / "damage-calculator-data-v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        summary = validate_bundle(release)
+        self.assertEqual(summary["counts"]["type_effectiveness"], 324)
+        self.assertEqual(fixture["data_version"], release.name)
+        self.assertEqual(fixture["schema_version"], "damage-calculator-data-v1")
+
+        def records(name: str) -> list[dict[str, object]]:
+            return json.loads((release / name).read_text(encoding="utf-8"))
+
+        capability = records("calculator_capabilities.json")[0]
+        self.assertEqual(
+            fixture["capability"],
+            {
+                key: value
+                for key, value in capability.items()
+                if key != "state_input_policy"
+            },
+        )
+        self.assertEqual(fixture["mechanics"], records("mechanics_profiles.json")[0])
+        self.assertEqual(
+            fixture["state_input_policy"], capability["state_input_policy"]
+        )
+        profiles = {
+            (value["regulation_id"], value["form_id"]): value
+            for value in records("profiles.json")
+        }
+        charizard = profiles[("m-c", "charizard")]
+        self.assertEqual(
+            fixture["forms"][0]["weight_tenths_kg"], charizard["weight_tenths_kg"]
+        )
+        self.assertEqual(fixture["forms"][0]["base_stats"], charizard["stats"])
+        moves = {
+            (value["regulation_id"], value["id"]): value
+            for value in records("move_profiles.json")
+        }
+        fixture_moves = {value["id"]: value for value in fixture["moves"]}
+        self.assertEqual(
+            fixture_moves["earthquake"]["calculation"],
+            moves[("m-c", "earthquake")]["calculation"],
+        )
+        self.assertEqual(
+            moves[("m-c", "counter")]["contextual_inputs"],
+            [
+                {
+                    "key": "prior_damage_taken",
+                    "label": "Prior damage taken",
+                    "kind": "integer",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 65535,
+                }
+            ],
+        )
+        self.assertEqual(
+            moves[("m-c", "spitup")]["contextual_inputs"],
+            [
+                {
+                    "key": "stockpile_count",
+                    "label": "Stockpile count",
+                    "kind": "integer",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 3,
+                }
+            ],
+        )
+        self.assertEqual(
+            [value["key"] for value in moves[("m-c", "beatup")]["contextual_inputs"]],
+            ["ally_1_base_attack", "ally_2_base_attack", "ally_3_base_attack"],
+        )
+        effectiveness = {
+            (value["attacking_type_id"], value["defending_type_id"]): value
+            for value in records("type_effectiveness.json")
+        }
+        self.assertEqual(effectiveness[("normal", "ghost")]["multiplier_percent"], 0)
+        self.assertEqual(effectiveness[("fire", "grass")]["multiplier_percent"], 200)
+
+        self.assertEqual(
+            set(fixture),
+            {
+                "schema_version",
+                "data_version",
+                "regulation",
+                "mechanics",
+                "sprite_url_template",
+                "state_input_policy",
+                "capability",
+                "natures",
+                "types",
+                "forms",
+                "abilities",
+                "items",
+                "moves",
+                "type_effectiveness",
+                "mega_item_relations",
+            },
+        )
+        type_ids = {value["id"] for value in fixture["types"]}
+        ability_ids = {value["id"] for value in fixture["abilities"]}
+        item_ids = {value["id"] for value in fixture["items"]}
+        move_ids = {value["id"] for value in fixture["moves"]}
+        form_ids = {value["id"] for value in fixture["forms"]}
+        for form in fixture["forms"]:
+            self.assertLessEqual(set(form["types"]), type_ids)
+            self.assertLessEqual(
+                {value["id"] for value in form["abilities"]}, ability_ids
+            )
+            self.assertLessEqual(set(form["move_ids"]), move_ids)
+        self.assertEqual(
+            {
+                (value["attacking_type_id"], value["defending_type_id"])
+                for value in fixture["type_effectiveness"]
+            },
+            {
+                (attacking, defending)
+                for attacking in type_ids
+                for defending in type_ids
+            },
+        )
+        relation = fixture["mega_item_relations"][0]
+        self.assertIn(relation["item_id"], item_ids)
+        self.assertIn(relation["base_form_id"], form_ids)
+        self.assertIn(relation["mega_form_id"], form_ids)
+        mega = next(
+            value
+            for value in fixture["forms"]
+            if value["id"] == relation["mega_form_id"]
+        )
+        self.assertFalse(mega["searchable"])
+        self.assertEqual(
+            mega["abilities"], [{"id": relation["locked_ability_id"], "slot": "0"}]
+        )
+        charizard_fixture = next(
+            value for value in fixture["forms"] if value["id"] == "charizard"
+        )
+        self.assertEqual(
+            (charizard_fixture["gender_options"], charizard_fixture["default_gender"]),
+            (["M", "F"], "M"),
+        )
+        self.assertEqual(
+            self.RIVALRY_GENDER_CASES,
+            {("M", "M", "same"), ("M", "F", "opposite"), ("M", "N", "genderless")},
+        )
+
+        engine_types = (
+            Path(__file__).parents[3]
+            / "references/vgc-multicalc/src/domain/data/types.ts"
+        ).read_text(encoding="utf-8")
+        for interface in ("StateMove", "StatePokemon"):
+            body = re.search(
+                rf"export interface {interface} \{{(.*?)\n\}}", engine_types, re.DOTALL
+            )
+            self.assertIsNotNone(body)
+            engine_keys = set(re.findall(r"^\s*(\w+)\??:", body.group(1), re.MULTILINE))
+            policy = fixture["state_input_policy"][interface]
+            classified = (
+                set(policy["source"])
+                | set(policy["user"])
+                | set(policy["deterministic_defaults"])
+                | set(policy["unsupported"])
+            )
+            self.assertEqual(classified, engine_keys)
+            self.assertEqual(
+                sum(
+                    key in group
+                    for group in (
+                        policy["source"],
+                        policy["user"],
+                        policy["deterministic_defaults"],
+                        policy["unsupported"],
+                    )
+                    for key in engine_keys
+                ),
+                len(engine_keys),
+            )
+
+    def test_schema_five_context_mutations_fail_closed(self) -> None:
+        reviewed = (
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s5-i6-38ee90625b30"
+        )
+        with tempfile.TemporaryDirectory() as name:
+            bundle = Path(name) / reviewed.name
+            shutil.copytree(reviewed, bundle)
+            path = bundle / "move_profiles.json"
+            values = json.loads(path.read_text(encoding="utf-8"))
+            rage_fist = next(value for value in values if value["id"] == "ragefist")
+            rage_fist["contextual_inputs"][0]["key"] = "unreviewed_state"
+            path.write_bytes(_canonical_bytes(values))
+            with self.assertRaisesRegex(BundleError, "unknown context key"):
+                validate_bundle(bundle, verify_manifest=False)
+
+    def test_schema_five_nested_calculation_mutations_fail_closed(self) -> None:
+        reviewed = (
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s5-i6-38ee90625b30"
+        )
+
+        def rejected(filename: str, mutate: object, message: str) -> None:
+            with tempfile.TemporaryDirectory() as name:
+                bundle = Path(name) / reviewed.name
+                shutil.copytree(reviewed, bundle)
+                path = bundle / filename
+                values = json.loads(path.read_text(encoding="utf-8"))
+                mutate(values)
+                path.write_bytes(_canonical_bytes(values))
+                with self.assertRaisesRegex(BundleError, message):
+                    validate_bundle(bundle, verify_manifest=False)
+
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update({"drain": [1, 0]}),
+            "fraction",
+        )
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update({"always_crit": 1}),
+            "boolean",
+        )
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update(
+                {
+                    "secondary": {
+                        "chance": 101,
+                        "boosts": {},
+                        "self_boosts": {},
+                        "status": None,
+                        "volatile_status": None,
+                    }
+                }
+            ),
+            "chance",
+        )
+        rejected(
+            "item_profiles.json",
+            lambda values: values[0]["calculation"].update(
+                {"plate_type_id": "unknown"}
+            ),
+            "unknown type",
+        )
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update({"multihit": [5, 2]}),
+            "multihit",
+        )
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update({"crit_ratio": -1}),
+            "crit_ratio",
+        )
+        rejected(
+            "move_profiles.json",
+            lambda values: values[0]["calculation"].update(
+                {"override_defensive_stat": "atk"}
+            ),
+            "override_defensive_stat",
+        )
 
 
 if __name__ == "__main__":

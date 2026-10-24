@@ -1,0 +1,654 @@
+// Bagredex internal exact-output regression fixture.
+// Data: showdown-multi-s5-i6-38ee90625b30.
+// This is not the independently generated vgcmulticalc evidence; see reference-parity.json.
+
+exports[`pinned exact parity matrix > ability 1`] = `
+{
+  "compact": "56 ~ 68 | 36.6% ~ 44.4%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 56-68 (36.6 - 44.4%)
+(56, 58, 58, 58, 60, 60, 60, 62, 62, 62, 64, 64, 64, 66, 66, 68)",
+  "name": "ability",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    56,
+    58,
+    58,
+    58,
+    60,
+    60,
+    60,
+    62,
+    62,
+    62,
+    64,
+    64,
+    64,
+    66,
+    66,
+    68,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > burn 1`] = `
+{
+  "compact": "22 ~ 27 | 14.4% ~ 17.6%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 22-27 (14.4 - 17.6%)
+(22, 23, 23, 23, 24, 24, 24, 24, 25, 25, 25, 25, 26, 26, 26, 27)",
+  "name": "burn",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    22,
+    23,
+    23,
+    23,
+    24,
+    24,
+    24,
+    24,
+    25,
+    25,
+    25,
+    25,
+    26,
+    26,
+    26,
+    27,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > context 1`] = `
+{
+  "compact": "54 ~ 64 | 35.3% ~ 41.8%",
+  "description": "0 Atk charizard Assurance vs. 0 HP / 0 Def target: 54-64 (35.3 - 41.8%)
+(54, 54, 54, 56, 56, 56, 58, 58, 58, 60, 60, 60, 62, 62, 62, 64)",
+  "name": "context",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    54,
+    54,
+    54,
+    56,
+    56,
+    56,
+    58,
+    58,
+    58,
+    60,
+    60,
+    60,
+    62,
+    62,
+    62,
+    64,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > critical 1`] = `
+{
+  "compact": "68 ~ 80 | 44.4% ~ 52.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 68-80 (44.4 - 52.3%)
+(68, 68, 68, 70, 70, 72, 72, 72, 74, 74, 76, 76, 76, 78, 78, 80)",
+  "name": "critical",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    68,
+    68,
+    68,
+    70,
+    70,
+    72,
+    72,
+    72,
+    74,
+    74,
+    76,
+    76,
+    76,
+    78,
+    78,
+    80,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > fixed 1`] = `
+{
+  "compact": "40 ~ 40 | 26.1% ~ 26.1%",
+  "description": "charizard Counter vs. target: 40 (26.1%)
+(40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40)",
+  "name": "fixed",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+    40,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > hp-ability 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "hp-ability",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > hp-power 1`] = `
+{
+  "compact": "16 ~ 20 | 10.5% ~ 13.1%",
+  "description": "0 Atk charizard Eruption vs. 0 HP / 0 Def target: 16-20 (10.5 - 13.1%)
+(16, 16, 16, 16, 16, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 20)",
+  "name": "hp-power",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    16,
+    16,
+    16,
+    16,
+    16,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    20,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > item 1`] = `
+{
+  "compact": "57 ~ 70 | 37.3% ~ 45.8%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 57-70 (37.3 - 45.8%)
+(57, 60, 60, 60, 62, 62, 62, 62, 65, 65, 65, 65, 68, 68, 68, 70)",
+  "name": "item",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    57,
+    60,
+    60,
+    60,
+    62,
+    62,
+    62,
+    62,
+    65,
+    65,
+    65,
+    65,
+    68,
+    68,
+    68,
+    70,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > mega 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk Charizard-Mega-X Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "mega",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > physical 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "physical",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > progressive 1`] = `
+{
+  "compact": "88 ~ 108 | 57.5% ~ 70.6%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 88-108 (57.5 - 70.6%)
+(88, 92, 92, 92, 96, 96, 96, 96, 100, 100, 100, 100, 104, 104, 104, 108)",
+  "name": "progressive",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    88,
+    92,
+    92,
+    92,
+    96,
+    96,
+    96,
+    96,
+    100,
+    100,
+    100,
+    100,
+    104,
+    104,
+    104,
+    108,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > screens 1`] = `
+{
+  "compact": "29 ~ 36 | 19.0% ~ 23.5%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 29-36 (19.0 - 23.5%)
+(29, 31, 31, 31, 32, 32, 32, 32, 33, 33, 33, 33, 35, 35, 35, 36)",
+  "name": "screens",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    29,
+    31,
+    31,
+    31,
+    32,
+    32,
+    32,
+    32,
+    33,
+    33,
+    33,
+    33,
+    35,
+    35,
+    35,
+    36,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > single-target 1`] = `
+{
+  "compact": "60 ~ 72 | 39.2% ~ 47.1%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 60-72 (39.2 - 47.1%)
+(60, 60, 62, 62, 64, 64, 64, 66, 66, 66, 68, 68, 68, 70, 70, 72)",
+  "name": "single-target",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    60,
+    60,
+    62,
+    62,
+    64,
+    64,
+    64,
+    66,
+    66,
+    66,
+    68,
+    68,
+    68,
+    70,
+    70,
+    72,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > special 1`] = `
+{
+  "compact": "70 ~ 84 | 45.8% ~ 54.9%",
+  "description": "0 SpA charizard Earthquake vs. 0 HP / 0 SpD target: 70-84 (45.8 - 54.9%)
+(70, 72, 72, 72, 74, 74, 76, 76, 78, 78, 78, 80, 80, 82, 82, 84)",
+  "name": "special",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    70,
+    72,
+    72,
+    72,
+    74,
+    74,
+    76,
+    76,
+    78,
+    78,
+    78,
+    80,
+    80,
+    82,
+    82,
+    84,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > specialized 1`] = `
+{
+  "compact": "30 ~ 36 | 19.6% ~ 23.5%",
+  "description": "0 Atk charizard Knock Off vs. 0 HP / 0 Def target: 30-36 (19.6 - 23.5%)
+(30, 30, 30, 30, 32, 32, 32, 32, 32, 32, 34, 34, 34, 34, 34, 36)",
+  "name": "specialized",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    30,
+    30,
+    30,
+    30,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    34,
+    34,
+    34,
+    34,
+    34,
+    36,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > spread 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "spread",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > stages 1`] = `
+{
+  "compact": "90 ~ 106 | 58.8% ~ 69.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 90-106 (58.8 - 69.3%)
+(90, 90, 92, 92, 94, 94, 96, 96, 98, 98, 100, 100, 102, 102, 104, 106)",
+  "name": "stages",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    90,
+    90,
+    92,
+    92,
+    94,
+    94,
+    96,
+    96,
+    98,
+    98,
+    100,
+    100,
+    102,
+    102,
+    104,
+    106,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > terrain-grounded 1`] = `
+{
+  "compact": "33 ~ 40 | 21.6% ~ 26.1%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 33-40 (21.6 - 26.1%)
+(33, 34, 34, 34, 36, 36, 36, 36, 37, 37, 37, 37, 39, 39, 39, 40)",
+  "name": "terrain-grounded",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    33,
+    34,
+    34,
+    34,
+    36,
+    36,
+    36,
+    36,
+    37,
+    37,
+    37,
+    37,
+    39,
+    39,
+    39,
+    40,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > terrain-ungrounded 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "terrain-ungrounded",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > variable 1`] = `
+{
+  "compact": "42 ~ 50 | 27.5% ~ 32.7%",
+  "description": "0 SpA charizard Electro Ball vs. 0 HP / 0 SpD target: 42-50 (27.5 - 32.7%)
+(42, 42, 42, 44, 44, 44, 44, 46, 46, 46, 46, 48, 48, 48, 48, 50)",
+  "name": "variable",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    42,
+    42,
+    42,
+    44,
+    44,
+    44,
+    44,
+    46,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+  ],
+}
+`;
+
+exports[`pinned exact parity matrix > weather 1`] = `
+{
+  "compact": "44 ~ 54 | 28.8% ~ 35.3%",
+  "description": "0 Atk charizard Earthquake vs. 0 HP / 0 Def target: 44-54 (28.8 - 35.3%)
+(44, 46, 46, 46, 48, 48, 48, 48, 50, 50, 50, 50, 52, 52, 52, 54)",
+  "name": "weather",
+  "pins": {
+    "formula": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "release": "showdown-multi-s5-i6-38ee90625b30",
+  },
+  "rolls": [
+    44,
+    46,
+    46,
+    46,
+    48,
+    48,
+    48,
+    48,
+    50,
+    50,
+    50,
+    50,
+    52,
+    52,
+    52,
+    54,
+  ],
+}
+`;

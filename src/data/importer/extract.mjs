@@ -47,7 +47,7 @@ const exactFormat = (formats, name, mod) => {
   return {name, showdown_format_id: toID(name), mod, ruleset: [...format.ruleset]};
 };
 
-const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, movesText, abilitiesText, itemsText, formats,
+const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, typeChart, movesText, abilitiesText, itemsText, formats,
   championsFormats, championsMovesDelta, championsAbilitiesDelta, championsItemsDelta, championsLearnsetsDelta] = await Promise.all([
   load('data/pokedex.ts', 'Pokedex'),
   load('data/moves.ts', 'Moves'),
@@ -55,6 +55,7 @@ const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, mov
   load('data/items.ts', 'Items'),
   load('data/natures.ts', 'Natures'),
   load('data/learnsets.ts', 'Learnsets'),
+  load('data/typechart.ts', 'TypeChart'),
   load('data/text/moves.ts', 'MovesText'),
   load('data/text/abilities.ts', 'AbilitiesText'),
   load('data/text/items.ts', 'ItemsText'),
@@ -108,6 +109,111 @@ const baseID = species => toID(species.baseSpecies || species.name);
 const spriteID = species => species.spriteid ||
   (toID(species.baseSpecies || species.name) + ((species.baseSpecies || species.name) !== species.name ? `-${toID(species.forme)}` : ''));
 
+const context = (key, label, kind, defaultValue, minimum, maximum, choices) => ({
+  key, label, kind, default: defaultValue,
+  ...(minimum === undefined ? {} : {minimum}),
+  ...(maximum === undefined ? {} : {maximum}),
+  ...(choices === undefined ? {} : {choices}),
+});
+const BOOLEAN_CONTEXT = {
+  ability_active: context('ability_active', 'Ability active', 'boolean', false),
+  last_move_failed: context('last_move_failed', 'Last move failed', 'boolean', false),
+  target_already_moved: context('target_already_moved', 'Target already moved', 'boolean', false),
+  target_damaged: context('target_damaged', 'Target already damaged', 'boolean', false),
+  damaged_by_target: context('damaged_by_target', 'Damaged by target', 'boolean', false),
+  ally_used_round: context('ally_used_round', 'Ally used Round', 'boolean', false),
+  ally_moves_later: context('ally_moves_later', 'Ally moves later', 'boolean', false),
+};
+const MOVE_CONTEXT = new Map([
+  ['counter', [context('prior_damage_taken', 'Prior damage taken', 'integer', 0, 0, 65535)]],
+  ['mirrorcoat', [context('prior_damage_taken', 'Prior damage taken', 'integer', 0, 0, 65535)]],
+  ['comeuppance', [context('prior_damage_taken', 'Prior damage taken', 'integer', 0, 0, 65535)]],
+  ['metalburst', [context('prior_damage_taken', 'Prior damage taken', 'integer', 0, 0, 65535)]],
+  ['spitup', [context('stockpile_count', 'Stockpile count', 'integer', 1, 1, 3)]],
+  ['beatup', [
+    context('ally_1_base_attack', 'Ally 1 base Attack (0 if absent or ineligible)', 'integer', 0, 0, 255),
+    context('ally_2_base_attack', 'Ally 2 base Attack (0 if absent or ineligible)', 'integer', 0, 0, 255),
+    context('ally_3_base_attack', 'Ally 3 base Attack (0 if absent or ineligible)', 'integer', 0, 0, 255),
+  ]],
+  ['ragefist', [context('hits_taken', 'Hits taken', 'integer', 0, 0, 6)]],
+  ['lastrespects', [context('allies_fainted', 'Allies fainted', 'integer', 0, 0, 5)]],
+  ['stompingtantrum', [BOOLEAN_CONTEXT.last_move_failed]],
+  ['temperflare', [BOOLEAN_CONTEXT.last_move_failed]],
+  ['payback', [BOOLEAN_CONTEXT.target_already_moved]],
+  ['boltbeak', [BOOLEAN_CONTEXT.target_already_moved]],
+  ['fishiousrend', [BOOLEAN_CONTEXT.target_already_moved]],
+  ['assurance', [BOOLEAN_CONTEXT.target_damaged]],
+  ['round', [BOOLEAN_CONTEXT.ally_used_round]],
+  ['avalanche', [BOOLEAN_CONTEXT.damaged_by_target]],
+  ['revenge', [BOOLEAN_CONTEXT.damaged_by_target]],
+  ['firepledge', [context('ally_pledge', 'Ally pledge', 'choice', '', undefined, undefined, ['', 'firepledge', 'waterpledge', 'grasspledge'])]],
+  ['waterpledge', [context('ally_pledge', 'Ally pledge', 'choice', '', undefined, undefined, ['', 'firepledge', 'waterpledge', 'grasspledge'])]],
+  ['grasspledge', [context('ally_pledge', 'Ally pledge', 'choice', '', undefined, undefined, ['', 'firepledge', 'waterpledge', 'grasspledge'])]],
+]);
+const ABILITY_ACTIVE_IDS = new Set([
+  'flashfire', 'flowergift', 'hadronengine', 'intimidate', 'minus',
+  'orichalcumpulse', 'plus', 'protosynthesis', 'quarkdrive', 'slowstart', 'stakeout',
+  'stamina', 'unburden',
+]);
+const abilityContext = id => {
+  const result = ABILITY_ACTIVE_IDS.has(id) ? [BOOLEAN_CONTEXT.ability_active] : [];
+  if (id === 'analytic') result.push(BOOLEAN_CONTEXT.target_already_moved, BOOLEAN_CONTEXT.ally_moves_later);
+  if (id === 'supremeoverlord') result.push(context('allies_fainted', 'Allies fainted', 'integer', 0, 0, 5));
+  if (id === 'protosynthesis' || id === 'quarkdrive') {
+    result.push(context('boosted_stat', 'Boosted stat', 'choice', 'auto', undefined, undefined, ['auto', 'atk', 'def', 'spa', 'spd', 'spe']));
+  }
+  return result;
+};
+const fraction = value => Array.isArray(value) && value.length === 2 ? [...value] : null;
+const boosts = value => value && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).filter(([, stages]) => Number.isInteger(stages)).sort(([a], [b]) => compareText(a, b)))
+  : {};
+const effect = value => value && typeof value === 'object' ? {
+  chance: Number.isInteger(value.chance) ? value.chance : null,
+  boosts: boosts(value.boosts),
+  self_boosts: boosts(value.self?.boosts),
+  status: value.status || null,
+  volatile_status: value.volatileStatus || null,
+} : null;
+const calculationFacts = value => ({
+  multihit: Array.isArray(value.multihit) ? [...value.multihit] : (Number.isInteger(value.multihit) ? value.multihit : null),
+  multiaccuracy: Boolean(value.multiaccuracy),
+  crit_ratio: Number.isInteger(value.critRatio) ? value.critRatio : 0,
+  always_crit: Boolean(value.willCrit),
+  drain: fraction(value.drain),
+  recoil: fraction(value.recoil),
+  crash_damage: Boolean(value.hasCrashDamage),
+  mind_blown_recoil: Boolean(value.mindBlownRecoil),
+  struggle_recoil: Boolean(value.struggleRecoil),
+  ignore_defensive: Boolean(value.ignoreDefensive),
+  override_defensive_stat: value.overrideDefensiveStat || null,
+  breaks_protect: Boolean(value.breaksProtect),
+  self: effect(value.self),
+  self_boost: effect(value.selfBoost),
+  secondary: effect(value.secondary),
+  secondaries: Array.isArray(value.secondaries) ? value.secondaries.map(effect) : [],
+});
+const itemCalculationFacts = value => ({
+  fling_base_power: Number.isInteger(value.fling?.basePower) ? value.fling.basePower : 0,
+  natural_gift: value.naturalGift && Number.isInteger(value.naturalGift.basePower)
+    ? {base_power: value.naturalGift.basePower, type_id: toID(value.naturalGift.type)} : null,
+  plate_type_id: value.onPlate ? toID(value.onPlate) : null,
+  drive_type_id: value.onDrive ? toID(value.onDrive) : null,
+  memory_type_id: value.onMemory ? toID(value.onMemory) : null,
+  mega_stone: Boolean(value.megaStone),
+  damage_boost: (() => {
+    const source = value.onBasePower?.toString() || '';
+    const type = source.match(/move\.type === ['"]([A-Za-z]+)['"]/);
+    const modifier = source.match(/chainModify\(\[(\d+),\s*(\d+)\]\)/);
+    return type && modifier ? {type_id: toID(type[1]), numerator: Number(modifier[1]), denominator: Number(modifier[2])} : null;
+  })(),
+  damage_resist: (() => {
+    const source = value.onSourceModifyDamage?.toString() || value.onDamagingHit?.toString() || '';
+    const type = source.match(/move\.type === ['"]([A-Za-z]+)['"]/);
+    return type ? {type_id: toID(type[1])} : null;
+  })(),
+});
+
 const requestedFormIDs = (process.argv[4] || '').split(',').filter(Boolean);
 const selected = new Set(requestedFormIDs.length
   ? requestedFormIDs
@@ -118,10 +224,14 @@ const forms = [...selected].sort().map(id => {
   if (!species || !Number.isInteger(species.num) || species.num <= 0) {
     throw new Error(`data/pokedex.ts: selected form ${id} lacks a positive National Dex number`);
   }
+  const gender = species.gender || 'variable';
   return {
     id, name: species.name, national_dex_number: species.num,
     base_form_id: baseID(species), form_label: species.forme || '',
-    is_mega: isMega(species), sprite_id: spriteID(species),
+    is_mega: isMega(species), is_nfe: Boolean(species.nfe),
+    gender, gender_options: gender === 'variable' ? ['M', 'F'] : [gender],
+    default_gender: gender === 'variable' ? 'M' : gender,
+    sprite_id: spriteID(species),
   };
 });
 
@@ -165,6 +275,7 @@ for (const config of configurations) {
     .map(([id, value]) => ({
       id, name: value.name, source_status: 'standard',
       ...resolveItemDescription(itemsText[id], `${config.mod} item ${id}`),
+      calculation: itemCalculationFacts(value),
       mega_stone: value.megaStone ? Object.entries(value.megaStone).map(([base, mega]) => ({
         base_form_id: toID(base), mega_form_id: toID(mega),
       })).sort((a, b) => compareText(a.base_form_id, b.base_form_id)) : [],
@@ -178,7 +289,7 @@ for (const config of configurations) {
     abilities.forEach(value => abilityIDs.add(value.ability_id));
     profiles.push({
       form_id: id, stats: species.baseStats, bst: Object.values(species.baseStats).reduce((a, b) => a + b, 0),
-      types: [...species.types], abilities,
+      types: [...species.types], abilities, weight_tenths_kg: Math.round(species.weightkg * 10),
     });
     for (const [moveID, provenance] of resolveLearnset({
       formID: id, table: config.learnsets, moves: config.moves, regulationID: config.id,
@@ -194,7 +305,7 @@ for (const config of configurations) {
     const text = abilitiesText[id] || {};
     return {
       id, name: value.name, short_description: text.shortDesc || '',
-      description: text.desc || text.shortDesc || '',
+      description: text.desc || text.shortDesc || '', contextual_inputs: abilityContext(id),
     };
   });
   const moves = [...moveIDs].sort().map(id => {
@@ -207,6 +318,12 @@ for (const config of configurations) {
       pp: Math.min(value.pp, 20), priority: value.priority || 0, target: value.target,
       short_description: text.shortDesc || '', description: text.desc || text.shortDesc || '',
       flags: Object.keys(value.flags || {}).filter(flag => value.flags[flag]).sort(),
+      calculation: calculationFacts(value), contextual_inputs: [
+        ...(MOVE_CONTEXT.get(id) || []),
+        ...(value.multihit ? [context('hits', 'Hits', 'integer', Array.isArray(value.multihit) ? value.multihit[0] + 1 : value.multihit,
+          Array.isArray(value.multihit) ? value.multihit[0] : 1,
+          Array.isArray(value.multihit) ? value.multihit[1] : value.multihit)] : []),
+      ],
     };
   });
   output.regulations[config.id] = {memberships, profiles, abilities, moves, items, learnsets};
@@ -215,4 +332,20 @@ for (const config of configurations) {
 output.mega_relations = forms.filter(value => value.is_mega).map(value => ({
   base_form_id: value.base_form_id, mega_form_id: value.id,
 })).sort((a, b) => compareText(a.mega_form_id, b.mega_form_id));
+const selectedTypeNames = new Set(Object.values(output.regulations)
+  .flatMap(value => value.profiles.flatMap(profile => profile.types)));
+output.type_effectiveness = [...selectedTypeNames].sort().flatMap(defending => {
+  const data = typeChart[toID(defending)]?.damageTaken;
+  if (!data) throw new Error(`data/typechart.ts: missing defending type ${defending}`);
+  return [...selectedTypeNames].sort().map(attacking => {
+    const code = data[attacking];
+    if (![0, 1, 2, 3].includes(code)) {
+      throw new Error(`data/typechart.ts: invalid ${attacking} -> ${defending} code ${code}`);
+    }
+    return {
+      attacking_type_id: toID(attacking), defending_type_id: toID(defending),
+      multiplier_percent: [100, 200, 50, 0][code],
+    };
+  });
+});
 process.stdout.write(`${JSON.stringify(output)}\n`);

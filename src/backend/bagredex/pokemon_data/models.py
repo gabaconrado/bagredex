@@ -159,6 +159,10 @@ class PokemonForm(NamedIdentity):
     base_form = models.ForeignKey("self", on_delete=models.PROTECT, related_name="derived_forms")
     form_label = models.CharField(max_length=100, blank=True)
     is_mega = models.BooleanField()
+    is_nfe = models.BooleanField(default=False)
+    gender = models.CharField(max_length=16, default="variable")
+    gender_options = models.JSONField(default=list)
+    default_gender = models.CharField(max_length=1, default="M")
     sprite_id = models.CharField(max_length=100)
 
     class Meta:
@@ -261,6 +265,7 @@ class AbilityProfile(VersionOwnedModel):
     ability = models.ForeignKey(Ability, on_delete=models.PROTECT)
     short_description = models.TextField()
     description = models.TextField()
+    contextual_inputs = models.JSONField(default=list)
 
     class Meta:
         constraints = [
@@ -285,6 +290,8 @@ class ItemProfile(VersionOwnedModel):
     description_source = models.CharField(  # noqa: DJ001
         max_length=16, choices=DescriptionSource, null=True, blank=True
     )
+    contextual_inputs = models.JSONField(default=list)
+    calculation = models.JSONField(default=dict)
 
     class Meta:
         constraints = [
@@ -329,6 +336,8 @@ class MoveProfile(VersionOwnedModel):
     target = models.CharField(max_length=100)
     short_description = models.TextField()
     description = models.TextField()
+    calculation = models.JSONField(default=dict)
+    contextual_inputs = models.JSONField(default=list)
 
     class Meta:
         constraints = [
@@ -357,6 +366,7 @@ class PokemonProfile(VersionOwnedModel):
     special_defense = models.PositiveSmallIntegerField()
     speed = models.PositiveSmallIntegerField()
     bst = models.PositiveSmallIntegerField()
+    weight_tenths_kg = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -434,6 +444,41 @@ class PokemonProfileType(models.Model):
 
     def __str__(self) -> str:
         return f"{self.profile}: {self.position}={self.type}"
+
+
+class TypeEffectiveness(VersionOwnedModel):
+    """One exact attacking-to-defending type multiplier."""
+
+    attacking_type = models.ForeignKey(Type, on_delete=models.PROTECT, related_name="attacking")
+    defending_type = models.ForeignKey(Type, on_delete=models.PROTECT, related_name="defending")
+    multiplier_percent = models.PositiveSmallIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version", "attacking_type", "defending_type"),
+                name="pokemon_data_unique_type_effectiveness",
+            ),
+            models.CheckConstraint(
+                condition=Q(multiplier_percent__in=(0, 50, 100, 200)),
+                name="pokemon_data_valid_type_effectiveness",
+            ),
+        ]
+
+
+class CalculatorCapability(VersionOwnedModel):
+    """Validated calculator capability marker for one immutable version."""
+
+    canonical_id = models.CharField(max_length=100)
+    contract = models.JSONField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("version", "canonical_id"),
+                name="pokemon_data_unique_calculator_capability",
+            )
+        ]
 
 
 class PokemonProfileAbility(models.Model):

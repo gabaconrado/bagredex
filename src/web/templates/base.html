@@ -16,6 +16,7 @@
         <nav class="site-header__nav" aria-label="Primary">
           <a href="{% url 'home' %}{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Pokédex</a>
           <a href="/teams/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Team Builder</a>
+          <a href="/damage-calculator/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Damage Calculator</a>
         </nav>
         {% if regulation_selector %}
           <form class="site-header__regulation" method="get" data-regulation-selector>

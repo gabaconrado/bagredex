@@ -102,10 +102,10 @@ setup_review_mocks() {
     "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" ]
   [ "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" -lt \
     "$(grep -n 'compose .* build server' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" ]
-  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s4-i5-7205fa48044e' \
+  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s5-i6-38ee90625b30' \
     "${COMMAND_LOG}"
-  grep -Fq 'activate_pokemon_data showdown-multi-s4-i5-7205fa48044e' "${COMMAND_LOG}"
-  ! grep -Fq 'activate_pokemon_data showdown-multi-s4-i5-7205fa48044e --if-none' \
+  grep -Fq 'activate_pokemon_data showdown-multi-s5-i6-38ee90625b30' "${COMMAND_LOG}"
+  ! grep -Fq 'activate_pokemon_data showdown-multi-s5-i6-38ee90625b30 --if-none' \
     "${COMMAND_LOG}"
   grep -Fq 'run --rm -T server python manage.py shell -c' "${COMMAND_LOG}"
   [ "$(grep -n ' up -d database' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" -lt \
@@ -304,8 +304,8 @@ setup_review_mocks() {
   [ -r "${REPOSITORY_ROOT}/src/data/releases/showdown-3a766f2c-s1-i2-4bedbf1eb44d/manifest.json" ]
   [ -r "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s2-i3-fc85b358deaa/manifest.json" ]
   [ "$(find "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s2-i3-fc85b358deaa/sprites" -type f -name '*.webp' | wc -l)" -eq 700 ]
-  [ -r "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s4-i5-7205fa48044e/manifest.json" ]
-  [ "$(find "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s4-i5-7205fa48044e/sprites" -type f -name '*.webp' | wc -l)" -eq 700 ]
+  [ -r "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s5-i6-38ee90625b30/manifest.json" ]
+  [ "$(find "${REPOSITORY_ROOT}/src/data/releases/showdown-multi-s5-i6-38ee90625b30/sprites" -type f -name '*.webp' | wc -l)" -eq 700 ]
 }
 
 @test "application data is normalized read-only and verified as the runtime user" {
@@ -320,7 +320,7 @@ setup_review_mocks() {
 
 @test "deployment pins one approved Pokemon data bundle" {
   grep -Fxq \
-    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s4-i5-7205fa48044e' \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s5-i6-38ee90625b30' \
     "${REPOSITORY_ROOT}/deploy/pokemon-data.env"
   ! grep -Eq 'find .*src/data/releases|ls .*src/data/releases' \
     "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh"
@@ -379,7 +379,7 @@ setup_review_mocks() {
 
 @test "development image resolves the uv cache inside the application workspace" {
   grep -Fq 'WORKDIR /app/src/backend' "${REPOSITORY_ROOT}/deploy/Containerfile"
-  grep -Fq 'cache-dir = "../../.cache/uv"' \
+  grep -Fq 'cache-dir = ".cache/uv"' \
     "${REPOSITORY_ROOT}/src/backend/pyproject.toml"
   ! grep -R -Fq 'UV_CACHE_DIR' "${REPOSITORY_ROOT}/deploy/Containerfile" \
     "${REPOSITORY_ROOT}/deploy/compose.yaml" "${REPOSITORY_ROOT}/deploy/compose.local.yaml" \

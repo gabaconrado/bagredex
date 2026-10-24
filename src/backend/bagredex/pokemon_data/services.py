@@ -14,6 +14,7 @@ from .models import (
     Ability,
     AbilityProfile,
     ActiveDataVersion,
+    CalculatorCapability,
     DataActivation,
     DataVersion,
     Item,
@@ -36,6 +37,7 @@ from .models import (
     Sprite,
     SpriteMapping,
     Type,
+    TypeEffectiveness,
 )
 
 
@@ -164,6 +166,10 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             national_dex_number=_integer(record, "national_dex_number"),
             form_label=cast(str, record["form_label"]),
             is_mega=cast(bool, record["is_mega"]),
+            is_nfe=cast(bool, record.get("is_nfe", False)),
+            gender=cast(str, record.get("gender", "variable")),
+            gender_options=record.get("gender_options", []),
+            default_gender=cast(str, record.get("default_gender", "M")),
             sprite_id=_string(record, "sprite_id"),
         )
     for record in bundle.records["forms.json"]:
@@ -190,6 +196,27 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
     items: dict[str, Item] = (
         named_identities(Item, "items.json") if "items.json" in bundle.records else {}
     )
+    TypeEffectiveness.objects.bulk_create(
+        [
+            TypeEffectiveness(
+                version=version,
+                attacking_type=types[_string(record, "attacking_type_id")],
+                defending_type=types[_string(record, "defending_type_id")],
+                multiplier_percent=_integer(record, "multiplier_percent"),
+            )
+            for record in bundle.records.get("type_effectiveness.json", [])
+        ]
+    )
+    CalculatorCapability.objects.bulk_create(
+        [
+            CalculatorCapability(
+                version=version,
+                canonical_id=_string(record, "id"),
+                contract={key: value for key, value in record.items() if key != "id"},
+            )
+            for record in bundle.records.get("calculator_capabilities.json", [])
+        ]
+    )
     if "natures.json" in bundle.records:
         Nature.objects.bulk_create(
             [
@@ -215,6 +242,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             ability=abilities[_string(record, "id")],
             short_description=_string(record, "short_description"),
             description=_string(record, "description"),
+            contextual_inputs=record.get("contextual_inputs", []),
         )
         for record in bundle.records["ability_profiles.json"]
     }
@@ -228,6 +256,8 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             short_description=record.get("short_description"),
             description=record.get("description"),
             description_source=record.get("description_source"),
+            contextual_inputs=record.get("contextual_inputs", []),
+            calculation=record.get("calculation", {}),
         )
         for record in bundle.records.get("item_profiles.json", [])
     }
@@ -252,6 +282,8 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             target=_string(record, "target"),
             short_description=_string(record, "short_description"),
             description=_string(record, "description"),
+            calculation=record.get("calculation", {}),
+            contextual_inputs=record.get("contextual_inputs", []),
         )
     MoveProfile.objects.bulk_create(move_profiles.values())
     profiles: dict[tuple[str, str], PokemonProfile] = {}
@@ -270,6 +302,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             special_defense=_integer(stats, "spd"),
             speed=_integer(stats, "spe"),
             bst=_integer(record, "bst"),
+            weight_tenths_kg=record.get("weight_tenths_kg"),
         )
     PokemonProfile.objects.bulk_create(profiles.values())
     profile_types: list[PokemonProfileType] = []

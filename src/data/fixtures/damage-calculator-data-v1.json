@@ -1,0 +1,479 @@
+{
+  "schema_version": "damage-calculator-data-v1",
+  "data_version": "showdown-multi-s5-i6-38ee90625b30",
+  "regulation": {
+    "id": "m-c",
+    "name": "Regulation M-C"
+  },
+  "mechanics": {
+    "id": "champions-level-50-v1",
+    "level": 50,
+    "sp_minimum": 0,
+    "sp_maximum": 32,
+    "sp_total_max": 66,
+    "hp_formula": "base + sp + 75",
+    "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
+    "nature_percentages": {
+      "hindering": 90,
+      "neutral": 100,
+      "increasing": 110
+    }
+  },
+  "sprite_url_template": "/static/pokemon/{sprite_form_id}-normal.webp",
+  "state_input_policy": {
+    "StateMove": {
+      "source": [
+        "name"
+      ],
+      "user": [
+        "isCrit",
+        "hits",
+        "hitsTaken",
+        "lastMoveFailed",
+        "targetDamaged",
+        "allyUsedRound",
+        "targetAlreadyMoved",
+        "damagedByTarget",
+        "allyMovesLater",
+        "allyPledge",
+        "timesUsed",
+        "timesUsedWithMetronome"
+      ],
+      "deterministic_defaults": {
+        "isStellarFirstUse": false,
+        "waitsForAllyPledge": false
+      },
+      "unsupported": [
+        "overrides"
+      ]
+    },
+    "StatePokemon": {
+      "source": [
+        "name",
+        "ability",
+        "item",
+        "nature",
+        "moves"
+      ],
+      "user": [
+        "abilityOn",
+        "gender",
+        "alliesFainted",
+        "boostedStat",
+        "evs",
+        "boosts",
+        "originalCurrentHp",
+        "status",
+        "teraType",
+        "toxicCounter"
+      ],
+      "deterministic_defaults": {},
+      "unsupported": [
+        "overrides"
+      ]
+    }
+  },
+  "capability": {
+    "id": "damage-calculator-v1",
+    "context_schema_version": "damage-context-v1",
+    "formula_reference": "vgcmulticalc@166578cf88c4219dff7dbaa562b0a4e798b274f3",
+    "game_type": "Doubles",
+    "level": 50,
+    "stat_stage_minimum": -6,
+    "stat_stage_maximum": 6,
+    "status_values": [
+      "",
+      "brn",
+      "par",
+      "psn",
+      "slp",
+      "frz",
+      "tox"
+    ]
+  },
+  "natures": [
+    {
+      "id": "adamant",
+      "name": "Adamant",
+      "increased_stat": "atk",
+      "decreased_stat": "spa"
+    },
+    {
+      "id": "bold",
+      "name": "Bold",
+      "increased_stat": "def",
+      "decreased_stat": "atk"
+    },
+    {
+      "id": "brave",
+      "name": "Brave",
+      "increased_stat": "atk",
+      "decreased_stat": "spe"
+    },
+    {
+      "id": "calm",
+      "name": "Calm",
+      "increased_stat": "spd",
+      "decreased_stat": "atk"
+    },
+    {
+      "id": "careful",
+      "name": "Careful",
+      "increased_stat": "spd",
+      "decreased_stat": "spa"
+    },
+    {
+      "id": "gentle",
+      "name": "Gentle",
+      "increased_stat": "spd",
+      "decreased_stat": "def"
+    },
+    {
+      "id": "hasty",
+      "name": "Hasty",
+      "increased_stat": "spe",
+      "decreased_stat": "def"
+    },
+    {
+      "id": "impish",
+      "name": "Impish",
+      "increased_stat": "def",
+      "decreased_stat": "spa"
+    },
+    {
+      "id": "jolly",
+      "name": "Jolly",
+      "increased_stat": "spe",
+      "decreased_stat": "spa"
+    },
+    {
+      "id": "lax",
+      "name": "Lax",
+      "increased_stat": "def",
+      "decreased_stat": "spd"
+    },
+    {
+      "id": "lonely",
+      "name": "Lonely",
+      "increased_stat": "atk",
+      "decreased_stat": "def"
+    },
+    {
+      "id": "mild",
+      "name": "Mild",
+      "increased_stat": "spa",
+      "decreased_stat": "def"
+    },
+    {
+      "id": "modest",
+      "name": "Modest",
+      "increased_stat": "spa",
+      "decreased_stat": "atk"
+    },
+    {
+      "id": "naive",
+      "name": "Naive",
+      "increased_stat": "spe",
+      "decreased_stat": "spd"
+    },
+    {
+      "id": "naughty",
+      "name": "Naughty",
+      "increased_stat": "atk",
+      "decreased_stat": "spd"
+    },
+    {
+      "id": "quiet",
+      "name": "Quiet",
+      "increased_stat": "spa",
+      "decreased_stat": "spe"
+    },
+    {
+      "id": "rash",
+      "name": "Rash",
+      "increased_stat": "spa",
+      "decreased_stat": "spd"
+    },
+    {
+      "id": "relaxed",
+      "name": "Relaxed",
+      "increased_stat": "def",
+      "decreased_stat": "spe"
+    },
+    {
+      "id": "sassy",
+      "name": "Sassy",
+      "increased_stat": "spd",
+      "decreased_stat": "spe"
+    },
+    {
+      "id": "serious",
+      "name": "Serious",
+      "increased_stat": null,
+      "decreased_stat": null
+    },
+    {
+      "id": "timid",
+      "name": "Timid",
+      "increased_stat": "spe",
+      "decreased_stat": "atk"
+    }
+  ],
+  "types": [
+    {
+      "id": "dragon",
+      "name": "Dragon"
+    },
+    {
+      "id": "fire",
+      "name": "Fire"
+    },
+    {
+      "id": "flying",
+      "name": "Flying"
+    },
+    {
+      "id": "ground",
+      "name": "Ground"
+    }
+  ],
+  "forms": [
+    {
+      "id": "charizard",
+      "name": "Charizard",
+      "searchable": true,
+      "is_mega": false,
+      "is_nfe": false,
+      "gender": "variable",
+      "gender_options": ["M", "F"],
+      "default_gender": "M",
+      "types": [
+        "fire",
+        "flying"
+      ],
+      "base_stats": {
+        "hp": 78,
+        "atk": 84,
+        "def": 78,
+        "spa": 109,
+        "spd": 85,
+        "spe": 100
+      },
+      "weight_tenths_kg": 905,
+      "abilities": [
+        {
+          "id": "blaze",
+          "slot": "0"
+        },
+        {
+          "id": "solarpower",
+          "slot": "H"
+        }
+      ],
+      "move_ids": [
+        "earthquake"
+      ],
+      "sprite_form_id": "charizard"
+    },
+    {
+      "id": "charizardmegax",
+      "name": "Charizard-Mega-X",
+      "searchable": false,
+      "is_mega": true,
+      "is_nfe": false,
+      "gender": "variable",
+      "gender_options": ["M", "F"],
+      "default_gender": "M",
+      "types": [
+        "fire",
+        "dragon"
+      ],
+      "base_stats": {
+        "hp": 78,
+        "atk": 130,
+        "def": 111,
+        "spa": 130,
+        "spd": 85,
+        "spe": 100
+      },
+      "weight_tenths_kg": 1105,
+      "abilities": [
+        {
+          "id": "toughclaws",
+          "slot": "0"
+        }
+      ],
+      "move_ids": [
+        "earthquake"
+      ],
+      "sprite_form_id": "charizardmegax"
+    }
+  ],
+  "abilities": [
+    {
+      "id": "blaze",
+      "name": "Blaze",
+      "contextual_inputs": []
+    },
+    {
+      "id": "rivalry",
+      "name": "Rivalry",
+      "contextual_inputs": []
+    },
+    {
+      "id": "solarpower",
+      "name": "Solar Power",
+      "contextual_inputs": []
+    },
+    {
+      "id": "toughclaws",
+      "name": "Tough Claws",
+      "contextual_inputs": []
+    }
+  ],
+  "items": [
+    {
+      "id": "charizarditex",
+      "name": "Charizardite X",
+      "calculation": {
+        "drive_type_id": null,
+      "damage_boost": null,
+      "damage_resist": null,
+        "fling_base_power": 0,
+        "mega_stone": true,
+        "memory_type_id": null,
+        "natural_gift": null,
+        "plate_type_id": null
+      },
+      "contextual_inputs": []
+    }
+  ],
+  "moves": [
+    {
+      "id": "earthquake",
+      "name": "Earthquake",
+      "type_id": "ground",
+      "category": "Physical",
+      "base_power": 100,
+      "accuracy": 100,
+      "pp": 10,
+      "priority": 0,
+      "target": "allAdjacent",
+      "flags": [
+        "metronome",
+        "mirror",
+        "nonsky",
+        "protect"
+      ],
+      "calculation": {
+        "always_crit": false,
+        "breaks_protect": false,
+        "crash_damage": false,
+        "crit_ratio": 0,
+        "drain": null,
+        "ignore_defensive": false,
+        "mind_blown_recoil": false,
+        "multiaccuracy": false,
+        "multihit": null,
+        "override_defensive_stat": null,
+        "recoil": null,
+        "secondaries": [],
+        "secondary": null,
+        "self": null,
+        "self_boost": null,
+        "struggle_recoil": false
+      },
+      "contextual_inputs": []
+    }
+  ],
+  "type_effectiveness": [
+    {
+      "attacking_type_id": "dragon",
+      "defending_type_id": "dragon",
+      "multiplier_percent": 200
+    },
+    {
+      "attacking_type_id": "dragon",
+      "defending_type_id": "fire",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "dragon",
+      "defending_type_id": "flying",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "dragon",
+      "defending_type_id": "ground",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "fire",
+      "defending_type_id": "dragon",
+      "multiplier_percent": 50
+    },
+    {
+      "attacking_type_id": "fire",
+      "defending_type_id": "fire",
+      "multiplier_percent": 50
+    },
+    {
+      "attacking_type_id": "fire",
+      "defending_type_id": "flying",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "fire",
+      "defending_type_id": "ground",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "flying",
+      "defending_type_id": "dragon",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "flying",
+      "defending_type_id": "fire",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "flying",
+      "defending_type_id": "flying",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "flying",
+      "defending_type_id": "ground",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "ground",
+      "defending_type_id": "dragon",
+      "multiplier_percent": 100
+    },
+    {
+      "attacking_type_id": "ground",
+      "defending_type_id": "fire",
+      "multiplier_percent": 200
+    },
+    {
+      "attacking_type_id": "ground",
+      "defending_type_id": "flying",
+      "multiplier_percent": 0
+    },
+    {
+      "attacking_type_id": "ground",
+      "defending_type_id": "ground",
+      "multiplier_percent": 100
+    }
+  ],
+  "mega_item_relations": [
+    {
+      "item_id": "charizarditex",
+      "base_form_id": "charizard",
+      "mega_form_id": "charizardmegax",
+      "locked_ability_id": "toughclaws"
+    }
+  ]
+}

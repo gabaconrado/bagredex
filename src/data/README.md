@@ -6,7 +6,7 @@ these files are reviewed inputs for loading immutable database versions.
 
 ## Build inputs
 
-The v3 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
+The v5 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
 checkout must be at `3a766f2cfb5e51c1e428cfe87d0dba91a8f01640` and its local object database must contain
 historical commit `b555f4d8ce7250e72939fe0c12cc5b303741d203`. PokeAPI sprites revision
 `ba403973fdf9d0ac59175813861e6a1f8ed5020c`, and PokeAPI mapping revision
@@ -36,7 +36,17 @@ A form is a regulation member only when its effective Showdown formats entry has
 including unknown future markers, is excluded by default. Profiles required by base-to-Mega
 relations remain separate from selectable regulation membership.
 
-Importer version 5 and schema 4 add regulation-effective Item descriptions and their source marker
+Importer version 6 and schema 5 retain schema 4's regulation-effective Item descriptions and add
+the Showdown facts required by the one-on-one damage calculator: exact weights, the complete type
+effectiveness matrix, primitive move calculation metadata, and bounded contextual-input
+descriptors. The capability record pins the formula compatibility target without importing
+vgcmulticalc game-data tables. The normalized facts remain sourced only from the pinned Showdown
+snapshots. Boolean and counter context inputs default deterministically to false and zero unless
+their descriptor declares another value; integer descriptors carry inclusive bounds. The frozen
+consumer fixture classifies every pinned `StateMove` and `StatePokemon` input as source-backed,
+user-controlled, deterministically defaulted, or unsupported, and a test rejects interface drift.
+
+Importer version 5 and schema 4 added regulation-effective Item descriptions and their source marker
 to the team-builder facts introduced by importer 4 and schema 3. Item identity and legality come
 from the effective Item table; text comes from the owning revision's `data/text/items.ts`.
 Non-empty `desc` supplies the full description, otherwise the same record's `shortDesc` does. The
@@ -49,13 +59,14 @@ canonical UTF-8 JSON with sorted keys, compact separators, stable record order, 
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:
 
 ```text
-showdown-multi-s3-i4-<bundle-hash-prefix>
+showdown-multi-s5-i6-<bundle-hash-prefix>
 ```
 
 ## Bundle contract
 
-`manifest.json` is the authoritative interchange contract. Schema 3 retains schema 2's ordered
-`showdown_sources` and adds the normalized team-builder records below. Each source
+`manifest.json` is the authoritative interchange contract. Schema 5 retains the ordered
+`showdown_sources` and normalized team-builder and Item-information records from prior schemas,
+then adds the damage-calculator records below. Each source
 contains its exact revision, commit date, and regulation IDs; `provenance.json` additionally stores
 source counts for that tree. The portable files are:
 
@@ -85,6 +96,12 @@ source counts for that tree. The portable files are:
 - `sprites.json`: form/variant logical paths, PokeAPI identities, complete source PNG properties,
   exact encoder provenance, output WebP properties, and content hashes.
 - `mechanics_profiles.json`: exact level, per-stat and total SP limits, and integer stat formulas.
+- `type_effectiveness.json`: all 324 attacking/defending pairs for the 18 included types, stored as
+  exact integer percentages.
+- `calculator_capabilities.json`: the calculator schema marker, fixed level/game type, supported
+  status and stat-stage bounds, and the pinned formula-reference revision.
+- `profiles.json`, `ability_profiles.json`, `item_profiles.json`, and `move_profiles.json` include
+  the schema-5 weight, primitive calculation, and contextual-input extensions.
 - `validation.json`: deterministic counts, coverage, ignored categories, warnings, and errors.
 - `provenance.json` and `POKEMON-SHOWDOWN-LICENSE.txt`: separate code and sprite provenance.
 

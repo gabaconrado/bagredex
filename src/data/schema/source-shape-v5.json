@@ -1,0 +1,19 @@
+{
+  "version": "showdown-champions-multi-revision-5",
+  "sources": [
+    {
+      "regulations": ["m-a"],
+      "revision": "b555f4d8ce7250e72939fe0c12cc5b303741d203"
+    },
+    {
+      "regulations": ["m-b", "m-c"],
+      "revision": "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
+    }
+  ],
+  "type_chart_source": "data/typechart.ts",
+  "pokemon_weight_source": "data/pokedex.ts",
+  "move_calculation_source": "effective data/moves.ts records",
+  "contextual_input_schema": "damage-context-v1",
+  "historical_materialization": "read-only-git-archive-allow-list",
+  "identity_merge": "exact-match-or-fail"
+}

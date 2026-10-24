@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load vite %}
+
+{% block title %}Damage Calculator · Bagredex{% endblock %}
+{% block main_class %} site-main--damage-calculator{% endblock %}
+
+{% block head %}
+  {% if damage_calculator_bootstrap %}{% vite_styles 'src/damage-calculator.tsx' %}{% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if damage_calculator_unavailable %}
+    <section class="state-card state-card--error" aria-labelledby="calculator-unavailable-title">
+      <p class="eyebrow">Champions matchup tool</p>
+      <h1 id="calculator-unavailable-title">Damage Calculator unavailable</h1>
+      <p>{{ damage_calculator_unavailable }}</p>
+    </section>
+  {% else %}
+    {{ damage_calculator_bootstrap|json_script:"damage-calculator-bootstrap" }}
+    <div data-damage-calculator-root>
+      <section class="damage-state" data-damage-calculator-fallback>
+        <h1>Damage Calculator</h1>
+        <p>Loading calculation data…</p>
+      </section>
+    </div>
+    <noscript><p class="state-card state-card--error">JavaScript is required to calculate damage.</p></noscript>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {% if damage_calculator_bootstrap %}<script type="module" src="{% vite_asset 'src/damage-calculator.tsx' %}"></script>{% endif %}
+{% endblock %}

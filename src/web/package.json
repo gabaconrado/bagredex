@@ -8,6 +8,8 @@
     "check": "tsc --noEmit && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "audit:damage": "node audit-damage-release.mjs",
+    "generate:damage-parity": "node scripts/run-damage-parity-generator.mjs",
     "test:e2e": "playwright test",
     "test:watch": "vitest"
   },

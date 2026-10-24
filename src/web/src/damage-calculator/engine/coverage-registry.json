@@ -1,0 +1,2961 @@
+[
+  {
+    "kind": "ability",
+    "id": "adaptability",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "aerilate",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "aftermath",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "analytic",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "angerpoint",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "anticipation",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "armortail",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "aromaveil",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "battlearmor",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "battlebond",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "berserk",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "bigpecks",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "blaze",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "bulletproof",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "cheekpouch",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "chlorophyll",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "clearbody",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "cloudnine",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "competitive",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "compoundeyes",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "contrary",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "corrosion",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "cudchew",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "curiousmedicine",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "cursedbody",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "cutecharm",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "damp",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "defiant",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "disguise",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "dragonize",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "drizzle",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "drought",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "dryskin",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "earlybird",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "eartheater",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "effectspore",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "electricsurge",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "electromorphosis",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "emergencyexit",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "fairyaura",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "filter",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "flamebody",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "flashfire",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "flowerveil",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "fluffy",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "forecast",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "forewarn",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "friendguard",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "frisk",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "furcoat",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "galewings",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "gluttony",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "goodasgold",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "gooey",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "grasspelt",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "grassysurge",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "guarddog",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "guts",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "harvest",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "healer",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "heatproof",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "heavymetal",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "hospitality",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "hugepower",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "hungerswitch",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "hustle",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "hydration",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "hypercutter",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "icebody",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "illuminate",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "illusion",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "immunity",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "imposter",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "infiltrator",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "innardsout",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "innerfocus",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "insomnia",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "intimidate",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "ironfist",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "justified",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "keeneye",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "klutz",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "leafguard",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "levitate",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "libero",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "lightmetal",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "lightningrod",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "limber",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "liquidooze",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "liquidvoice",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "longreach",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "magicbounce",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "magicguard",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "magician",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "magmaarmor",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "marvelscale",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "megalauncher",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "megasol",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "merciless",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "mimicry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "minus",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "mirrorarmor",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "moldbreaker",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "moody",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "motordrive",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "moxie",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "multiscale",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "mummy",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "naturalcure",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "noguard",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "oblivious",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "opportunist",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "overcoat",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "overgrow",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "owntempo",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "parentalbond",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "pickpocket",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "pickup",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "piercingdrill",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "pixilate",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "plus",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "poisonheal",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "poisonpoint",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "poisontouch",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "prankster",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "pressure",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "protean",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "psychicsurge",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "punkrock",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "purepower",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "purifyingsalt",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "queenlymajesty",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "quickdraw",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "quickfeet",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "raindish",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "rattled",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "receiver",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "reckless",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "refrigerate",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "regenerator",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "ripen",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "rivalry",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "rockhead",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "roughskin",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "runaway",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "sandforce",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "sandrush",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "sandspit",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "sandstream",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "sandveil",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "sapsipper",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "scrappy",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "screencleaner",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "seedsower",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "shadowtag",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "sharpness",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "shedskin",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "sheerforce",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "shellarmor",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "shielddust",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "skilllink",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "slushrush",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "sniper",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "snowcloak",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "snowwarning",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "solarpower",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "solidrock",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "soundproof",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "speedboost",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "spicyspray",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "stakeout",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "stall",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "stalwart",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "stamina",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "stancechange",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "static",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "steadfast",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "steelyspirit",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "stench",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "stickyhold",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "strongjaw",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "sturdy",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "suctioncups",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "superluck",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "supersweetsyrup",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "supremeoverlord",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "surgesurfer",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "swarm",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "sweetveil",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "swiftswim",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "symbiosis",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "synchronize",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "tangledfeet",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "technician",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "telepathy",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "thermalexchange",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "thickfat",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "torrent",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "toughclaws",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "toxicdebris",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "trace",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "unaware",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "unburden",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "unnerve",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "unseenfist",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "vitalspirit",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "voltabsorb",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "wanderingspirit",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "waterabsorb",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "waterbubble",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "weakarmor",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "whitesmoke",
+    "classification": "neutral",
+    "neutralReason": "user-state-or-post-damage-only"
+  },
+  {
+    "kind": "ability",
+    "id": "zerotohero",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "ability",
+    "id": "auraguard",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "eelevate",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "ability",
+    "id": "firemane",
+    "classification": "implemented",
+    "handler": "ability-modifier",
+    "evidenceIds": ["ability-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "abomasite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "absolite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "aerodactylite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "aggronite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "alakazite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "ampharosite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "aspearberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "audinite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "babiriberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "banettite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "beedrillite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "blackbelt",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "blackglasses",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "blastoisinite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "brightpowder",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "cameruptite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "chandelurite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "charcoal",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "charizarditex",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "charizarditey",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "chartiberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "cheriberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "chesnaughtite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "chestoberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "chilanberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "chimechite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "choicescarf",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "chopleberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "clefablite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "cobaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "colburberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "crabominite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "delphoxite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "dragonfang",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "dragoninite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "drampanite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "electricseed",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "emboarite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "excadrite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "fairyfeather",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "feraligite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "floettite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "focusband",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "focussash",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "froslassite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "galladite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "garchompite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "gardevoirite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "gengarite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "glalitite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "glimmoranite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "golurkite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "greninjite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "gyaradosite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "habanberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "hardstone",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "hawluchanite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "heracronite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "houndoominite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "kangaskhanite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "kasibberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "kebiaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "kingsrock",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "leftovers",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "leppaberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "lightball",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "lopunnite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "lucarionite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "lumberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "magnet",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "manectite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "medichamite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "meganiumite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "mentalherb",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "meowsticite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "metalcoat",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "miracleseed",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "mysticwater",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "nevermeltice",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "normalgem",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "occaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "oranberry",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "passhoberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "payapaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "pechaberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "persimberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "pidgeotite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "pinsirite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "poisonbarb",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "quickclaw",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "rawstberry",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "rindoberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "roseliberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "sablenite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "scizorite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "scopelens",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "scovillainite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "sharpbeak",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "sharpedonite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "shellbell",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "shucaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "silkscarf",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "silverpowder",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "sitrusberry",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "skarmorite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "slowbronite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "softsand",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "starminite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "steelixite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "tangaberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "twistedspoon",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "tyranitarite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "venusaurite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "victreebelite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "wacanberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "whiteherb",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "yacheberry",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "altarianite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "barbaracite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "bigroot",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "blazikenite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "damprock",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "dragalgite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "eelektrossite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "expertbelt",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "falinksite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "heatrock",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "icyrock",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "ironball",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "lifeorb",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "lightclay",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "malamarite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "mawilite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "metagrossite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "metronome",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "muscleband",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "pyroarite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "raichunitex",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "raichunitey",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "sceptilite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "scolipite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "scraftinite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "shedshell",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "smoothrock",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "spelltag",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "staraptite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "swampertite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "widelens",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "wiseglasses",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "zoomlens",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "absolitez",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "airballoon",
+    "classification": "implemented",
+    "handler": "item-modifier",
+    "evidenceIds": ["item-handler-group-tests"]
+  },
+  {
+    "kind": "item",
+    "id": "baxcalibrite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "bindingband",
+    "classification": "neutral",
+    "neutralReason": "post-damage-or-user-state"
+  },
+  {
+    "kind": "item",
+    "id": "ejectbutton",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "garchompitez",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "golisopite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "grassyseed",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "leek",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "lucarionitez",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "mistyseed",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "psychicseed",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "redcard",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "rockyhelmet",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "salamencite",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "item",
+    "id": "terrainextender",
+    "classification": "neutral",
+    "neutralReason": "not-referenced-by-pinned-engine"
+  },
+  {
+    "kind": "move",
+    "id": "aurawheel",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "bodypress",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "brickbreak",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "bulldoze",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "clangoroussoul",
+    "classification": "neutral",
+    "neutralReason": "status-or-post-damage-only"
+  },
+  {
+    "kind": "move",
+    "id": "earthquake",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "electroball",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "electroshot",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "endeavor",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "expandingforce",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "facade",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "finalgambit",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "flyingpress",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "foulplay",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "freezedry",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "gravapple",
+    "classification": "neutral",
+    "neutralReason": "status-or-post-damage-only"
+  },
+  {
+    "kind": "move",
+    "id": "gyroball",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "knockoff",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "lashout",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "meteorbeam",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "mistyexplosion",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "nightshade",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "painsplit",
+    "classification": "neutral",
+    "neutralReason": "status-or-post-damage-only"
+  },
+  {
+    "kind": "move",
+    "id": "poltergeist",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "psychicfangs",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "psychicnoise",
+    "classification": "neutral",
+    "neutralReason": "status-or-post-damage-only"
+  },
+  {
+    "kind": "move",
+    "id": "ragingbull",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "seismictoss",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "shellsidearm",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "solarbeam",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "solarblade",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "steelroller",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "superfang",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "terrainpulse",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "venoshock",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "move",
+    "id": "weatherball",
+    "classification": "implemented",
+    "handler": "move-special",
+    "evidenceIds": ["pinned-move-handler-audit"]
+  },
+  {
+    "kind": "context",
+    "id": "analytic:target_already_moved",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "analytic:ally_moves_later",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "flashfire:ability_active",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "intimidate:ability_active",
+    "classification": "neutral",
+    "neutralReason": "Intimidate changes Attack on entry; its descriptor does not directly modify a selected move calculation."
+  },
+  {
+    "kind": "context",
+    "id": "minus:ability_active",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "plus:ability_active",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "stakeout:ability_active",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "stamina:ability_active",
+    "classification": "neutral",
+    "neutralReason": "Stamina is applied from actual prior hits; the legacy toggle is not read by the pinned progressive-hit path."
+  },
+  {
+    "kind": "context",
+    "id": "supremeoverlord:allies_fainted",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "unburden:ability_active",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "metronome:consecutive_uses",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "assurance:target_damaged",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "avalanche:damaged_by_target",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "beatup:ally_1_base_attack",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "beatup:ally_2_base_attack",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "beatup:ally_3_base_attack",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "bonerush:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "bulletseed:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "comeuppance:prior_damage_taken",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "counter:prior_damage_taken",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "doublehit:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "dragondarts:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "dualwingbeat:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "iciclespear:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "lastrespects:allies_fainted",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "metalburst:prior_damage_taken",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "mirrorcoat:prior_damage_taken",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "payback:target_already_moved",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "pinmissile:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "populationbomb:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "rockblast:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "round:ally_used_round",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "scaleshot:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "spitup:stockpile_count",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "stompingtantrum:last_move_failed",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "tailslap:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "temperflare:last_move_failed",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "tripleaxel:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "twinbeam:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "watershuriken:hits",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  },
+  {
+    "kind": "context",
+    "id": "ragefist:hits_taken",
+    "classification": "implemented",
+    "handler": "variable-power",
+    "evidenceIds": ["variable-and-fixed-power-golden"]
+  }
+]

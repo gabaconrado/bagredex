@@ -5,10 +5,21 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from . import views
+from .damage_calculator import views as damage_calculator_views
 from .teams import views as team_views
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path(
+        "damage-calculator/",
+        damage_calculator_views.damage_calculator_page,
+        name="damage-calculator-page",
+    ),
+    path(
+        "damage-calculator/data/<str:version>/<str:regulation>/",
+        damage_calculator_views.damage_calculator_data,
+        name="damage-calculator-data",
+    ),
     path("teams/", team_views.teams_page, name="teams-page"),
     path(
         "teams/data/<str:version>/<str:regulation>/",

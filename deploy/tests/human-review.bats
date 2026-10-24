@@ -103,7 +103,7 @@ human_review() {
   grep -Fxq 'STATE=ready' "${SESSION_CACHE}/session"
   ! grep -Fq 'reviewer;safe' "${COMMAND_LOG}"
   ! grep -Fq 'password;not-a-command' "${COMMAND_LOG}"
-  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s4-i5-7205fa48044e' \
+  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s5-i6-38ee90625b30' \
     "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
 }
@@ -219,7 +219,7 @@ human_review() {
   marker_base="$(sed -n 's/^BASE_COMMIT=//p' "${SESSION_CACHE}/session")"
   [ "${marker_base}" = "${reported}" ]
   [ "${marker_base}" != "${head}" ]
-  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s4-i5-7205fa48044e' \
+  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s5-i6-38ee90625b30' \
     "${SESSION_CACHE}/session"
 }
 

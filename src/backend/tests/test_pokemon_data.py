@@ -136,6 +136,27 @@ def test_item_information_bundle_requires_complete_versioned_descriptions() -> N
     )
 
 
+def test_damage_calculator_bundle_exposes_frozen_consumer_contract() -> None:
+    release = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s5-i6-38ee90625b30"
+    fixture_path = settings.REPOSITORY_ROOT / "src/data/fixtures/damage-calculator-data-v1.json"
+
+    bundle = read_bundle(release)
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    assert bundle.manifest["bundle_hash"] == (
+        "38ee90625b301639ff581409f3728f91e717373a9658ea516a4e9a336113fedd"
+    )
+    assert fixture["schema_version"] == "damage-calculator-data-v1"
+    assert fixture["data_version"] == release.name
+    capability = bundle.records["calculator_capabilities.json"][0]
+    assert fixture["capability"] == {
+        key: value for key, value in capability.items() if key != "state_input_policy"
+    }
+    assert fixture["state_input_policy"] == capability["state_input_policy"]
+    assert len(bundle.records["type_effectiveness.json"]) == 18 * 18
+    assert all("weight_tenths_kg" in record for record in bundle.records["profiles.json"])
+
+
 def test_item_profile_admin_exposes_description_provenance_read_only() -> None:
     model_admin = admin.site._registry[ItemProfile]
 
