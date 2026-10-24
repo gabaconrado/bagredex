@@ -57,14 +57,17 @@ unclassified, missing, stale, duplicate, or silently defaulted reachable damage 
   reference artifact.
 - The final-release damage audit passed with 205 executable implemented entries and no missing,
   stale, duplicate, unsupported, or unclassified entries.
-- `git diff --check` passed before this report was written.
+- The full `./bagredex.sh check` passed, including 265 PostgreSQL-backed tests, 64 deployment tests,
+  and the production Web build and manifest checks.
+- The final deployment-stage Web run passed 175 tests. Calculator Playwright passed all 14 desktop
+  scenarios and all 70 configured-project scenarios.
+- Repository lint and diff checks passed, and the local runtime authentication, data, and cache
+  paths served the final release successfully.
 - Data, backend, Web, and architect reviews found no remaining blocking findings.
 
-Final deployment validation remains pending: repository lint, the complete data and
-PostgreSQL-backed backend suites, production Web build and manifest checks, live Playwright across
-configured projects, local Podman/runtime authentication and cache smoke tests, and cleanup of
-obsolete intermediate untracked releases. These are environmental or final-cycle validation gaps,
-not known product defects.
+The broader site Playwright run reached 41 passing scenarios before the existing Pokédex
+regulation test timed out on desktop and tablet while waiting for `.search-input-wrap`. The
+calculator-specific browser matrix remained fully green.
 
 ## Deferred tasks
 
@@ -72,4 +75,4 @@ None.
 
 ## Commits
 
-This report is included in the pending cycle commit.
+`7170b608e9bace2774150524ac5cac8df3232ca2` (`feat(calc): add one-on-one damage calculator`).
