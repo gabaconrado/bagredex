@@ -108,6 +108,7 @@ remain outside agent execution.
 ```bash
 ./bagredex.sh check
 ./bagredex.sh run
+./bagredex.sh review
 ./bagredex.sh migrate
 ./bagredex.sh human-review start FEATURE-SLUG
 ./bagredex.sh publish VERSION
@@ -116,11 +117,13 @@ remain outside agent execution.
 
 `run` starts PostgreSQL, applies migrations, serves the local container at
 `http://127.0.0.1:8000`, and stops the containers on `Ctrl+C` without deleting database data.
-`migrate` applies local migrations without starting the web server. `publish` and `deploy` are
-human-invoked operational commands; agents do not execute their registry, SSH, certificate, or
-remote-system operations. See the [deployment guide](deploy/README.md) for database persistence,
-isolated human-review lifecycle, host preparation, configuration, account bootstrap, TLS, renewal,
-and rollback behavior.
+`review` prepares the complete browser-review stack on configurable port `8000` by default with
+the local-only `admin` / `admin` account. Human-review sessions use fixed port `8000` and the same
+default account. `migrate` applies local migrations without starting the web server. `publish` and
+`deploy` are human-invoked operational commands; agents do not execute their registry, SSH,
+certificate, or remote-system operations. See the [deployment guide](deploy/README.md) for database
+persistence, isolated human-review lifecycle, host preparation, configuration, account bootstrap,
+TLS, renewal, and rollback behavior.
 
 ## License
 

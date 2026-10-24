@@ -48,9 +48,14 @@ create_human_review_mocks() {
     'elif [[ "$1 $2" == "network rm" ]]; then' \
     '  rm -f "${MOCK_STATE}/network"' \
     'elif [[ "$1 $2" == "container exists" ]]; then' \
+    '  if [[ "${*: -1}" == *_database_1 ]]; then' \
+    '    [[ -f "${MOCK_STATE}/database" ]]; exit $?' \
+    '  fi' \
     '  [[ -f "${MOCK_STATE}/server" ]]; exit $?' \
     'elif [[ "$1 $2" == "rm -f" ]]; then' \
     '  rm -f "${MOCK_STATE}/server"' \
+    'elif [[ "$1" == start && "${*: -1}" == *_database_1 ]]; then' \
+    '  touch "${MOCK_STATE}/database"' \
     'elif [[ "$1 $2" == "volume inspect" ]]; then' \
     '  printf "%s\\n" "${MOCK_VOLUME_LABEL:-true}"' \
     'elif [[ "$1" == inspect ]]; then' \
@@ -61,7 +66,7 @@ create_human_review_mocks() {
     '  fi' \
     'elif [[ "$1" == compose ]]; then' \
     '  if [[ "$*" == *" up -d database"* ]]; then touch "${MOCK_STATE}/volume" "${MOCK_STATE}/network" "${MOCK_STATE}/database"; fi' \
-    '  if [[ "$*" == *" up -d server"* ]]; then touch "${MOCK_STATE}/server"; fi' \
+    '  if [[ "$*" == *" up -d server"* || "$*" == *" run --no-deps -d --name bagredex-human-review_server_1 --service-ports server"* ]]; then touch "${MOCK_STATE}/server"; fi' \
     '  if [[ "$*" == *" ps --status running --services"* ]]; then' \
     '    [[ -f "${MOCK_STATE}/database" ]] && printf "%s\\n" database' \
     '    [[ -f "${MOCK_STATE}/server" ]] && printf "%s\\n" server' \
@@ -91,12 +96,14 @@ human_review() {
 }
 
 @test "human-review start writes a private marker and reports stable fields without logging credentials" {
-  run human_review env BAGREDEX_REVIEW_USERNAME='reviewer;safe' \
+  run human_review env BAGREDEX_HUMAN_REVIEW_PORT=38117 \
+    BAGREDEX_REVIEW_USERNAME='reviewer;safe' \
     BAGREDEX_REVIEW_PASSWORD='password;not-a-command' \
     "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"TARGET: basic-team-builder"* ]]
   [[ "${output}" == *"STATE: ready"* ]]
+  [[ "${output}" == *"URL: http://127.0.0.1:8000/"* ]]
   [[ "${output}" == *"PROJECT: bagredex-human-review"* ]]
   [[ "${output}" == *"VOLUME: bagredex-human-review-database"* ]]
   [ "$(stat -c '%a' "${SESSION_CACHE}/session")" = 600 ]
@@ -106,6 +113,16 @@ human_review() {
   grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s5-i6-38ee90625b30' \
     "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
+}
+
+@test "human-review defaults to fixed port 8000 and admin credentials" {
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"URL: http://127.0.0.1:8000/"* ]]
+  [[ "${output}" == *"USERNAME: admin"* ]]
+  [[ "${output}" == *"PASSWORD: admin"* ]]
+  grep -Fxq 'PORT=8000' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=admin' "${SESSION_CACHE}/session"
 }
 
 @test "human-review status is read-only and reload preserves the fixed volume" {
@@ -126,6 +143,11 @@ human_review() {
   grep -Fq 'migrate --noinput' "${COMMAND_LOG}"
   grep -Fq 'container exists bagredex-human-review_server_1' "${COMMAND_LOG}"
   grep -Fq 'rm -f bagredex-human-review_server_1' "${COMMAND_LOG}"
+  grep -Fq 'start bagredex-human-review_database_1' "${COMMAND_LOG}"
+  grep -Fq 'run --no-deps --rm server python manage.py migrate --noinput' "${COMMAND_LOG}"
+  grep -Fq 'run --no-deps -d --name bagredex-human-review_server_1 --service-ports server' \
+    "${COMMAND_LOG}"
+  ! grep -Fq ' up -d database' "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
   [ -f "${MOCK_STATE}/volume" ]
 }
@@ -239,11 +261,12 @@ human_review() {
   [ "${output}" = "${intended}" ]
 }
 
-@test "human-review rejects an occupied port missing pin and missing host tool before mutation" {
+@test "human-review rejects fixed occupied port missing pin and missing host tool before mutation" {
   run human_review env MOCK_PORT_OCCUPIED=true BAGREDEX_HUMAN_REVIEW_PORT=38117 \
     "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"port is already occupied"* ]]
+  [[ "${output}" == *"8000"* ]]
   [ ! -e "${SESSION_CACHE}/session" ]
 
   run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${TEST_TEMP}/missing-pin" \
@@ -262,6 +285,65 @@ human_review() {
     /bin/bash "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"Required host tool is unavailable: podman"* ]]
+}
+
+@test "legacy session status is read-only and reload migrates old defaults" {
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  sed -i 's/^PORT=8000$/PORT=8001/; s/^PASSWORD=admin$/PASSWORD=bagredex-local/' \
+    "${SESSION_CACHE}/session"
+  : >"${COMMAND_LOG}"
+
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review status
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: partial-ready"* ]]
+  [[ "${output}" == *"URL: http://127.0.0.1:8001/"* ]]
+  grep -Fxq 'PORT=8001' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=bagredex-local' "${SESSION_CACHE}/session"
+  ! grep -Eq ' build | up | down |rm -f|volume rm|volume prune' "${COMMAND_LOG}"
+
+  : >"${COMMAND_LOG}"
+  run human_review env MOCK_PORT_OCCUPIED=true \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 1 ]
+  grep -Fxq 'STATE=ready' "${SESSION_CACHE}/session"
+  grep -Fxq 'PORT=8001' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=bagredex-local' "${SESSION_CACHE}/session"
+  [ -f "${MOCK_STATE}/server" ]
+  ! grep -Fq 'rm -f bagredex-human-review_server_1' "${COMMAND_LOG}"
+
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"URL: http://127.0.0.1:8000/"* ]]
+  [[ "${output}" == *"PASSWORD: admin"* ]]
+  grep -Fxq 'STATE=ready' "${SESSION_CACHE}/session"
+  grep -Fxq 'PORT=8000' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=admin' "${SESSION_CACHE}/session"
+  [ -f "${MOCK_STATE}/volume" ]
+}
+
+@test "legacy reload preserves custom credentials and interrupted migration is resumable" {
+  run human_review env BAGREDEX_REVIEW_USERNAME=custom \
+    BAGREDEX_REVIEW_PASSWORD=custom-password \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  sed -i 's/^PORT=8000$/PORT=8001/' "${SESSION_CACHE}/session"
+
+  run human_review env MOCK_PODMAN_FAIL_MATCH='migrate --noinput' \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 9 ]
+  grep -Fxq 'STATE=reloading' "${SESSION_CACHE}/session"
+  grep -Fxq 'PORT=8000' "${SESSION_CACHE}/session"
+  grep -Fxq 'USERNAME=custom' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=custom-password' "${SESSION_CACHE}/session"
+  [ -f "${MOCK_STATE}/volume" ]
+
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"STATE: ready"* ]]
+  [[ "${output}" == *"URL: http://127.0.0.1:8000/"* ]]
+  [[ "${output}" == *"USERNAME: custom"* ]]
+  [[ "${output}" == *"PASSWORD: custom-password"* ]]
 }
 
 @test "human-review status fails closed for missing established resources and foreign labels" {
@@ -411,4 +493,10 @@ human_review() {
   run grep -F '`partial-reloading`, `partial-ready`, or `stopped`, ask it to run' \
     "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
   [ "${status}" -eq 0 ]
+  run grep -F 'exactly as shown without injecting a port override' \
+    "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
+  [ "${status}" -eq 0 ]
+  run grep -F 'BAGREDEX_HUMAN_REVIEW_PORT=' \
+    "${REPOSITORY_ROOT}/.agents/skills/human-review/SKILL.md"
+  [ "${status}" -eq 1 ]
 }

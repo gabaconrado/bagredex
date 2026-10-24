@@ -53,7 +53,7 @@ explicitly activates the pinned bundle, and creates or updates this local-only s
 ```text
 URL:      http://127.0.0.1:8000/
 Username: admin
-Password: bagredex-local
+Password: admin
 ```
 
 These known credentials are safe only for the loopback-bound local review environment. Override
@@ -102,12 +102,13 @@ is complete and committed. Its deterministic lifecycle commands are:
 ./bagredex.sh human-review finish
 ```
 
-`start` defaults to `http://127.0.0.1:8001/`, creates the fixed
+`start` publishes only at `http://127.0.0.1:8000/`, creates the fixed
 `bagredex-human-review` project and fresh `bagredex-human-review-database` volume, and prints stable
-labeled connection fields only after readiness. `BAGREDEX_HUMAN_REVIEW_PORT`,
-`BAGREDEX_REVIEW_USERNAME`, and `BAGREDEX_REVIEW_PASSWORD` may override the loopback port and local
-account. The ignored marker under `.cache/human-review` stores the credentials with mode `0600`;
-do not share them or use them outside this local environment.
+labeled connection fields only after readiness. The default local-only account is `admin` / `admin`.
+`BAGREDEX_REVIEW_USERNAME` and `BAGREDEX_REVIEW_PASSWORD` may override that account, but the
+human-review port is fixed for the host proxy. Startup fails before mutation when port `8000` is
+occupied; stop the other listener and retry. The ignored marker under `.cache/human-review` stores
+the credentials with mode `0600`; do not share them or use them outside this local environment.
 
 `reload` rebuilds and reapplies idempotent setup while preserving the session volume and any review
 data. `status` is read-only. If startup or reload is interrupted, retain the marker and run
@@ -116,7 +117,8 @@ instead of guessing which state may be deleted.
 
 Only explicit `finish` removes the exact human-review containers, network, and named volume. A
 later `start` therefore begins with a fresh database. These commands never target the ordinary
-`bagredex-local` review volume, and the existing `./bagredex.sh review` behavior is unchanged.
+`bagredex-local` review volume. Ordinary `./bagredex.sh review` remains configurable through
+`BAGREDEX_PORT`.
 
 ## Publish images
 

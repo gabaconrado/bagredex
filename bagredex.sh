@@ -166,7 +166,7 @@ review_local() {
   require_tools podman npm node sed curl
   local review_port="${BAGREDEX_PORT-8000}"
   local review_username="${BAGREDEX_REVIEW_USERNAME-admin}"
-  local review_password="${BAGREDEX_REVIEW_PASSWORD-bagredex-local}"
+  local review_password="${BAGREDEX_REVIEW_PASSWORD-admin}"
   local data_version
   [[ "${review_port}" =~ ^[0-9]+$ && "${review_port}" -ge 1 && \
     "${review_port}" -le 65535 ]] || {

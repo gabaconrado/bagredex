@@ -7,6 +7,10 @@ readonly human_review_project="bagredex-human-review"
 readonly human_review_volume="bagredex-human-review-database"
 readonly human_review_network="bagredex-human-review_application"
 readonly human_review_server="bagredex-human-review_server_1"
+readonly human_review_fixed_port="8000"
+readonly human_review_former_default_port="8001"
+readonly human_review_former_default_username="admin"
+readonly human_review_former_default_password="bagredex-local"
 readonly human_review_compose="${script_dir}/deploy/compose.human-review.yaml"
 readonly human_review_cache="${BAGREDEX_HUMAN_REVIEW_CACHE-${script_dir}/.cache/human-review}"
 readonly human_review_marker="${human_review_cache}/session"
@@ -39,6 +43,16 @@ human_review_usage() {
 human_compose() {
   BAGREDEX_HUMAN_REVIEW_PORT="${hr_port}" podman compose \
     -p "${human_review_project}" -f "${base_compose}" -f "${human_review_compose}" "$@"
+}
+
+human_compose_no_dependencies() {
+  local command="${1:?compose command required}"
+  shift
+  [[ "${command}" == run ]] || {
+    printf 'Dependency-free human-review Compose supports only run.\n' >&2
+    return 2
+  }
+  human_compose run --no-deps "$@"
 }
 
 human_review_lock_session() {
@@ -259,13 +273,13 @@ human_review_resolve_target() {
 }
 
 human_review_port_is_free() {
-  local listeners
-  listeners="$(ss -H -ltn "sport = :${hr_port}")" || {
+  local port="${1:-${hr_port}}" listeners
+  listeners="$(ss -H -ltn "sport = :${port}")" || {
     printf 'Could not inspect the requested human-review port.\n' >&2
     return 1
   }
   if [[ -n "${listeners}" ]]; then
-    printf 'Human-review port is already occupied: %s\n' "${hr_port}" >&2
+    printf 'Human-review port is already occupied: %s\n' "${port}" >&2
     return 1
   fi
 }
@@ -285,26 +299,39 @@ human_review_wait_for_health() {
 }
 
 human_review_initialize() {
-  local restart_server="${1:-false}"
+  local restart_server="${1:-false}" compose_run_function="human_compose"
   install_frontend
   build_frontend
   human_compose build server
-  human_compose up -d database
+  if [[ "${restart_server}" == true ]]; then
+    compose_run_function="human_compose_no_dependencies"
+    if podman container exists "${human_review_server}"; then
+      podman rm -f "${human_review_server}" >/dev/null
+    fi
+    if podman container exists "${human_review_project}_database_1"; then
+      podman start "${human_review_project}_database_1" >/dev/null
+    else
+      human_compose up -d database
+    fi
+  else
+    human_compose up -d database
+  fi
   # The variables are resolved inside the database container.
   # shellcheck disable=SC2016
   human_compose exec -T database sh -c \
     'attempt=0; until pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
        attempt=$((attempt + 1)); [ "$attempt" -lt 30 ] || exit 1; sleep 1
      done'
-  human_compose run --rm server python manage.py migrate --noinput
-  human_compose run --rm server python manage.py load_pokemon_data \
+  "${compose_run_function}" run --rm server python manage.py migrate --noinput
+  "${compose_run_function}" run --rm server python manage.py load_pokemon_data \
     "/app/src/data/releases/${hr_bundle}"
-  human_compose run --rm server python manage.py activate_pokemon_data "${hr_bundle}"
-  configure_review_account human_compose "${hr_username}" "${hr_password}"
-  if [[ "${restart_server}" == true ]] && podman container exists "${human_review_server}"; then
-    podman rm -f "${human_review_server}" >/dev/null
+  "${compose_run_function}" run --rm server python manage.py activate_pokemon_data "${hr_bundle}"
+  configure_review_account "${compose_run_function}" "${hr_username}" "${hr_password}"
+  if [[ "${restart_server}" == true ]]; then
+    human_compose run --no-deps -d --name "${human_review_server}" --service-ports server
+  else
+    human_compose up -d server
   fi
-  human_compose up -d server
   wait_for_review_server "${hr_port}"
   human_review_wait_for_health
   hr_state="ready"
@@ -329,7 +356,8 @@ human_review_print_status() {
         printf 'Could not inspect human-review server health.\n' >&2
         return 8
       }
-      if [[ "${database_health}" == 'running|healthy' &&
+      if [[ "${hr_port}" == "${human_review_fixed_port}" &&
+        "${database_health}" == 'running|healthy' &&
         "${server_health}" == 'running|healthy' ]] &&
         curl --fail --silent --output /dev/null \
           "http://127.0.0.1:${hr_port}/health/ready"; then
@@ -362,9 +390,9 @@ human_review_start() {
     resource_status=$?
     [[ "${resource_status}" -eq 1 ]] || return "${resource_status}"
   fi
-  hr_port="${BAGREDEX_HUMAN_REVIEW_PORT-8001}"
+  hr_port="${human_review_fixed_port}"
   hr_username="${BAGREDEX_REVIEW_USERNAME-admin}"
-  hr_password="${BAGREDEX_REVIEW_PASSWORD-bagredex-local}"
+  hr_password="${BAGREDEX_REVIEW_PASSWORD-admin}"
   hr_bundle="$(review_data_version_from \
     "${BAGREDEX_HUMAN_REVIEW_DATA_ENV-${pokemon_data_env}}")"
   [[ "${hr_port}" =~ ^[0-9]+$ && "${hr_port}" -ge 1 && "${hr_port}" -le 65535 &&
@@ -390,7 +418,7 @@ human_review_status() {
 }
 
 human_review_reload() {
-  require_tools podman npm node sed curl stat mktemp mv chmod
+  require_tools podman npm node sed curl stat mktemp mv chmod ss
   human_review_read_marker
   [[ "${hr_state}" != finishing ]] || {
     printf 'Human-review teardown is pending; run finish to resume it.\n' >&2
@@ -401,6 +429,15 @@ human_review_reload() {
     printf 'Active human-review session is missing its validated database volume.\n' >&2
     return 6
   }
+  if [[ "${hr_port}" != "${human_review_fixed_port}" ]]; then
+    human_review_port_is_free "${human_review_fixed_port}"
+    if [[ "${hr_port}" == "${human_review_former_default_port}" &&
+      "${hr_username}" == "${human_review_former_default_username}" &&
+      "${hr_password}" == "${human_review_former_default_password}" ]]; then
+      hr_password="admin"
+    fi
+    hr_port="${human_review_fixed_port}"
+  fi
   hr_state="reloading"
   human_review_write_marker
   human_review_initialize true

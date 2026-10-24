@@ -17,8 +17,9 @@ Never infer invocation from a visual-review or feedback request.
    report, and reported commit. Ask one question if candidates are ambiguous or explicit context
    conflicts. Incomplete features are ineligible.
 3. Ask the deployment agent to run `./bagredex.sh human-review start TARGET`. Relay its labeled URL,
-   username, password, target, state, active bundle, project, and volume. Do not reconstruct Podman
-   commands or open a browser automatically.
+   username, password, target, state, active bundle, project, and volume. Run the lifecycle command
+   exactly as shown without injecting a port override. Do not reconstruct Podman commands or open a
+   browser automatically.
 4. If status reports `partial-finishing`, ask the deployment agent to run
    `./bagredex.sh human-review finish` to resume the exact teardown. For `partial-starting`,
    `partial-reloading`, `partial-ready`, or `stopped`, ask it to run

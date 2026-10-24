@@ -125,6 +125,23 @@ setup_review_mocks() {
   grep -Fq 'user.set_password(password.decode())' "${REPOSITORY_ROOT}/bagredex.sh"
 }
 
+@test "review defaults to port 8000 and admin credentials while retaining port overrides" {
+  setup_review_mocks
+
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" MOCK_FOREGROUND=fail \
+    "${REPOSITORY_ROOT}/bagredex.sh" review
+  [ "${status}" -eq 7 ]
+  [[ "${output}" == *"URL:      http://127.0.0.1:8000/"* ]]
+  [[ "${output}" == *"Username: admin"* ]]
+  [[ "${output}" == *"Password: admin"* ]]
+
+  : >"${COMMAND_LOG}"
+  run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" MOCK_FOREGROUND=fail \
+    BAGREDEX_PORT=38117 "${REPOSITORY_ROOT}/bagredex.sh" review
+  [ "${status}" -eq 7 ]
+  [[ "${output}" == *"URL:      http://127.0.0.1:38117/"* ]]
+}
+
 @test "review cleans up when database or initialization fails" {
   setup_review_mocks
   run env PATH="${MOCK_BIN}:${PATH}" COMMAND_LOG="${COMMAND_LOG}" \
