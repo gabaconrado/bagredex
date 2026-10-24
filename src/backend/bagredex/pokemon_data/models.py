@@ -273,15 +273,39 @@ class AbilityProfile(VersionOwnedModel):
 class ItemProfile(VersionOwnedModel):
     """A regulation-effective legal held item."""
 
+    class DescriptionSource(models.TextChoices):
+        DESC = "desc", "Full description"
+        SHORT_DESC = "shortDesc", "Short-description fallback"
+
     regulation = models.ForeignKey(Regulation, on_delete=models.PROTECT)
     item = models.ForeignKey(Item, on_delete=models.PROTECT)
     source_status = models.CharField(max_length=32)
+    short_description = models.TextField(null=True, blank=True)  # noqa: DJ001
+    description = models.TextField(null=True, blank=True)  # noqa: DJ001
+    description_source = models.CharField(  # noqa: DJ001
+        max_length=16, choices=DescriptionSource, null=True, blank=True
+    )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=("regulation", "item"), name="pokemon_data_unique_item_profile"
-            )
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        short_description__isnull=True,
+                        description__isnull=True,
+                        description_source__isnull=True,
+                    )
+                    | models.Q(
+                        short_description__isnull=False,
+                        description__isnull=False,
+                        description_source__in=("desc", "shortDesc"),
+                    )
+                ),
+                name="pokemon_data_item_descriptions_complete",
+            ),
         ]
 
 

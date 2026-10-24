@@ -43,10 +43,10 @@ from bagredex.teams.services import replace_team
 @pytest.fixture
 def team_data() -> dict[str, Any]:
     version = DataVersion.objects.create(
-        id="showdown-team-test-s3-i4-0123456789ab",
+        id="showdown-team-test-s4-i5-0123456789ab",
         bundle_hash="a" * 64,
-        bundle_schema_version="3",
-        importer_version="4",
+        bundle_schema_version="4",
+        importer_version="5",
         source_shape_version="test",
         provenance={},
         validation_summary={},
@@ -159,7 +159,13 @@ def team_data() -> dict[str, Any]:
     )
     stone = Item.objects.create(version=version, canonical_id="pikachunite", name="Pikachunite")
     stone_profile = ItemProfile.objects.create(
-        version=version, regulation=regulation, item=stone, source_status="standard"
+        version=version,
+        regulation=regulation,
+        item=stone,
+        source_status="standard",
+        short_description="Enables Mega Evolution.",
+        description="Enables Pikachu to Mega Evolve.",
+        description_source=ItemProfile.DescriptionSource.DESC,
     )
     ordinary_item = Item.objects.create(
         version=version, canonical_id="oranberry", name="Oran Berry"
@@ -169,6 +175,9 @@ def team_data() -> dict[str, Any]:
         regulation=regulation,
         item=ordinary_item,
         source_status="standard",
+        short_description="Restores HP.",
+        description="Restores HP.",
+        description_source=ItemProfile.DescriptionSource.SHORT_DESC,
     )
     mega = PokemonForm.objects.create(
         version=version,
@@ -999,7 +1008,16 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
     url = f"/teams/data/{retained.version_id}/{retained.canonical_id}/"
     client = Client()
     client.force_login(owner)
-    assert client.get(url).status_code == 200
+    owner_response = client.get(url)
+    assert owner_response.status_code == 200
+    assert owner_response.json()["items"] == [
+        {
+            "id": "foreignitem",
+            "name": "Foreign Item",
+            "short_description": None,
+            "description": None,
+        }
+    ]
     client.force_login(other)
     response = client.get(url)
     assert response.status_code == 404
@@ -1007,7 +1025,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
 
 
 @pytest.mark.django_db
-def test_builder_dataset_v2_has_pinned_ability_and_move_details(
+def test_builder_dataset_v3_has_pinned_ability_move_and_item_details(
     team_data: dict[str, Any],
 ) -> None:
     owner = User.objects.create_user(username="dataset-details")
@@ -1019,7 +1037,7 @@ def test_builder_dataset_v2_has_pinned_ability_and_move_details(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, max-age=3600"
     payload = response.json()
-    assert payload["schema_version"] == "team-builder-data-v2"
+    assert payload["schema_version"] == "team-builder-data-v3"
     assert payload["data_version"] == team_data["version"].pk
     assert payload["regulation"]["id"] == "m-c"
     assert payload["abilities"] == [
@@ -1050,7 +1068,20 @@ def test_builder_dataset_v2_has_pinned_ability_and_move_details(
     assert payload["forms"][0]["ability_ids"] == ["static"]
     assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
     assert payload["mega_relations"][0]["target"]["ability_ids"] == ["static"]
-    assert set(payload["items"][0]) == {"id", "name"}
+    assert payload["items"] == [
+        {
+            "id": "oranberry",
+            "name": "Oran Berry",
+            "short_description": "Restores HP.",
+            "description": "Restores HP.",
+        },
+        {
+            "id": "pikachunite",
+            "name": "Pikachunite",
+            "short_description": "Enables Mega Evolution.",
+            "description": "Enables Pikachu to Mega Evolve.",
+        },
+    ]
     assert payload["sprite_url_template"].startswith("/")
     assert team_data["version"].pk in payload["sprite_url_template"]
 
@@ -1197,6 +1228,51 @@ def test_durable_team_constraints_reject_invalid_rows(team_data: dict[str, Any])
     profile = team_data["profile"]
     nature = team_data["nature"]
     stone = ItemProfile.objects.get(item__canonical_id="pikachunite")
+    loading_version = DataVersion.objects.create(
+        id="showdown-constraint-test-s4-i5-0123456789ab",
+        bundle_hash="c" * 64,
+        bundle_schema_version="4",
+        importer_version="5",
+        source_shape_version="test",
+        provenance={},
+        validation_summary={},
+        semantic_inventory={},
+        semantic_diff={},
+        manifest={},
+    )
+    loading_mechanics = MechanicsProfile.objects.create(
+        version=loading_version,
+        canonical_id="constraint-test",
+        level=50,
+        sp_minimum=0,
+        sp_maximum=32,
+        sp_total_max=66,
+        hp_formula="base + sp + 75",
+        other_formula="truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages={"hindering": 90, "neutral": 100, "increasing": 110},
+    )
+    loading_regulation = Regulation.objects.create(
+        version=loading_version,
+        canonical_id="m-c",
+        name="Constraint Regulation",
+        showdown_format_id="constraint-test",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=loading_mechanics,
+    )
+    incomplete_item = Item.objects.create(
+        version=loading_version,
+        canonical_id="incompleteitem",
+        name="Incomplete Item",
+    )
+    with pytest.raises(IntegrityError), transaction.atomic():
+        ItemProfile.objects.create(
+            version=loading_version,
+            regulation=loading_regulation,
+            item=incomplete_item,
+            source_status="standard",
+            short_description="Only one field.",
+        )
     first = TeamMember.objects.create(
         team=team,
         position=0,

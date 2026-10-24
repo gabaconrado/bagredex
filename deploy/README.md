@@ -219,8 +219,8 @@ image.
 Builds require the three user-supplied local reference repositories and the exact tools documented
 in `src/data/README.md`; production does not contain those inputs. After reviewing and committing a
 new bundle, update `deploy/pokemon-data.env` in the same release. The current pin is
-`showdown-multi-s3-i4-5073b2ab1402`, whose canonical bundle hash is
-`5073b2ab1402a90ec951e0b4ccc123956998b40092d7d74c26b50e9736a61267`.
+`showdown-multi-s4-i5-7205fa48044e`, whose canonical bundle hash is
+`7205fa48044e73f059e980629e222fcbdc1d5aaffb2bd667c8b8837a7b15ab6b`.
 
 From a prepared source checkout, build the deterministic bundle with:
 
@@ -248,7 +248,7 @@ release with the production Compose environment shown in the administrator examp
 podman compose -p bagredex \
   -f current/deploy/compose.yaml \
   -f current/deploy/compose.production.yaml \
-  exec server python manage.py activate_pokemon_data showdown-multi-s3-i4-5073b2ab1402
+  exec server python manage.py activate_pokemon_data showdown-multi-s4-i5-7205fa48044e
 ```
 
 Rollback uses the same command with a retained, validated release. For example, return to the

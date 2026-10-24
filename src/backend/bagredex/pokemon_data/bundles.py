@@ -21,7 +21,12 @@ MULTI_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-2"
 TEAM_SCHEMA_VERSION = "3"
 TEAM_IMPORTER_VERSION = "4"
 TEAM_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-3"
-MULTI_SCHEMA_VERSIONS = frozenset({MULTI_SCHEMA_VERSION, TEAM_SCHEMA_VERSION})
+ITEM_INFO_SCHEMA_VERSION = "4"
+ITEM_INFO_IMPORTER_VERSION = "5"
+ITEM_INFO_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-4"
+MULTI_SCHEMA_VERSIONS = frozenset(
+    {MULTI_SCHEMA_VERSION, TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION}
+)
 SUPPORTED_SCHEMA_VERSIONS = frozenset({SUPPORTED_SCHEMA_VERSION, *MULTI_SCHEMA_VERSIONS})
 EXPECTED_SHOWDOWN_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
 EXPECTED_SPRITES_REVISION = "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
@@ -149,6 +154,15 @@ TEAM_PINNED_COUNTS = {
     "natures": 21,
     "mega_item_relations": 214,
 }
+ITEM_DESCRIPTION_SOURCE_COUNTS = {
+    "m-a": {"desc": 2, "shortDesc": 115},
+    "m-b": {"desc": 2, "shortDesc": 146},
+    "m-c": {"desc": 2, "shortDesc": 164},
+}
+ITEM_INFO_PINNED_COUNTS = {
+    **TEAM_PINNED_COUNTS,
+    "item_description_sources_by_regulation": ITEM_DESCRIPTION_SOURCE_COUNTS,
+}
 MULTI_GROUP_COUNTS = {
     "legal_forms_by_regulation": {"m-a": 272, "m-b": 314, "m-c": 349},
     "learnsets_by_regulation": {"m-a": 21506, "m-b": 21715, "m-c": 21714},
@@ -169,6 +183,32 @@ MULTI_GROUP_COUNTS = {
     },
 }
 PINNED_RELEASE_CONTRACTS = {
+    "showdown-multi-s4-i5-7205fa48044e": (
+        "7205fa48044e73f059e980629e222fcbdc1d5aaffb2bd667c8b8837a7b15ab6b",
+        ITEM_INFO_PINNED_COUNTS,
+        MULTI_GROUP_COUNTS,
+        EXPECTED_SPRITE_MAPPING_SHA256,
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_item_texts": 564,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_item_texts": 583,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
+    ),
     "showdown-multi-s3-i4-5073b2ab1402": (
         "5073b2ab1402a90ec951e0b4ccc123956998b40092d7d74c26b50e9736a61267",
         TEAM_PINNED_COUNTS,
@@ -444,6 +484,128 @@ def _identifier(record: JsonObject, field: str, label: str) -> str:
     return value
 
 
+def _canonical_json_object(path: Path, label: str) -> JsonObject:
+    value = _object(_json(path), label)
+    if path.read_bytes() != canonical_bytes(value):
+        raise BundleReadError(f"{label}: JSON must use canonical encoding")
+    return value
+
+
+def _validate_item_text_overlay(directory: Path, declaration: JsonObject) -> dict[str, JsonObject]:
+    """Authenticate the exact six historical Item-text transitions and fixtures."""
+    overlay_path = Path(_string(declaration, "path", "provenance.json:overlays[0]"))
+    overlay = _canonical_json_object(directory / overlay_path, overlay_path.as_posix())
+    _exact_keys(
+        overlay,
+        {
+            "id",
+            "target_regulation",
+            "target_revision",
+            "text_source_revision",
+            "transitions",
+        },
+        overlay_path.as_posix(),
+    )
+    if (
+        overlay.get("id") != declaration.get("id")
+        or overlay.get("target_regulation") != "m-a"
+        or overlay.get("target_revision") != declaration.get("target_revision")
+        or overlay.get("text_source_revision") != declaration.get("text_source_revision")
+    ):
+        raise BundleReadError(f"{overlay_path}: metadata does not match its declaration")
+    declared_transitions = _records(
+        declaration.get("transitions"), "provenance.json:overlays[0]:transitions"
+    )
+    overlay_transitions = _records(overlay.get("transitions"), f"{overlay_path}:transitions")
+    if len(overlay_transitions) != len(declared_transitions):
+        raise BundleReadError(f"{overlay_path}: transition count does not match its declaration")
+    transition_keys = {
+        "after",
+        "authoring_date",
+        "before",
+        "fixture",
+        "item_id",
+        "rationale",
+        "record",
+    }
+    state_keys = {
+        "description",
+        "description_source",
+        "id",
+        "mega_stone",
+        "name",
+        "short_description",
+        "source_status",
+    }
+    fixture_keys = {"expected_after", "expected_before", "overlay_id", "record"}
+    resolved_after: dict[str, JsonObject] = {}
+    for index, (transition, declared) in enumerate(
+        zip(overlay_transitions, declared_transitions, strict=True)
+    ):
+        label = f"{overlay_path}:transitions[{index}]"
+        _exact_keys(transition, transition_keys, label)
+        item_id = _identifier(transition, "item_id", label)
+        expected_record = f"item_profiles.json:m-a:{item_id}"
+        if (
+            transition.get("record") != expected_record
+            or declared.get("item_id") != item_id
+            or declared.get("record") != expected_record
+            or transition.get("authoring_date") != declared.get("authoring_date")
+            or transition.get("rationale") != declared.get("rationale")
+        ):
+            raise BundleReadError(f"{label}: identity does not match its declaration")
+        before = _object(transition.get("before"), f"{label}:before")
+        after = _object(transition.get("after"), f"{label}:after")
+        _exact_keys(before, state_keys, f"{label}:before")
+        _exact_keys(after, state_keys, f"{label}:after")
+        if (
+            before.get("id") != item_id
+            or before.get("short_description") is not None
+            or before.get("description") is not None
+            or before.get("description_source") is not None
+            or after.get("id") != item_id
+            or before.get("name") != after.get("name")
+            or before.get("source_status") != "standard"
+            or after.get("source_status") != "standard"
+            or before.get("mega_stone") != after.get("mega_stone")
+        ):
+            raise BundleReadError(f"{label}: invalid before/after Item transition")
+        item_name = _text(after, "name", f"{label}:after", maximum=200)
+        expected_rationale = (
+            f"The pinned M-A revision legally enables {item_name} but lacks its Item text; "
+            "use the exact text from the pinned current revision."
+        )
+        if transition.get("rationale") != expected_rationale:
+            raise BundleReadError(f"{label}: rationale does not identify the declared Item")
+        short_description = _text(after, "short_description", f"{label}:after")
+        description = _text(after, "description", f"{label}:after")
+        if after.get("description_source") != "shortDesc" or description != short_description:
+            raise BundleReadError(f"{label}: invalid resolved Item text")
+        mega_stones = _records(after.get("mega_stone"), f"{label}:after:mega_stone")
+        if not mega_stones:
+            raise BundleReadError(f"{label}: missing Mega Stone identity")
+        for stone_index, stone in enumerate(mega_stones):
+            stone_label = f"{label}:after:mega_stone[{stone_index}]"
+            _exact_keys(stone, {"base_form_id", "mega_form_id"}, stone_label)
+            _identifier(stone, "base_form_id", stone_label)
+            _identifier(stone, "mega_form_id", stone_label)
+        fixture_name = transition.get("fixture")
+        fixture_path = Path(_string(declared, "fixture_path", label))
+        if fixture_name != fixture_path.name:
+            raise BundleReadError(f"{label}: fixture identity does not match its declaration")
+        fixture = _canonical_json_object(directory / fixture_path, fixture_path.as_posix())
+        _exact_keys(fixture, fixture_keys, fixture_path.as_posix())
+        if (
+            fixture.get("overlay_id") != declaration.get("id")
+            or fixture.get("record") != expected_record
+            or fixture.get("expected_before") != before
+            or fixture.get("expected_after") != after
+        ):
+            raise BundleReadError(f"{fixture_path}: fixture does not match transition {item_id}")
+        resolved_after[item_id] = after
+    return resolved_after
+
+
 def _boolean(record: JsonObject, field: str, label: str) -> bool:
     value = record.get(field)
     if not isinstance(value, bool):
@@ -494,7 +656,7 @@ def _validate_unique(records: list[JsonObject], fields: tuple[str, ...], label: 
         seen.add(key)
 
 
-def _validate_record_shapes(records: dict[str, list[JsonObject]]) -> None:
+def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_version: str) -> None:
     """Validate every field before ORM construction can observe malformed values."""
     mechanics_keys = {
         "id",
@@ -573,12 +735,30 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]]) -> None:
                 _text(record, "name", label, maximum=200)
         for index, record in enumerate(records["item_profiles.json"]):
             label = f"item_profiles.json[{index}]"
-            _exact_keys(record, {"regulation_id", "id", "name", "source_status"}, label)
+            keys = {"regulation_id", "id", "name", "source_status"}
+            if schema_version == ITEM_INFO_SCHEMA_VERSION:
+                keys.update({"short_description", "description", "description_source"})
+            _exact_keys(record, keys, label)
             _identifier(record, "regulation_id", label)
             _identifier(record, "id", label)
             _text(record, "name", label, maximum=200)
             if record.get("source_status") != "standard":
                 raise BundleReadError(f"{label}: item must be standard")
+            if schema_version == ITEM_INFO_SCHEMA_VERSION:
+                short_description = _text(record, "short_description", label)
+                description = _text(record, "description", label)
+                if (
+                    short_description.strip() != short_description
+                    or description.strip() != description
+                ):
+                    raise BundleReadError(f"{label}: Item descriptions must be trimmed")
+                description_source = record.get("description_source")
+                if description_source not in {"desc", "shortDesc"}:
+                    raise BundleReadError(f"{label}: invalid description_source")
+                if description_source == "shortDesc" and description != short_description:
+                    raise BundleReadError(
+                        f"{label}: shortDesc description must equal short_description"
+                    )
         for index, record in enumerate(records["mega_item_relations.json"]):
             label = f"mega_item_relations.json[{index}]"
             _exact_keys(record, {"regulation_id", "item_id", "base_form_id", "mega_form_id"}, label)
@@ -807,7 +987,7 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
         "nature_percentages": {"hindering": 90, "neutral": 100, "increasing": 110},
     }
-    if schema_version == TEAM_SCHEMA_VERSION:
+    if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION}:
         expected_mechanics["sp_total_max"] = 66
     if records["mechanics_profiles.json"] != [expected_mechanics]:
         raise BundleReadError("mechanics_profiles.json: unsupported mechanics contract")
@@ -929,7 +1109,7 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         raise BundleReadError(
             "regulation_memberships.json: membership without an effective profile"
         )
-    if schema_version == TEAM_SCHEMA_VERSION:
+    if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION}:
         item_ids = {_string(item, "id", "items.json") for item in records["items.json"]}
         item_profiles = {
             (
@@ -1280,6 +1460,23 @@ def _expected_counts(records: dict[str, list[JsonObject]]) -> dict[str, object]:
                 "mega_item_relations": len(records["mega_item_relations.json"]),
             }
         )
+        if any("description_source" in record for record in records["item_profiles.json"]):
+            counts["item_description_sources_by_regulation"] = {
+                regulation_id: dict(sorted(source_counts.items()))
+                for regulation_id, source_counts in sorted(
+                    {
+                        regulation_id: Counter(
+                            _string(item, "description_source", "item_profiles.json")
+                            for item in records["item_profiles.json"]
+                            if _string(item, "regulation_id", "item_profiles.json") == regulation_id
+                        )
+                        for regulation_id in {
+                            _string(item, "regulation_id", "item_profiles.json")
+                            for item in records["item_profiles.json"]
+                        }
+                    }.items()
+                )
+            }
     return counts
 
 
@@ -1320,23 +1517,31 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: unsupported bundle schema version")
     importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_importers = (
-        {TEAM_IMPORTER_VERSION}
-        if schema_version == TEAM_SCHEMA_VERSION
+        {ITEM_INFO_IMPORTER_VERSION}
+        if schema_version == ITEM_INFO_SCHEMA_VERSION
         else (
-            {MULTI_IMPORTER_VERSION}
-            if schema_version == MULTI_SCHEMA_VERSION
-            else SUPPORTED_IMPORTER_VERSIONS
+            {TEAM_IMPORTER_VERSION}
+            if schema_version == TEAM_SCHEMA_VERSION
+            else (
+                {MULTI_IMPORTER_VERSION}
+                if schema_version == MULTI_SCHEMA_VERSION
+                else SUPPORTED_IMPORTER_VERSIONS
+            )
         )
     )
     if importer_version not in expected_importers:
         raise BundleReadError("manifest.json: unsupported importer version")
     expected_source_shape = (
-        TEAM_SOURCE_SHAPE_VERSION
-        if schema_version == TEAM_SCHEMA_VERSION
+        ITEM_INFO_SOURCE_SHAPE_VERSION
+        if schema_version == ITEM_INFO_SCHEMA_VERSION
         else (
-            MULTI_SOURCE_SHAPE_VERSION
-            if schema_version == MULTI_SCHEMA_VERSION
-            else SUPPORTED_SOURCE_SHAPE_VERSION
+            TEAM_SOURCE_SHAPE_VERSION
+            if schema_version == TEAM_SCHEMA_VERSION
+            else (
+                MULTI_SOURCE_SHAPE_VERSION
+                if schema_version == MULTI_SCHEMA_VERSION
+                else SUPPORTED_SOURCE_SHAPE_VERSION
+            )
         )
     )
     if manifest.get("source_shape_version") != expected_source_shape:
@@ -1389,7 +1594,11 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError(
             "manifest.json: file inventory does not exactly match bundle contents"
         )
-    data_files = TEAM_DATA_FILES if schema_version == TEAM_SCHEMA_VERSION else DATA_FILES
+    data_files = (
+        TEAM_DATA_FILES
+        if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION}
+        else DATA_FILES
+    )
     required_files = frozenset((*data_files, "provenance.json", "validation.json"))
     if not declared_paths >= required_files:
         missing = sorted(required_files - declared_paths)
@@ -1478,11 +1687,10 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     provenance_source_field = (
         "showdown_sources" if schema_version in MULTI_SCHEMA_VERSIONS else "showdown"
     )
-    _exact_keys(
-        provenance,
-        {provenance_source_field, "sprites", "pokeapi_mapping", "overlays"},
-        "provenance.json",
-    )
+    provenance_keys = {provenance_source_field, "sprites", "pokeapi_mapping", "overlays"}
+    if schema_version == ITEM_INFO_SCHEMA_VERSION:
+        provenance_keys.add("item_description_sources")
+    _exact_keys(provenance, provenance_keys, "provenance.json")
     source_count_keys = {
         "pokedex",
         "base_moves",
@@ -1491,6 +1699,8 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         "champions_format_entries",
         "championsregmb_format_entries",
     }
+    if schema_version == ITEM_INFO_SCHEMA_VERSION:
+        source_count_keys.add("base_item_texts")
     if schema_version in MULTI_SCHEMA_VERSIONS:
         provenance_sources = _records(
             provenance.get("showdown_sources"), "provenance.json:showdown_sources"
@@ -1635,25 +1845,112 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     overlays = provenance.get("overlays")
     if not isinstance(overlays, list):
         raise BundleReadError("provenance.json: overlays must be an array")
-    overlay_keys = {"id", "record", "path", "sha256", "fixture_path", "fixture_sha256"}
-    for index, raw_overlay in enumerate(overlays):
-        overlay = _object(raw_overlay, f"provenance.json:overlays[{index}]")
-        label = f"provenance.json:overlays[{index}]"
-        _exact_keys(overlay, overlay_keys, label)
-        for field in overlay_keys:
-            _string(overlay, field, label)
-        for path_field, hash_field in (("path", "sha256"), ("fixture_path", "fixture_sha256")):
-            relative = Path(cast(str, overlay[path_field]))
-            if relative.is_absolute() or ".." in relative.parts:
-                raise BundleReadError(f"{label}: unsafe {path_field}")
-            target = directory / relative
-            if not target.is_file() or _sha256(target) != overlay[hash_field]:
-                raise BundleReadError(f"{target}: overlay file is missing or altered")
+    item_overlay_after: dict[str, JsonObject] = {}
+    if schema_version == ITEM_INFO_SCHEMA_VERSION:
+        if len(overlays) != 1:
+            raise BundleReadError("provenance.json: expected one Item text compatibility overlay")
+        overlay = _object(overlays[0], "provenance.json:overlays[0]")
+        overlay_keys = {
+            "id",
+            "path",
+            "sha256",
+            "target_keys",
+            "target_revision",
+            "text_source_revision",
+            "transitions",
+        }
+        _exact_keys(overlay, overlay_keys, "provenance.json:overlays[0]")
+        if (
+            overlay.get("id") != "m-a-item-text-compatibility"
+            or overlay.get("target_revision") != EXPECTED_MA_SHOWDOWN_REVISION
+            or overlay.get("text_source_revision") != EXPECTED_SHOWDOWN_REVISION
+        ):
+            raise BundleReadError("provenance.json: unexpected Item text overlay source")
+        expected_overlay_items = [
+            "chimechite",
+            "crabominite",
+            "glimmoranite",
+            "golurkite",
+            "meowsticite",
+            "scovillainite",
+        ]
+        if overlay.get("target_keys") != expected_overlay_items:
+            raise BundleReadError("provenance.json: unexpected Item text overlay targets")
+        overlay_path = Path(_string(overlay, "path", "provenance.json:overlays[0]"))
+        if (
+            overlay_path.is_absolute()
+            or ".." in overlay_path.parts
+            or not (directory / overlay_path).is_file()
+            or _sha256(directory / overlay_path) != overlay.get("sha256")
+        ):
+            raise BundleReadError("provenance.json: Item text overlay is missing or altered")
+        transitions = _records(
+            overlay.get("transitions"), "provenance.json:overlays[0]:transitions"
+        )
+        if [transition.get("item_id") for transition in transitions] != expected_overlay_items:
+            raise BundleReadError("provenance.json: unexpected Item text overlay transitions")
+        transition_keys = {
+            "authoring_date",
+            "fixture_path",
+            "fixture_sha256",
+            "item_id",
+            "rationale",
+            "record",
+        }
+        for index, transition in enumerate(transitions):
+            label = f"provenance.json:overlays[0]:transitions[{index}]"
+            _exact_keys(transition, transition_keys, label)
+            for field in transition_keys:
+                _string(transition, field, label)
+            if transition["authoring_date"] != "2026-10-24":
+                raise BundleReadError(f"{label}: unexpected authoring_date")
+            fixture_path = Path(cast(str, transition["fixture_path"]))
+            if (
+                fixture_path.is_absolute()
+                or ".." in fixture_path.parts
+                or not (directory / fixture_path).is_file()
+                or _sha256(directory / fixture_path) != transition["fixture_sha256"]
+            ):
+                raise BundleReadError(f"{label}: fixture is missing or altered")
+        item_overlay_after = _validate_item_text_overlay(directory, overlay)
+    else:
+        overlay_keys = {"id", "record", "path", "sha256", "fixture_path", "fixture_sha256"}
+        for index, raw_overlay in enumerate(overlays):
+            overlay = _object(raw_overlay, f"provenance.json:overlays[{index}]")
+            label = f"provenance.json:overlays[{index}]"
+            _exact_keys(overlay, overlay_keys, label)
+            for field in overlay_keys:
+                _string(overlay, field, label)
+            for path_field, hash_field in (
+                ("path", "sha256"),
+                ("fixture_path", "fixture_sha256"),
+            ):
+                relative = Path(cast(str, overlay[path_field]))
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise BundleReadError(f"{label}: unsafe {path_field}")
+                target = directory / relative
+                if not target.is_file() or _sha256(target) != overlay[hash_field]:
+                    raise BundleReadError(f"{target}: overlay file is missing or altered")
     records = {name: _records(_json(directory / name), name) for name in data_files}
-    _validate_record_shapes(records)
+    _validate_record_shapes(records, schema_version=schema_version)
     for name, values in records.items():
         _validate_unique(values, FILE_KEYS[name], name)
     _validate_relations(records, schema_version=schema_version)
+    if schema_version == ITEM_INFO_SCHEMA_VERSION:
+        m_a_item_profiles = {
+            _string(profile, "id", "item_profiles.json"): profile
+            for profile in records["item_profiles.json"]
+            if profile.get("regulation_id") == "m-a"
+        }
+        for item_id, after in item_overlay_after.items():
+            portable_after = {
+                "regulation_id": "m-a",
+                **{key: value for key, value in after.items() if key != "mega_stone"},
+            }
+            if m_a_item_profiles.get(item_id) != portable_after:
+                raise BundleReadError(
+                    f"item_profiles.json:m-a:{item_id}: does not match overlay transition"
+                )
     mappings = {
         _string(item, "form_id", "sprite_mappings.json"): item
         for item in records["sprite_mappings.json"]
@@ -1682,6 +1979,17 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     expected_counts = _expected_counts(records)
     if validation.get("counts") != expected_counts or manifest.get("counts") != expected_counts:
         raise BundleReadError("bundle counts do not match normalized records")
+    if schema_version == ITEM_INFO_SCHEMA_VERSION:
+        item_description_sources = _object(
+            provenance.get("item_description_sources"),
+            "provenance.json:item_description_sources",
+        )
+        if item_description_sources != expected_counts.get(
+            "item_description_sources_by_regulation"
+        ):
+            raise BundleReadError(
+                "provenance.json: Item description source counts do not match records"
+            )
     if validation.get("source_counts") != source_counts:
         raise BundleReadError("validation.json: source counts do not match provenance")
     if require_pinned:
@@ -1695,7 +2003,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
             pinned_mapping_sha256,
             pinned_source_counts,
         ) = contract
-        for name, expected in pinned_counts.items():
+        for name, expected in cast(dict[str, object], pinned_counts).items():
             if expected_counts.get(name) != expected:
                 raise BundleReadError(
                     f"pinned bundle count {name}: expected {expected}, "

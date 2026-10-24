@@ -36,10 +36,13 @@ A form is a regulation member only when its effective Showdown formats entry has
 including unknown future markers, is excluded by default. Profiles required by base-to-Mega
 relations remain separate from selectable regulation membership.
 
-Importer version 4 and schema 3 add team-builder item, nature, Mega-stone, and total-SP facts to the
-multi-revision source contract. Validation continues to accept the retained schema-1 and schema-2
-releases with their original semantics. No source tree is checked out or mutated, and the build
-never fetches missing objects.
+Importer version 5 and schema 4 add regulation-effective Item descriptions and their source marker
+to the team-builder facts introduced by importer 4 and schema 3. Item identity and legality come
+from the effective Item table; text comes from the owning revision's `data/text/items.ts`.
+Non-empty `desc` supplies the full description, otherwise the same record's `shortDesc` does. The
+six explicitly pinned M-A compatibility transitions under `overrides` are the only cross-revision
+text exception. Validation continues to accept retained schemas with their original semantics. No
+source tree is checked out or mutated, and the build never fetches missing objects.
 
 Rebuilding identical inputs returns the existing bundle without rewriting it. Output files use
 canonical UTF-8 JSON with sorted keys, compact separators, stable record order, and a final newline.
@@ -61,8 +64,9 @@ source counts for that tree. The portable files are:
 - `regulations.json`: stable regulation identity, exact Showdown format identity, mod, rules, and
   mechanics profile.
 - `types.json`, `abilities.json`, `moves.json`, and `move_flags.json`: stable identities.
-- `items.json` and `item_profiles.json`: stable item identities and regulation-effective legal held
-  items, including their normalized upstream status.
+- `items.json` and `item_profiles.json`: stable Item identities and regulation-effective legal held
+  Items, including normalized upstream status, short and full descriptions, and whether full text
+  came from `desc` or the same record's `shortDesc`.
 - `natures.json`: the stat-changing nature directions plus Serious as the only approved neutral
   nature.
 - `regulation_memberships.json`: forms that appear in each regulation's legal Pokédex list.

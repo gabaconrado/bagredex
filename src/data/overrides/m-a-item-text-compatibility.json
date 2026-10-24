@@ -1,0 +1,62 @@
+{
+  "id": "m-a-item-text-compatibility",
+  "target_regulation": "m-a",
+  "target_revision": "b555f4d8ce7250e72939fe0c12cc5b303741d203",
+  "text_source_revision": "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640",
+  "transitions": [
+    {
+      "after": {"description": "If held by a Chimecho, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "chimechite", "mega_stone": [{"base_form_id": "chimecho", "mega_form_id": "chimechomega"}], "name": "Chimechite", "short_description": "If held by a Chimecho, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "chimechite", "mega_stone": [{"base_form_id": "chimecho", "mega_form_id": "chimechomega"}], "name": "Chimechite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-chimechite-item-text.json",
+      "item_id": "chimechite",
+      "rationale": "The pinned M-A revision legally enables Chimechite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:chimechite"
+    },
+    {
+      "after": {"description": "If held by a Crabominable, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "crabominite", "mega_stone": [{"base_form_id": "crabominable", "mega_form_id": "crabominablemega"}], "name": "Crabominite", "short_description": "If held by a Crabominable, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "crabominite", "mega_stone": [{"base_form_id": "crabominable", "mega_form_id": "crabominablemega"}], "name": "Crabominite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-crabominite-item-text.json",
+      "item_id": "crabominite",
+      "rationale": "The pinned M-A revision legally enables Crabominite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:crabominite"
+    },
+    {
+      "after": {"description": "If held by a Glimmora, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "glimmoranite", "mega_stone": [{"base_form_id": "glimmora", "mega_form_id": "glimmoramega"}], "name": "Glimmoranite", "short_description": "If held by a Glimmora, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "glimmoranite", "mega_stone": [{"base_form_id": "glimmora", "mega_form_id": "glimmoramega"}], "name": "Glimmoranite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-glimmoranite-item-text.json",
+      "item_id": "glimmoranite",
+      "rationale": "The pinned M-A revision legally enables Glimmoranite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:glimmoranite"
+    },
+    {
+      "after": {"description": "If held by a Golurk, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "golurkite", "mega_stone": [{"base_form_id": "golurk", "mega_form_id": "golurkmega"}], "name": "Golurkite", "short_description": "If held by a Golurk, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "golurkite", "mega_stone": [{"base_form_id": "golurk", "mega_form_id": "golurkmega"}], "name": "Golurkite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-golurkite-item-text.json",
+      "item_id": "golurkite",
+      "rationale": "The pinned M-A revision legally enables Golurkite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:golurkite"
+    },
+    {
+      "after": {"description": "If held by a Meowstic, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "meowsticite", "mega_stone": [{"base_form_id": "meowstic", "mega_form_id": "meowsticmmega"}, {"base_form_id": "meowsticf", "mega_form_id": "meowsticfmega"}], "name": "Meowsticite", "short_description": "If held by a Meowstic, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "meowsticite", "mega_stone": [{"base_form_id": "meowstic", "mega_form_id": "meowsticmmega"}, {"base_form_id": "meowsticf", "mega_form_id": "meowsticfmega"}], "name": "Meowsticite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-meowsticite-item-text.json",
+      "item_id": "meowsticite",
+      "rationale": "The pinned M-A revision legally enables Meowsticite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:meowsticite"
+    },
+    {
+      "after": {"description": "If held by a Scovillain, this item allows it to Mega Evolve in battle.", "description_source": "shortDesc", "id": "scovillainite", "mega_stone": [{"base_form_id": "scovillain", "mega_form_id": "scovillainmega"}], "name": "Scovillainite", "short_description": "If held by a Scovillain, this item allows it to Mega Evolve in battle.", "source_status": "standard"},
+      "authoring_date": "2026-10-24",
+      "before": {"description": null, "description_source": null, "id": "scovillainite", "mega_stone": [{"base_form_id": "scovillain", "mega_form_id": "scovillainmega"}], "name": "Scovillainite", "short_description": null, "source_status": "standard"},
+      "fixture": "m-a-scovillainite-item-text.json",
+      "item_id": "scovillainite",
+      "rationale": "The pinned M-A revision legally enables Scovillainite but lacks its Item text; use the exact text from the pinned current revision.",
+      "record": "item_profiles.json:m-a:scovillainite"
+    }
+  ]
+}

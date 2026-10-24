@@ -3,6 +3,7 @@
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {hasStandardStatus, isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
+import {resolveItemDescription} from './item-text.mjs';
 import {resolveLearnset} from './learnset-resolution.mjs';
 
 const root = path.resolve(process.argv[2] || '');
@@ -46,7 +47,7 @@ const exactFormat = (formats, name, mod) => {
   return {name, showdown_format_id: toID(name), mod, ruleset: [...format.ruleset]};
 };
 
-const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, movesText, abilitiesText, formats,
+const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, movesText, abilitiesText, itemsText, formats,
   championsFormats, championsMovesDelta, championsAbilitiesDelta, championsItemsDelta, championsLearnsetsDelta] = await Promise.all([
   load('data/pokedex.ts', 'Pokedex'),
   load('data/moves.ts', 'Moves'),
@@ -56,6 +57,7 @@ const [pokedex, baseMoves, baseAbilities, baseItems, natures, baseLearnsets, mov
   load('data/learnsets.ts', 'Learnsets'),
   load('data/text/moves.ts', 'MovesText'),
   load('data/text/abilities.ts', 'AbilitiesText'),
+  load('data/text/items.ts', 'ItemsText'),
   load('config/formats.ts', 'Formats'),
   load('data/mods/champions/formats-data.ts', 'FormatsData'),
   load('data/mods/champions/moves.ts', 'Moves'),
@@ -141,6 +143,7 @@ const output = {
     pokedex: Object.keys(pokedex).length,
     base_moves: Object.keys(baseMoves).length,
     base_abilities: Object.keys(baseAbilities).length,
+    base_item_texts: Object.keys(itemsText).length,
     base_learnsets: Object.keys(baseLearnsets).length,
     champions_format_entries: Object.keys(championsFormats).length,
     championsregmb_format_entries: Object.keys(mbFormats).length,
@@ -161,6 +164,7 @@ for (const config of configurations) {
     .filter(([id, value]) => hasStandardStatus(value, `${config.mod} item ${id}`))
     .map(([id, value]) => ({
       id, name: value.name, source_status: 'standard',
+      ...resolveItemDescription(itemsText[id], `${config.mod} item ${id}`),
       mega_stone: value.megaStone ? Object.entries(value.megaStone).map(([base, mega]) => ({
         base_form_id: toID(base), mega_form_id: toID(mega),
       })).sort((a, b) => compareText(a.base_form_id, b.base_form_id)) : [],

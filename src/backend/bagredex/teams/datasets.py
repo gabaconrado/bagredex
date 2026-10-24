@@ -192,7 +192,12 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             move_records.values(), key=lambda value: (value["name"].casefold(), value["id"])
         ),
         "items": [
-            {"id": profile.item.canonical_id, "name": profile.item.name}
+            {
+                "id": profile.item.canonical_id,
+                "name": profile.item.name,
+                "short_description": profile.short_description,
+                "description": profile.description,
+            }
             for profile in sorted(
                 item_profiles,
                 key=lambda value: (value.item.name.casefold(), value.item.canonical_id),

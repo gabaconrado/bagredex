@@ -10,6 +10,7 @@ import type {
   BuilderData,
   BuilderForm,
   Bootstrap,
+  ItemDetail,
   Member,
   MoveDetail,
   Named,
@@ -722,6 +723,10 @@ export function PokemonPalette({
 
 type FieldInformation =
   | { kind: "ability"; value: AbilityDetail }
+  | {
+      kind: "item";
+      value: ItemDetail & { short_description: string; description: string };
+    }
   | { kind: "move"; value: MoveDetail };
 
 const formatMoveTarget = (target: string) => {
@@ -826,7 +831,7 @@ function FieldInformationControl({
                 ×
               </button>
             </header>
-            {info.kind === "ability" ? (
+            {info.kind !== "move" ? (
               <p class="info-description">{info.value.description}</p>
             ) : (
               <div>
@@ -944,6 +949,15 @@ export function MemberEditor({
     member.mega_preview && mega
       ? data.abilities.find((item) => item.id === mega.target.ability.id)
       : data.abilities.find((item) => item.id === member.ability_id);
+  const selectedItem = data.items.find((item) => item.id === member.item_id);
+  const itemDetail =
+    selectedItem?.short_description && selectedItem.description
+      ? {
+          ...selectedItem,
+          short_description: selectedItem.short_description,
+          description: selectedItem.description,
+        }
+      : null;
   if (!expanded) {
     const ability =
       member.mega_preview && mega
@@ -1216,26 +1230,38 @@ export function MemberEditor({
             </div>
           </div>
           <div>
-            <Autocomplete
-              inputId={`${prefix}-item`}
-              label="Item"
-              value={member.item_id}
-              choices={availableItems}
-              error={errors.item_id ?? serverError("item")}
-              transient={autocompleteTransients.get(transientKey("item"))}
-              onTransientChange={(state) =>
-                onAutocompleteTransient(transientKey("item"), state)
-              }
-              next={`${prefix}-move-0`}
-              onChange={(id) =>
-                onChange({
-                  ...member,
-                  item_id: id,
-                  mega_preview:
-                    id === member.item_id ? member.mega_preview : false,
-                })
-              }
-            />
+            <div class="field-with-information">
+              <Autocomplete
+                inputId={`${prefix}-item`}
+                label="Item"
+                value={member.item_id}
+                choices={availableItems}
+                error={errors.item_id ?? serverError("item")}
+                transient={autocompleteTransients.get(transientKey("item"))}
+                onTransientChange={(state) =>
+                  onAutocompleteTransient(transientKey("item"), state)
+                }
+                informationDescriptionId={
+                  itemDetail ? `${prefix}-item-info-description` : undefined
+                }
+                informationControlId={
+                  itemDetail ? `${prefix}-item-info` : undefined
+                }
+                next={`${prefix}-move-0`}
+                onChange={(id) =>
+                  onChange({
+                    ...member,
+                    item_id: id,
+                    mega_preview:
+                      id === member.item_id ? member.mega_preview : false,
+                  })
+                }
+              />
+              <FieldInformationControl
+                controlId={`${prefix}-item-info`}
+                info={itemDetail ? { kind: "item", value: itemDetail } : null}
+              />
+            </div>
           </div>
           <div class="move-grid">
             {member.move_ids.map((move, moveIndex) => (

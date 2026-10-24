@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import subprocess
@@ -11,7 +12,9 @@ from unittest import mock
 from src.data.importer.bundle import (
     BundleError,
     EXPECTED_REVISION,
+    M_A_ITEM_TEXT_OVERLAY_IDS,
     _apply_overlays,
+    _apply_m_a_item_text_overlay,
     _canonical_bytes,
     _combine_extractions,
     _extract,
@@ -27,6 +30,58 @@ from src.data.importer.bundle import (
 
 
 class MultiRevisionSourceTests(unittest.TestCase):
+    def test_exact_m_a_item_text_compatibility_set_is_applied(self) -> None:
+        repository = Path(__file__).parents[3]
+        showdown = repository / "references" / "pokemon-showdown"
+        current = _extract(showdown)
+        with tempfile.TemporaryDirectory() as name:
+            historical_root = Path(name) / "tree"
+            _materialize_historical_tree(showdown, historical_root)
+            historical = _extract(historical_root, "m-a")
+            before_memberships = copy.deepcopy(
+                historical["regulations"]["m-a"]["memberships"]
+            )
+            before_mega = copy.deepcopy(historical["mega_relations"])
+            overlay, _, fixtures = _apply_m_a_item_text_overlay(
+                current,
+                historical,
+                repository / "src" / "data" / "overrides",
+                repository / "src" / "data" / "fixtures",
+            )
+        self.assertEqual(
+            {value["item_id"] for value in overlay["transitions"]},
+            M_A_ITEM_TEXT_OVERLAY_IDS,
+        )
+        self.assertEqual(len(fixtures), 6)
+        profiles = {
+            value["id"]: value for value in historical["regulations"]["m-a"]["items"]
+        }
+        self.assertTrue(
+            all(profiles[item_id]["short_description"] for item_id in M_A_ITEM_TEXT_OVERLAY_IDS)
+        )
+        self.assertEqual(historical["regulations"]["m-a"]["memberships"], before_memberships)
+        self.assertEqual(historical["mega_relations"], before_mega)
+
+    def test_m_a_item_text_compatibility_rejects_wrong_target_set(self) -> None:
+        repository = Path(__file__).parents[3]
+        showdown = repository / "references" / "pokemon-showdown"
+        current = _extract(showdown)
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            historical_root = root / "tree"
+            _materialize_historical_tree(showdown, historical_root)
+            historical = _extract(historical_root, "m-a")
+            overrides = root / "overrides"
+            fixtures = root / "fixtures"
+            shutil.copytree(repository / "src" / "data" / "overrides", overrides)
+            shutil.copytree(repository / "src" / "data" / "fixtures", fixtures)
+            path = overrides / "m-a-item-text-compatibility.json"
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["transitions"].pop()
+            path.write_bytes(_canonical_bytes(value))
+            with self.assertRaisesRegex(BundleError, "exactly six transitions"):
+                _apply_m_a_item_text_overlay(current, historical, overrides, fixtures)
+
     def test_historical_tree_is_materialized_without_mutating_checkout(self) -> None:
         repository = Path(__file__).parents[3] / "references" / "pokemon-showdown"
         if not (repository / ".git").exists():
@@ -392,6 +447,44 @@ class SchemaArtifactTests(unittest.TestCase):
 
 
 class LocalSnapshotIntegrationTests(unittest.TestCase):
+    def test_item_text_resolution_trims_and_records_fallback(self) -> None:
+        module = (Path(__file__).parents[1] / "importer" / "item-text.mjs").as_uri()
+        script = (
+            f"import {{resolveItemDescription}} from {json.dumps(module)};"
+            "const values=["
+            "resolveItemDescription({shortDesc:' short ',desc:' full '},'item'),"
+            "resolveItemDescription({shortDesc:' fallback ',desc:'   '},'item'),"
+            "resolveItemDescription({shortDesc:' absent '},'item')];"
+            "process.stdout.write(JSON.stringify(values));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script], check=True,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(
+            json.loads(result.stdout),
+            [
+                {"short_description": "short", "description": "full", "description_source": "desc"},
+                {"short_description": "fallback", "description": "fallback", "description_source": "shortDesc"},
+                {"short_description": "absent", "description": "absent", "description_source": "shortDesc"},
+            ],
+        )
+
+    def test_item_text_resolution_rejects_malformed_text(self) -> None:
+        module = (Path(__file__).parents[1] / "importer" / "item-text.mjs").as_uri()
+        cases = ({}, {"shortDesc": ""}, {"shortDesc": 3}, {"shortDesc": "ok", "desc": 3})
+        for value in cases:
+            script = (
+                f"import {{resolveItemDescription}} from {json.dumps(module)};"
+                f"resolveItemDescription({json.dumps(value)},'item');"
+            )
+            with self.subTest(value=value):
+                result = subprocess.run(
+                    ["node", "--input-type=module", "--eval", script], check=False,
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+
     def test_standard_item_status_truth_table_fails_closed(self) -> None:
         legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
         cases = [
@@ -651,6 +744,89 @@ class PublishedBundleMutationTests(unittest.TestCase):
             / "releases"
             / "showdown-multi-s3-i4-5073b2ab1402"
         )
+
+    @property
+    def item_information_bundle(self) -> Path:
+        return (
+            Path(__file__).parents[1]
+            / "releases"
+            / "showdown-multi-s4-i5-7205fa48044e"
+        )
+
+    def test_item_information_release_goldens_and_semantic_diff(self) -> None:
+        summary = validate_bundle(self.item_information_bundle)
+        manifest = json.loads(
+            (self.item_information_bundle / "manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            (manifest["bundle_id"], manifest["bundle_hash"]),
+            (
+                "showdown-multi-s4-i5-7205fa48044e",
+                "7205fa48044e73f059e980629e222fcbdc1d5aaffb2bd667c8b8837a7b15ab6b",
+            ),
+        )
+        self.assertEqual(
+            summary["counts"]["item_description_sources_by_regulation"],
+            {
+                "m-a": {"desc": 2, "shortDesc": 115},
+                "m-b": {"desc": 2, "shortDesc": 146},
+                "m-c": {"desc": 2, "shortDesc": 164},
+            },
+        )
+        self.assertEqual(
+            summary["overlays"][0]["target_keys"], sorted(M_A_ITEM_TEXT_OVERLAY_IDS)
+        )
+        profiles = json.loads(
+            (self.item_information_bundle / "item_profiles.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(
+            all(
+                value["short_description"] and value["description"]
+                for value in profiles
+            )
+        )
+        difference = compare_bundles(self.team_builder_bundle, self.item_information_bundle)
+        self.assertEqual(difference["files"]["item_profiles.json"]["changed"], 431)
+        self.assertTrue(
+            all(
+                changes["changed"] == 0
+                for filename, changes in difference["files"].items()
+                if filename != "item_profiles.json"
+            )
+        )
+        self.assertEqual(
+            difference["overlays"]["added"], ["m-a-item-text-compatibility"]
+        )
+
+    def test_item_information_release_rejects_description_mutations(self) -> None:
+        mutations = (
+            lambda value: value.update(short_description=""),
+            lambda value: value.update(description_source="unknown"),
+            lambda value: value.update(
+                description_source="shortDesc", description="different"
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate), tempfile.TemporaryDirectory() as name:
+                bundle = Path(name) / self.item_information_bundle.name
+                shutil.copytree(self.item_information_bundle, bundle)
+                path = bundle / "item_profiles.json"
+                values = json.loads(path.read_text(encoding="utf-8"))
+                mutate(values[0])
+                path.write_bytes(_canonical_bytes(values))
+                with self.assertRaises(BundleError):
+                    validate_bundle(bundle, verify_manifest=False)
+
+    def test_item_information_release_rejects_overlay_inventory_mutations(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            bundle = Path(name) / self.item_information_bundle.name
+            shutil.copytree(self.item_information_bundle, bundle)
+            path = bundle / "provenance.json"
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["overlays"][0]["target_keys"].pop()
+            path.write_bytes(_canonical_bytes(value))
+            with self.assertRaisesRegex(BundleError, "overlay provenance changed"):
+                validate_bundle(bundle, verify_manifest=False)
 
     def test_team_builder_release_item_nature_and_mega_goldens(self) -> None:
         summary = validate_bundle(self.team_builder_bundle)

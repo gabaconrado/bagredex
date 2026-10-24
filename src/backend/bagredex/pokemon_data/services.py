@@ -225,6 +225,9 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             regulation=regulations[_string(record, "regulation_id")],
             item=items[_string(record, "id")],
             source_status=_string(record, "source_status"),
+            short_description=record.get("short_description"),
+            description=record.get("description"),
+            description_source=record.get("description_source"),
         )
         for record in bundle.records.get("item_profiles.json", [])
     }

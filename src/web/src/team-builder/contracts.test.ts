@@ -64,7 +64,7 @@ describe("team builder contracts", () => {
 
   it("parses the exact dataset and builds same-origin sprites", () => {
     const parsed = parseBuilderData({
-      schema_version: "team-builder-data-v2",
+      schema_version: "team-builder-data-v3",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -112,7 +112,14 @@ describe("team builder contracts", () => {
           flags: [],
         },
       ],
-      items: [{ id: "charizarditex", name: "Charizardite X" }],
+      items: [
+        {
+          id: "charizarditex",
+          name: "Charizardite X",
+          short_description: "Makes Charizard Mega Evolve.",
+          description: "Makes Charizard Mega Evolve into Mega Charizard X.",
+        },
+      ],
       natures: [
         {
           id: "serious",
@@ -153,7 +160,8 @@ describe("team builder contracts", () => {
         "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
     });
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
-    expect(parsed.schema_version).toBe("team-builder-data-v2");
+    expect(parsed.schema_version).toBe("team-builder-data-v3");
+    expect(parsed.items[0]?.description).toContain("Mega Charizard X");
     expect(parsed.abilities[0]?.description).toContain("Fire-type");
     expect(parsed.moves[0]?.always_hits).toBe(true);
     expect(parsed.mega_relations[0]?.target.ability.name).toBe("Tough Claws");
@@ -161,6 +169,55 @@ describe("team builder contracts", () => {
     expect(parsed.natures.find((nature) => nature.id === "jolly")?.name).toBe(
       "Jolly (+Spe/-SpA)",
     );
+  });
+
+  it("requires paired non-empty Item descriptions or paired legacy nulls", () => {
+    const validItem = {
+      id: "oranberry",
+      name: "Oran Berry",
+      short_description: "Restores HP.",
+      description: "Restores 10 HP when HP is low.",
+    };
+    const base = {
+      schema_version: "team-builder-data-v3",
+      data_version: "version-3",
+      regulation: named,
+      forms: [],
+      types: [],
+      abilities: [],
+      moves: [],
+      items: [validItem],
+      natures: [],
+      mechanics: {
+        level: 50,
+        sp_minimum: 0,
+        sp_maximum: 32,
+        sp_total_max: 66,
+        hp_formula: "base + sp + 75",
+        other_formula: "truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages: { hindering: 90, neutral: 100, increasing: 110 },
+      },
+      mega_relations: [],
+      sprite_url_template:
+        "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
+    };
+    expect(
+      parseBuilderData({
+        ...base,
+        items: [{ ...validItem, short_description: null, description: null }],
+      }).items[0]?.description,
+    ).toBeNull();
+    for (const item of [
+      { ...validItem, short_description: null },
+      { ...validItem, description: null },
+      { ...validItem, short_description: "" },
+      { ...validItem, description: "   " },
+      { ...validItem, description: 1 },
+    ]) {
+      expect(() => parseBuilderData({ ...base, items: [item] })).toThrow(
+        "Invalid item details",
+      );
+    }
   });
 
   it("adapts aggregates and serializes complete draft replacement", () => {

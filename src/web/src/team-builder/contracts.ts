@@ -38,6 +38,10 @@ export type AbilityDetail = Named & {
   short_description: string;
   description: string;
 };
+export type ItemDetail = Named & {
+  short_description: string | null;
+  description: string | null;
+};
 export type MoveDetail = Named & {
   type: Named;
   category: "Physical" | "Special" | "Status";
@@ -57,14 +61,14 @@ export type MegaRelation = {
   target: BuilderForm & { ability: Named };
 };
 export type BuilderData = {
-  schema_version: "team-builder-data-v2";
+  schema_version: "team-builder-data-v3";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
   types: Named[];
   abilities: AbilityDetail[];
   moves: MoveDetail[];
-  items: Named[];
+  items: ItemDetail[];
   natures: Nature[];
   mega_relations: MegaRelation[];
   mechanics: {
@@ -213,7 +217,7 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v2" ||
+    item.schema_version !== "team-builder-data-v3" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
     !Array.isArray(item.abilities) ||
@@ -294,7 +298,21 @@ export function parseBuilderData(value: unknown): BuilderData {
       throw new Error("Invalid move details.");
     assertNamed(move.type);
   });
-  assertNamedArray(item.items);
+  item.items.forEach((value) => {
+    assertNamed(value);
+    const detail = record(value)!;
+    const shortDescription = detail.short_description;
+    const description = detail.description;
+    const bothNull = shortDescription === null && description === null;
+    const bothPresent = text(shortDescription) && text(description);
+    if (
+      (!bothNull && !bothPresent) ||
+      (bothPresent &&
+        (shortDescription.trim().length === 0 ||
+          description.trim().length === 0))
+    )
+      throw new Error("Invalid item details.");
+  });
   item.natures.forEach((value) => {
     assertNamed(value);
     const nature = record(value)!;
@@ -375,14 +393,14 @@ export function parseBuilderData(value: unknown): BuilderData {
         : nature.name,
   }));
   return {
-    schema_version: "team-builder-data-v2",
+    schema_version: "team-builder-data-v3",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
     forms,
     types,
     abilities: item.abilities as AbilityDetail[],
     moves: item.moves as MoveDetail[],
-    items: item.items as Named[],
+    items: item.items as ItemDetail[],
     natures,
     mega_relations: mega,
     mechanics: {

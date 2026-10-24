@@ -16,6 +16,7 @@ from typing import Any, cast
 
 import pytest
 from django.conf import settings
+from django.contrib import admin
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError, close_old_connections, connection, transaction
@@ -109,6 +110,41 @@ def test_team_builder_bundle_exposes_immutable_legality_contract() -> None:
         ("charizarditex", "charizardmegax"),
         ("charizarditey", "charizardmegay"),
     }
+
+
+def test_item_information_bundle_requires_complete_versioned_descriptions() -> None:
+    release = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s4-i5-7205fa48044e"
+    bundle = read_bundle(release)
+
+    assert bundle.manifest["bundle_hash"] == (
+        "7205fa48044e73f059e980629e222fcbdc1d5aaffb2bd667c8b8837a7b15ab6b"
+    )
+    profiles = bundle.records["item_profiles.json"]
+    assert len(profiles) == 431
+    assert all(
+        isinstance(profile["short_description"], str)
+        and profile["short_description"].strip() == profile["short_description"]
+        and isinstance(profile["description"], str)
+        and profile["description"].strip() == profile["description"]
+        for profile in profiles
+    )
+    assert {profile["description_source"] for profile in profiles} == {"desc", "shortDesc"}
+    assert all(
+        profile["description"] == profile["short_description"]
+        for profile in profiles
+        if profile["description_source"] == "shortDesc"
+    )
+
+
+def test_item_profile_admin_exposes_description_provenance_read_only() -> None:
+    model_admin = admin.site._registry[ItemProfile]
+
+    assert set(model_admin.readonly_fields) >= {
+        "short_description",
+        "description",
+        "description_source",
+    }
+    assert "description_source" in model_admin.list_display
 
 
 def test_semantic_diff_reports_stable_record_keys() -> None:
@@ -554,6 +590,166 @@ def _rewrite_multi_release(source: Path, tmp_path: Path, filename: str, mutate: 
     return destination
 
 
+def _rewrite_item_info_release(source: Path, tmp_path: Path, filename: str, mutate: Any) -> Path:
+    """Copy and consistently re-identify the committed schema-4 release after mutation."""
+    directory = tmp_path / source.name
+    shutil.copytree(source, directory)
+    path = directory / filename
+    value = json.loads(path.read_text(encoding="utf-8"))
+    mutate(value)
+    _write_json(path, value)
+    manifest_path = directory / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    files = [
+        {
+            "path": asset.relative_to(directory).as_posix(),
+            "bytes": asset.stat().st_size,
+            "sha256": _hash(asset),
+        }
+        for asset in sorted(
+            asset
+            for asset in directory.rglob("*")
+            if asset.is_file() and asset.name != "manifest.json"
+        )
+    ]
+    bundle_hash = hashlib.sha256(canonical_bytes(files)).hexdigest()
+    identifier = f"showdown-multi-s4-i5-{bundle_hash[:12]}"
+    manifest["files"] = files
+    manifest["bundle_hash"] = bundle_hash
+    manifest["bundle_id"] = identifier
+    manifest["validation_sha256"] = _hash(directory / "validation.json")
+    destination = directory.with_name(identifier)
+    directory.rename(destination)
+    _write_json(destination / "manifest.json", manifest)
+    return destination
+
+
+def _rewrite_item_overlay_release(source: Path, tmp_path: Path, mutate: Any) -> Path:
+    """Mutate schema-4 overlay inputs while keeping declarations and hashes consistent."""
+    directory = tmp_path / source.name
+    shutil.copytree(source, directory)
+    overlay_path = directory / "overlays/m-a-item-text-compatibility.json"
+    fixture_path = directory / "overlay-fixtures/m-a-chimechite-item-text.json"
+    profiles_path = directory / "item_profiles.json"
+    overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    profiles = json.loads(profiles_path.read_text(encoding="utf-8"))
+    mutate(overlay, fixture, profiles)
+    _write_json(overlay_path, overlay)
+    _write_json(fixture_path, fixture)
+    _write_json(profiles_path, profiles)
+
+    provenance_path = directory / "provenance.json"
+    validation_path = directory / "validation.json"
+    manifest_path = directory / "manifest.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    declaration = provenance["overlays"][0]
+    declaration["sha256"] = _hash(overlay_path)
+    declaration["transitions"][0]["fixture_sha256"] = _hash(fixture_path)
+    _write_json(provenance_path, provenance)
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    validation["overlays"] = provenance["overlays"]
+    _write_json(validation_path, validation)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["overlays"] = provenance["overlays"]
+    manifest["validation_sha256"] = _hash(validation_path)
+    files = [
+        {
+            "path": asset.relative_to(directory).as_posix(),
+            "bytes": asset.stat().st_size,
+            "sha256": _hash(asset),
+        }
+        for asset in sorted(
+            asset
+            for asset in directory.rglob("*")
+            if asset.is_file() and asset.name != "manifest.json"
+        )
+    ]
+    bundle_hash = hashlib.sha256(canonical_bytes(files)).hexdigest()
+    identifier = f"showdown-multi-s4-i5-{bundle_hash[:12]}"
+    manifest["files"] = files
+    manifest["bundle_hash"] = bundle_hash
+    manifest["bundle_id"] = identifier
+    destination = directory.with_name(identifier)
+    directory.rename(destination)
+    _write_json(destination / "manifest.json", manifest)
+    return destination
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda overlay, fixture, profiles: overlay["transitions"][0].__setitem__(
+                "record", "item_profiles.json:m-a:other"
+            ),
+            "identity does not match its declaration",
+        ),
+        (
+            lambda overlay, fixture, profiles: fixture["expected_after"].__setitem__(
+                "description", "Different text."
+            ),
+            "fixture does not match transition chimechite",
+        ),
+        (
+            lambda overlay, fixture, profiles: fixture.__setitem__(
+                "record", "item_profiles.json:m-a:other"
+            ),
+            "fixture does not match transition chimechite",
+        ),
+        (
+            lambda overlay, fixture, profiles: next(
+                profile
+                for profile in profiles
+                if profile["regulation_id"] == "m-a" and profile["id"] == "chimechite"
+            ).update(
+                {
+                    "short_description": "Different normalized text.",
+                    "description": "Different normalized text.",
+                }
+            ),
+            "does not match overlay transition",
+        ),
+    ],
+)
+def test_item_information_bundle_rejects_unproven_overlay_transitions(
+    tmp_path: Path, mutate: Any, message: str
+) -> None:
+    source = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s4-i5-7205fa48044e"
+    directory = _rewrite_item_overlay_release(source, tmp_path, mutate)
+
+    with pytest.raises(BundleReadError, match=message):
+        read_bundle(directory, require_pinned=False)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda records: records[0].pop("short_description"), "unexpected record shape"),
+        (
+            lambda records: records[0].__setitem__("description", ""),
+            "description must be a non-empty string",
+        ),
+        (
+            lambda records: records[0].__setitem__("description_source", "other"),
+            "invalid description_source",
+        ),
+        (
+            lambda records: records[0].__setitem__("short_description", " padded"),
+            "Item descriptions must be trimmed",
+        ),
+    ],
+)
+def test_item_information_bundle_rejects_malformed_descriptions(
+    tmp_path: Path, mutate: Any, message: str
+) -> None:
+    source = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s4-i5-7205fa48044e"
+    directory = _rewrite_item_info_release(source, tmp_path, "item_profiles.json", mutate)
+
+    with pytest.raises(BundleReadError, match=message):
+        read_bundle(directory, require_pinned=False)
+
+
 @pytest.fixture
 def synthetic_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -845,24 +1041,62 @@ def test_committed_releases_load_and_support_audited_rollback_and_reactivation(
     releases = settings.REPOSITORY_ROOT / "src" / "data" / "releases"
     multi_path = releases / "showdown-multi-s2-i3-fc85b358deaa"
     team_builder_path = releases / "showdown-multi-s3-i4-5073b2ab1402"
+    item_information_path = releases / "showdown-multi-s4-i5-7205fa48044e"
     current_path = releases / "showdown-3a766f2c-s1-i2-4bedbf1eb44d"
     preceding_path = releases / "showdown-3a766f2c-s1-i1-923ba416555c"
     if not all(
-        path.is_dir() for path in (team_builder_path, multi_path, current_path, preceding_path)
+        path.is_dir()
+        for path in (
+            item_information_path,
+            team_builder_path,
+            multi_path,
+            current_path,
+            preceding_path,
+        )
     ):
-        pytest.skip("all four reviewed releases are required")
+        pytest.skip("all five reviewed releases are required")
     settings.POKEMON_DATA_RELEASES_ROOT = releases
 
+    item_information = load_pokemon_data(item_information_path).version
+    repeated_item_information = load_pokemon_data(item_information_path)
     team_builder = load_pokemon_data(team_builder_path).version
     repeated_team_builder = load_pokemon_data(team_builder_path)
     multi = load_pokemon_data(multi_path).version
     repeated_multi = load_pokemon_data(multi_path)
     current = load_pokemon_data(current_path).version
     preceding = load_pokemon_data(preceding_path).version
+    assert repeated_item_information.created is False
+    assert repeated_item_information.version == item_information
     assert repeated_team_builder.created is False
     assert repeated_team_builder.version == team_builder
     assert Item.objects.filter(version=team_builder).count() == 166
     assert ItemProfile.objects.filter(version=team_builder).count() == 431
+    assert (
+        ItemProfile.objects.filter(
+            version=team_builder,
+            short_description__isnull=True,
+            description__isnull=True,
+            description_source__isnull=True,
+        ).count()
+        == 431
+    )
+    assert (
+        ItemProfile.objects.filter(
+            version=item_information,
+            short_description__isnull=False,
+            description__isnull=False,
+            description_source__in=("desc", "shortDesc"),
+        ).count()
+        == 431
+    )
+    assert (
+        ItemProfile.objects.get(
+            version=item_information,
+            regulation__canonical_id="m-a",
+            item__canonical_id="chimechite",
+        ).description_source
+        == ItemProfile.DescriptionSource.SHORT_DESC
+    )
     assert Nature.objects.filter(version=team_builder).count() == 21
     assert MegaItemRelation.objects.filter(version=team_builder).count() == 214
     assert MechanicsProfile.objects.get(version=team_builder).sp_total_max == 66

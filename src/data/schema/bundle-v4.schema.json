@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/bundle-v4.schema.json",
+  "title": "Bagredex Item-description Pokémon bundle manifest",
+  "description": "Pinned schema-4 manifest contract with versioned Item text and compatibility provenance.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown_sources",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": {"const": "showdown-multi-s4-i5-7205fa48044e"},
+    "bundle_hash": {"const": "7205fa48044e73f059e980629e222fcbdc1d5aaffb2bd667c8b8837a7b15ab6b"},
+    "bundle_schema_version": {"const": "4"},
+    "importer_version": {"const": "5"},
+    "source_shape_version": {"const": "showdown-champions-multi-revision-4"},
+    "showdown_sources": {"type": "array", "minItems": 2, "maxItems": 2},
+    "counts": {
+      "type": "object",
+      "required": [
+        "items",
+        "item_profiles",
+        "item_description_sources_by_regulation"
+      ],
+      "properties": {
+        "items": {"const": 166},
+        "item_profiles": {"const": 431},
+        "item_description_sources_by_regulation": {
+          "const": {
+            "m-a": {"desc": 2, "shortDesc": 115},
+            "m-b": {"desc": 2, "shortDesc": 146},
+            "m-c": {"desc": 2, "shortDesc": 164}
+          }
+        }
+      }
+    },
+    "files": {"type": "array", "minItems": 32}
+  },
+  "additionalProperties": true
+}

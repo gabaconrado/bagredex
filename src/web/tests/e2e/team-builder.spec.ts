@@ -1,4 +1,30 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+async function createDraftWithDescribedItem(page: Page) {
+  await page.getByRole("button", { name: "New Team" }).click();
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  await page
+    .getByRole("dialog", { name: "Choose a Pokémon" })
+    .getByRole("combobox")
+    .press("Enter");
+  const member = page.locator(".member-card").first();
+  await expect(member).toBeVisible();
+  const ability = member.getByRole("combobox", {
+    name: "Ability",
+    exact: true,
+  });
+  await ability.focus();
+  await ability.press("Enter");
+  const item = member.getByRole("combobox", { name: "Item", exact: true });
+  await item.focus();
+  await item.press("Enter");
+  await expect(item).not.toHaveValue("");
+  await expect(
+    member.getByRole("button", { name: /item information/i }),
+  ).toHaveCount(1);
+  return { member, item };
+}
 
 test.beforeEach(async ({ page }) => {
   const username = process.env.BAGREDEX_E2E_USERNAME;
@@ -217,15 +243,36 @@ test("creates a keyboard-first local draft and protects it from navigation", asy
   await expect(
     sixth.getByRole("button", { name: /Edit nickname/ }),
   ).toBeFocused();
-  await sixth.getByLabel("Ability").fill("not accepted");
-  await sixth.getByLabel("Item").focus();
-  await expect(sixth.getByLabel("Ability")).toHaveValue("not accepted");
+  const sixthAbility = sixth.getByRole("combobox", {
+    name: "Ability",
+    exact: true,
+  });
+  const sixthItem = sixth.getByRole("combobox", {
+    name: "Item",
+    exact: true,
+  });
+  await sixthAbility.fill("not accepted");
+  await sixthItem.focus();
+  await sixthItem.press("Enter");
+  await expect(sixthAbility).toHaveValue("not accepted");
   await expect(
     sixth.getByRole("button", { name: /Shiny colors/ }),
   ).toBeVisible();
-  await expect(
-    sixth.getByRole("button", { name: /item information/i }),
-  ).toHaveCount(0);
+  const itemInfo = sixth.getByRole("button", { name: /item information/i });
+  await expect(itemInfo).toHaveCount(1);
+  await expect(itemInfo).toHaveAttribute("tabindex", "-1");
+  let informationRequests = 0;
+  page.on("request", () => {
+    informationRequests += 1;
+  });
+  const requestsBeforeInformation = informationRequests;
+  await sixthItem.press("Alt+i");
+  const itemDialog = page.getByRole("dialog");
+  await expect(itemDialog).toBeVisible();
+  await expect(itemDialog.getByRole("heading")).not.toBeEmpty();
+  await itemDialog.getByRole("button", { name: "Close details" }).click();
+  await expect(sixthItem).toBeFocused();
+  expect(informationRequests).toBe(requestsBeforeInformation);
   await expect(
     sixth.getByRole("button", { name: /ability information/i }),
   ).toHaveCount(0);
@@ -238,11 +285,8 @@ test("creates a keyboard-first local draft and protects it from navigation", asy
       saveRequests += 1;
   });
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(sixth.getByLabel("Ability")).toHaveAttribute(
-    "aria-invalid",
-    "true",
-  );
-  await expect(sixth.getByLabel("Ability")).toBeFocused();
+  await expect(sixthAbility).toHaveAttribute("aria-invalid", "true");
+  await expect(sixthAbility).toBeFocused();
   expect(saveRequests).toBe(0);
   await sixth.getByRole("button", { name: /Collapse/ }).click();
   await expect(sixth.locator(".collapsed-member__surface")).toBeFocused();
@@ -281,6 +325,140 @@ test("creates a keyboard-first local draft and protects it from navigation", asy
   await page.getByRole("button", { name: "Discard changes" }).click();
   await expect(page).toHaveURL(/\/(?:\?regulation=.*)?$/);
   expect(nativeDialogs).toBe(0);
+});
+
+test("keeps a retained legacy Item editable without offering unavailable information", async ({
+  page,
+}) => {
+  const { item } = await createDraftWithDescribedItem(page);
+  const itemName = await item.inputValue();
+  const teamName = await page.getByLabel("Team name").inputValue();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Team saved.")).toBeVisible();
+
+  const retainedVersion = "showdown-retained-s3-i4-111111111111";
+  const bootstrap = JSON.parse(
+    (await page.locator("#team-builder-bootstrap").textContent()) ?? "null",
+  );
+  const activeResponse = await page.request.get(bootstrap.dataset_url);
+  const activeDataset = await activeResponse.json();
+  let retainedTeamResponse: Record<string, any> | null = null;
+  let retainedSaveObserved = false;
+  await page.route("**/teams/*/", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (!/^\/teams\/[^/]+\/$/.test(path)) {
+      await route.continue();
+      return;
+    }
+    if (request.method() === "GET") {
+      const response = await route.fetch();
+      const payload = await response.json();
+      payload.data.pinned.version = retainedVersion;
+      retainedTeamResponse = payload;
+      await route.fulfill({ response, json: payload });
+      return;
+    }
+    if (request.method() === "PUT" && retainedTeamResponse) {
+      const draft = request.postDataJSON();
+      expect(retainedTeamResponse.data.pinned.version).toBe(retainedVersion);
+      expect(draft.schema_version).toBe("team-draft-v1");
+      expect(draft.members[0].nickname).toBe("Legacy");
+      expect(draft.members[0].item).toBe(
+        retainedTeamResponse.data.members[0].item,
+      );
+      expect(draft.members[0].item).toBeTruthy();
+      const saved = structuredClone(retainedTeamResponse);
+      saved.data.name = draft.name;
+      saved.data.members = draft.members;
+      saved.data.updated_at = new Date().toISOString();
+      retainedSaveObserved = true;
+      await route.fulfill({ status: 200, json: saved });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route(`**/teams/data/${retainedVersion}/*/`, async (route) => {
+    const retainedDataset = structuredClone(activeDataset);
+    retainedDataset.data_version = retainedVersion;
+    retainedDataset.items = retainedDataset.items.map(
+      (choice: Record<string, unknown>) => ({
+        ...choice,
+        short_description: null,
+        description: null,
+      }),
+    );
+    await route.fulfill({ status: 200, json: retainedDataset });
+  });
+
+  await page.getByRole("button", { name: "New Team" }).click();
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .locator("li button")
+    .filter({ has: page.getByText(teamName, { exact: true }) })
+    .click();
+  const discard = page.getByRole("alertdialog", {
+    name: "Discard unsaved changes?",
+  });
+  await expect(discard).toBeVisible();
+  await discard
+    .getByRole("button", { name: "Discard changes", exact: true })
+    .click();
+  const retainedMember = page.locator(".member-card").first();
+  await expect(retainedMember).toBeVisible();
+  const collapsedSurface = retainedMember.locator(".collapsed-member__surface");
+  if (await collapsedSurface.isVisible()) await collapsedSurface.click();
+  const retainedItem = retainedMember.getByRole("combobox", {
+    name: "Item",
+    exact: true,
+  });
+  await expect(retainedItem).toBeVisible();
+  await expect(retainedItem).toHaveValue(itemName);
+  await expect(
+    retainedMember.getByRole("button", { name: /item information/i }),
+  ).toHaveCount(0);
+  await expect(retainedItem).not.toHaveAttribute(
+    "aria-describedby",
+    /item-info-description/,
+  );
+
+  await retainedMember.getByRole("button", { name: /Edit nickname/ }).click();
+  await retainedMember.getByLabel(/Nickname for/).fill("Legacy");
+  await retainedMember.getByLabel(/Nickname for/).press("Enter");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Team saved.")).toBeVisible();
+  expect(retainedSaveObserved).toBe(true);
+  await expect(retainedItem).toHaveValue(itemName);
+});
+
+test("opens described Item information by touch without a request", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { member, item } = await createDraftWithDescribedItem(page);
+  const information = member.getByRole("button", {
+    name: /item information/i,
+  });
+  await information.focus();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).not.toBeEmpty();
+
+  let requests = 0;
+  page.on("request", () => {
+    requests += 1;
+  });
+  const before = requests;
+  if (await page.evaluate(() => navigator.maxTouchPoints > 0))
+    await information.tap();
+  else await information.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading")).toHaveText(await item.inputValue());
+  await expect(dialog.locator(".info-description")).not.toBeEmpty();
+  expect(requests).toBe(before);
+  await dialog.getByRole("button", { name: "Close details" }).click();
+  await expect(information).toBeFocused();
 });
 
 test("is functional at phone width with touch-sized controls", async ({
@@ -369,15 +547,15 @@ test("keeps library geometry stable and aligns builder content", async ({
     await expect(member).toHaveAttribute("aria-expanded", "true");
     await expect(member).toBeFocused();
     expect(species.trim().length).toBeGreaterThan(0);
-    await expect(
-      member.getByRole("button", { name: /item information/i }),
-    ).toHaveCount(0);
     const abilityInfo = member.getByRole("button", {
       name: /ability information/i,
     });
     if ((await abilityInfo.count()) > 0) {
       await expect(abilityInfo).toHaveAttribute("tabindex", "-1");
-      const ability = member.getByLabel("Ability");
+      const ability = member.getByRole("combobox", {
+        name: "Ability",
+        exact: true,
+      });
       await ability.focus();
       await ability.press("Alt+i");
       const detail = page.getByRole("dialog");

@@ -44,4 +44,23 @@ class ActiveDataVersionAdmin(ReadOnlyAdmin):
     list_display = ("singleton_key", "version")
 
 
-admin.site.register((Item, ItemProfile, Nature, MegaItemRelation), ReadOnlyAdmin)
+@admin.register(ItemProfile)
+class ItemProfileAdmin(ReadOnlyAdmin):
+    list_display = (
+        "item",
+        "regulation",
+        "source_status",
+        "description_source",
+    )
+    readonly_fields = (
+        "version",
+        "regulation",
+        "item",
+        "source_status",
+        "short_description",
+        "description",
+        "description_source",
+    )
+
+
+admin.site.register((Item, Nature, MegaItemRelation), ReadOnlyAdmin)

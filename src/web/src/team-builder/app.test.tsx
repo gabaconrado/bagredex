@@ -241,7 +241,7 @@ describe("team builder autocomplete", () => {
       mega_preview: false,
     };
     const data = {
-      schema_version: "team-builder-data-v2",
+      schema_version: "team-builder-data-v3",
       data_version: "version-3",
       regulation: { id: "m-c", name: "Regulation M-C" },
       forms: [
@@ -288,7 +288,14 @@ describe("team builder autocomplete", () => {
           flags: [],
         },
       ],
-      items: [{ id: "charizarditex", name: "Charizardite X" }],
+      items: [
+        {
+          id: "charizarditex",
+          name: "Charizardite X",
+          short_description: "Makes Charizard Mega Evolve.",
+          description: "Makes Charizard Mega Evolve into Mega Charizard X.",
+        },
+      ],
       natures: [],
       mega_relations: [
         {
@@ -477,9 +484,73 @@ describe("team builder autocomplete", () => {
     expect(
       screen.getByRole("button", { name: "Show Protect move information" }),
     ).toBeTruthy();
+    const itemInfo = screen.getByRole("button", {
+      name: "Show Charizardite X item information",
+    });
+    const item = screen.getByRole("combobox", { name: "Item" });
+    expect(item.getAttribute("aria-describedby")).toContain(
+      "member-0-item-info-description",
+    );
+    fireEvent.focus(itemInfo);
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "Makes Charizard Mega Evolve",
+    );
+    fireEvent.blur(itemInfo);
+    item.focus();
+    fireEvent.keyDown(item, { key: "i", altKey: true });
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "Mega Charizard X",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    await Promise.resolve();
+    expect(document.activeElement).toBe(item);
+
+    cleanup();
+    render(
+      <MemberEditor
+        member={member}
+        index={0}
+        slot={0}
+        data={{
+          ...data,
+          items: data.items.map((choice) => ({
+            ...choice,
+            short_description: null,
+            description: null,
+          })),
+        }}
+        allMembers={[member]}
+        onChange={onChange}
+        onRemove={() => undefined}
+        onMove={() => null}
+        serverErrors={{}}
+        onAnnounce={() => undefined}
+      />,
+    );
     expect(
       screen.queryByRole("button", { name: /item information/i }),
     ).toBeNull();
+    expect(
+      screen
+        .getByRole("combobox", { name: "Item" })
+        .getAttribute("aria-describedby"),
+    ).toBeNull();
+
+    cleanup();
+    render(
+      <MemberEditor
+        member={member}
+        index={0}
+        slot={0}
+        data={data}
+        allMembers={[member]}
+        onChange={onChange}
+        onRemove={() => undefined}
+        onMove={() => null}
+        serverErrors={{}}
+        onAnnounce={() => undefined}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Use Shiny colors" }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ shiny: true }),
