@@ -824,6 +824,14 @@ function FieldEffects({
         .map(([name]) => `${side} ${name}`),
     ),
   ].filter(Boolean);
+  const choices = {
+    weather: ["sun", "rain", "sand", "snow"],
+    terrain: ["electric", "grassy", "psychic", "misty"],
+  } as const;
+  const label = (value: string) => {
+    const words = value.replace(/([A-Z])/g, " $1").toLowerCase();
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+  };
   return (
     <section class="field-effects">
       <button
@@ -837,58 +845,55 @@ function FieldEffects({
       </button>
       {open && (
         <div class="field-effects__body">
-          <label>
-            Weather
-            <select
-              value={value.weather}
-              onChange={(event) =>
-                onChange({ ...value, weather: event.currentTarget.value })
-              }
-            >
-              <option value="">None</option>
-              {["sun", "rain", "sand", "snow"].map((row) => (
-                <option value={row}>{row}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Terrain
-            <select
-              value={value.terrain}
-              onChange={(event) =>
-                onChange({ ...value, terrain: event.currentTarget.value })
-              }
-            >
-              <option value="">None</option>
-              {["electric", "grassy", "psychic", "misty"].map((row) => (
-                <option value={row}>{row}</option>
-              ))}
-            </select>
-          </label>
-          {(["left", "right"] as SideId[]).map((side) => (
-            <fieldset>
-              <legend>{side === "left" ? "Left" : "Right"}</legend>
-              {Object.entries(value[side]).map(([key, active]) => (
-                <label class="damage-toggle">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={(event) =>
+          {(
+            Object.entries(choices) as [
+              keyof typeof choices,
+              readonly string[],
+            ][]
+          ).map(([group, options]) => (
+            <fieldset class="field-effects__group" key={group}>
+              <legend>{group === "weather" ? "Weather" : "Terrain"}</legend>
+              <div class="field-effects__cells">
+                {options.map((option) => (
+                  <button
+                    type="button"
+                    class="field-effect-cell"
+                    key={option}
+                    aria-pressed={value[group] === option}
+                    onClick={() =>
                       onChange({
                         ...value,
-                        [side]: {
-                          ...value[side],
-                          [key]: event.currentTarget.checked,
-                        },
+                        [group]: value[group] === option ? "" : option,
                       })
                     }
-                  />
-                  {key.replace(
-                    /[A-Z]/g,
-                    (letter) => ` ${letter.toLowerCase()}`,
-                  )}
-                </label>
-              ))}
+                  >
+                    {label(option)}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+          {(["left", "right"] as SideId[]).map((side) => (
+            <fieldset class="field-effects__group" key={side}>
+              <legend>{side === "left" ? "Left" : "Right"}</legend>
+              <div class="field-effects__cells">
+                {Object.entries(value[side]).map(([key, active]) => (
+                  <button
+                    type="button"
+                    class="field-effect-cell"
+                    key={key}
+                    aria-pressed={active}
+                    onClick={() =>
+                      onChange({
+                        ...value,
+                        [side]: { ...value[side], [key]: !active },
+                      })
+                    }
+                  >
+                    {label(key)}
+                  </button>
+                ))}
+              </div>
             </fieldset>
           ))}
         </div>
@@ -961,16 +966,6 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
   };
   return (
     <div class="damage-calculator">
-      <header class="damage-page-header">
-        <div>
-          <p class="eyebrow">Level 50 · VGC doubles · {data.regulation.name}</p>
-          <h1>Damage Calculator</h1>
-        </div>
-        <p>
-          Compare six moves in either direction. State stays in this browser
-          tab.
-        </p>
-      </header>
       <FieldEffects value={field} onChange={setField} />
       <div class="damage-matchup">
         <PokemonPanel

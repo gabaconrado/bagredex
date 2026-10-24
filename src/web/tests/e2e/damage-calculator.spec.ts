@@ -47,8 +47,14 @@ test("calculates in both directions and resets field effects", async ({
   await expect(page.locator(".damage-result").nth(6)).toContainText(/%/);
 
   await page.getByRole("button", { name: /Field Effects/ }).click();
-  await page.getByLabel("single target", { exact: true }).nth(0).check();
-  await page.getByLabel("tailwind", { exact: true }).nth(0).check();
+  await page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Single target" })
+    .click();
+  await page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Tailwind" })
+    .click();
   await expect(
     page.getByRole("button", { name: /Field Effects/ }),
   ).toContainText("left singleTarget");
@@ -68,9 +74,8 @@ test("calculates in both directions and resets field effects", async ({
 
 test("keeps every calculator control reachable on phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(
-    page.getByRole("heading", { name: "Damage Calculator" }),
-  ).toBeVisible();
+  await expect(page.getByText(/Level 50 · VGC doubles/)).toHaveCount(0);
+  await expect(page.getByText(/Compare six moves/)).toHaveCount(0);
   await expect(
     page.getByRole("combobox", { name: "Pokémon", exact: true }),
   ).toHaveCount(2);
@@ -82,6 +87,46 @@ test("keeps every calculator control reachable on phone", async ({ page }) => {
       .locator("body")
       .evaluate((body) => body.scrollWidth <= body.clientWidth),
   ).toBe(true);
+});
+
+test("marks the active navigation section and centers calculator content", async ({
+  page,
+}) => {
+  const navigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(navigation.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(
+    navigation.getByRole("link", { name: "Damage Calculator" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  const calculator = await page.locator(".damage-calculator").boundingBox();
+  const field = await page.locator(".field-effects").boundingBox();
+  const matchup = await page.locator(".damage-matchup").boundingBox();
+  const viewport = page.viewportSize();
+  if (!calculator || !field || !matchup || !viewport)
+    throw new Error("Calculator geometry is unavailable.");
+  expect(
+    Math.abs(calculator.x - (viewport.width - calculator.width - calculator.x)),
+  ).toBeLessThan(2);
+  expect(field.x).toBeCloseTo(matchup.x, 0);
+  expect(field.width).toBeCloseTo(matchup.width, 0);
+
+  await navigation.getByRole("link", { name: "Pokédex" }).click();
+  const pokedexNavigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(pokedexNavigation.locator('[aria-current="page"]')).toHaveCount(
+    1,
+  );
+  await expect(
+    pokedexNavigation.getByRole("link", { name: "Pokédex" }),
+  ).toHaveAttribute("aria-current", "page");
+  await page
+    .getByRole("navigation", { name: "Primary" })
+    .getByRole("link", { name: "Team Builder" })
+    .click();
+  const teamNavigation = page.getByRole("navigation", { name: "Primary" });
+  await expect(teamNavigation.locator('[aria-current="page"]')).toHaveCount(1);
+  await expect(
+    teamNavigation.getByRole("link", { name: "Team Builder" }),
+  ).toHaveAttribute("aria-current", "page");
 });
 
 test("keeps six independent slots and clamps local battle state", async ({
@@ -276,10 +321,15 @@ test("keeps directional fields independent and resets on Pokémon change", async
   page,
 }) => {
   await page.getByRole("button", { name: /Field Effects/ }).click();
-  await page.getByLabel("tailwind", { exact: true }).first().check();
-  await expect(
-    page.getByLabel("tailwind", { exact: true }).nth(1),
-  ).not.toBeChecked();
+  const leftTailwind = page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Tailwind" });
+  const rightTailwind = page
+    .getByRole("group", { name: "Right" })
+    .getByRole("button", { name: "Tailwind" });
+  await leftTailwind.click();
+  await expect(leftTailwind).toHaveAttribute("aria-pressed", "true");
+  await expect(rightTailwind).toHaveAttribute("aria-pressed", "false");
   const pokemon = page
     .getByRole("combobox", { name: "Pokémon", exact: true })
     .first();
@@ -288,6 +338,96 @@ test("keeps directional fields independent and resets on Pokémon change", async
   await expect(
     page.getByRole("button", { name: /Field Effects/ }),
   ).toContainText("None active");
+});
+
+test("uses pressed cells for mutually exclusive field conditions", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: /Field Effects/ }).click();
+  const weather = page.getByRole("group", { name: "Weather" });
+  const sun = weather.getByRole("button", { name: "Sun" });
+  const rain = weather.getByRole("button", { name: "Rain" });
+  const inactiveBackground = await rain.evaluate(
+    (button) => getComputedStyle(button).backgroundColor,
+  );
+  await sun.click();
+  await expect(sun).toHaveAttribute("aria-pressed", "true");
+  await rain.focus();
+  await rain.press("Enter");
+  await expect(sun).toHaveAttribute("aria-pressed", "false");
+  await expect(rain).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() =>
+      rain.evaluate((button) => getComputedStyle(button).backgroundColor),
+    )
+    .not.toBe(inactiveBackground);
+  await rain.press("Space");
+  await expect(rain).toHaveAttribute("aria-pressed", "false");
+
+  const terrain = page.getByRole("group", { name: "Terrain" });
+  const electric = terrain.getByRole("button", { name: "Electric" });
+  const grassy = terrain.getByRole("button", { name: "Grassy" });
+  await electric.click();
+  await grassy.click();
+  await expect(electric).toHaveAttribute("aria-pressed", "false");
+  await expect(grassy).toHaveAttribute("aria-pressed", "true");
+});
+
+test("recalculates and restores damage when field cells toggle", async ({
+  page,
+}) => {
+  await commitChoice(
+    page,
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(0),
+    "Arcanine",
+  );
+  await commitChoice(
+    page,
+    page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(1),
+    "Charizard",
+  );
+  await commitChoice(
+    page,
+    page.getByRole("combobox", { name: "Move 1", exact: true }).nth(0),
+    "Flamethrower",
+  );
+  await commitChoice(
+    page,
+    page.getByRole("combobox", { name: "Move 2", exact: true }).nth(0),
+    "Thunder Fang",
+  );
+
+  const fireResult = page.locator(".damage-result").nth(0);
+  const electricResult = page.locator(".damage-result").nth(1);
+  const fireBaseline = await fireResult.textContent();
+  const electricBaseline = await electricResult.textContent();
+  if (!fireBaseline || !electricBaseline)
+    throw new Error("Expected baseline damage results.");
+
+  await page.getByRole("button", { name: /Field Effects/ }).click();
+  const sun = page
+    .getByRole("group", { name: "Weather" })
+    .getByRole("button", { name: "Sun" });
+  await sun.click();
+  await expect(fireResult).not.toHaveText(fireBaseline);
+  await sun.click();
+  await expect(fireResult).toHaveText(fireBaseline);
+
+  const electricTerrain = page
+    .getByRole("group", { name: "Terrain" })
+    .getByRole("button", { name: "Electric" });
+  await electricTerrain.click();
+  await expect(electricResult).not.toHaveText(electricBaseline);
+  await electricTerrain.click();
+  await expect(electricResult).toHaveText(electricBaseline);
+
+  const helpingHand = page
+    .getByRole("group", { name: "Left" })
+    .getByRole("button", { name: "Helping hand" });
+  await helpingHand.click();
+  await expect(fireResult).not.toHaveText(fireBaseline);
+  await helpingHand.click();
+  await expect(fireResult).toHaveText(fireBaseline);
 });
 
 test("announces recalculated results and supports keyboard disclosure", async ({
@@ -353,7 +493,7 @@ test("keeps the calculator available across M-A, M-B, and M-C", async ({
     await regulation.selectOption(value);
     await page.waitForLoadState("domcontentloaded");
     await expect(
-      page.getByRole("heading", { name: "Damage Calculator" }),
+      page.getByRole("combobox", { name: "Pokémon", exact: true }).first(),
     ).toBeVisible();
   }
 });

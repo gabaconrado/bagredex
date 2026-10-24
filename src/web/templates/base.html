@@ -14,9 +14,11 @@
       <header class="site-header">
         <a class="site-header__brand" href="{% url 'home' %}"><span class="site-header__brand-name">Bagredex</span><small class="site-header__version">{{ bagredex_version_label }}</small></a>
         <nav class="site-header__nav" aria-label="Primary">
-          <a href="{% url 'home' %}{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Pokédex</a>
-          <a href="/teams/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Team Builder</a>
-          <a href="/damage-calculator/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}">Damage Calculator</a>
+          {% with url_name=request.resolver_match.url_name %}
+            <a href="{% url 'home' %}{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "home" or url_name == "pokedex-index" or url_name == "pokedex-details" or url_name == "pokedex-form-detail" %} aria-current="page"{% endif %}>Pokédex</a>
+            <a href="/teams/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "teams-page" or url_name == "teams-detail" %} aria-current="page"{% endif %}>Team Builder</a>
+            <a href="/damage-calculator/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "damage-calculator-page" %} aria-current="page"{% endif %}>Damage Calculator</a>
+          {% endwith %}
         </nav>
         {% if regulation_selector %}
           <form class="site-header__regulation" method="get" data-regulation-selector>

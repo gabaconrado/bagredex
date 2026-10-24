@@ -149,6 +149,16 @@ body {
   color: var(--color-accent-strong);
 }
 
+.site-header__nav a[aria-current="page"] {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.site-header__nav a[aria-current="page"]:hover {
+  background: var(--color-accent-hover);
+  color: var(--color-on-accent);
+}
+
 .site-header__regulation {
   display: flex;
   align-items: center;

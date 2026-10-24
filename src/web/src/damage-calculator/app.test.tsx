@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fixture from "../../../data/fixtures/damage-calculator-data-v1.json";
@@ -35,6 +36,50 @@ describe("DamageCalculator", () => {
     );
     render(<DamageCalculator bootstrap={bootstrap} />);
     expect(screen.getByText("Loading calculation data…")).toBeTruthy();
+  });
+
+  it("renders the ready controls without redundant introduction copy", async () => {
+    vi.stubGlobal("fetch", vi.fn(response));
+    render(<DamageCalculator bootstrap={bootstrap} />);
+    await screen.findAllByLabelText("Pokémon");
+    expect(screen.queryByText(/Level 50 · VGC doubles/)).toBeNull();
+    expect(
+      screen.queryByText(/Compare six moves in either direction/),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Damage Calculator" }),
+    ).toBeNull();
+  });
+
+  it("toggles field-effect cells with mutually exclusive weather and terrain", async () => {
+    vi.stubGlobal("fetch", vi.fn(response));
+    render(<DamageCalculator bootstrap={bootstrap} />);
+    await screen.findAllByLabelText("Pokémon");
+    fireEvent.click(screen.getByRole("button", { name: /Field Effects/ }));
+
+    const weather = within(screen.getByRole("group", { name: "Weather" }));
+    const sun = weather.getByRole("button", { name: "Sun" });
+    const rain = weather.getByRole("button", { name: "Rain" });
+    fireEvent.click(sun);
+    expect(sun.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(rain);
+    expect(sun.getAttribute("aria-pressed")).toBe("false");
+    expect(rain.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(rain);
+    expect(rain.getAttribute("aria-pressed")).toBe("false");
+
+    const terrain = within(screen.getByRole("group", { name: "Terrain" }));
+    const electric = terrain.getByRole("button", { name: "Electric" });
+    fireEvent.click(electric);
+    expect(electric.getAttribute("aria-pressed")).toBe("true");
+
+    const left = within(screen.getByRole("group", { name: "Left" }));
+    const right = within(screen.getByRole("group", { name: "Right" }));
+    const leftTailwind = left.getByRole("button", { name: "Tailwind" });
+    const rightTailwind = right.getByRole("button", { name: "Tailwind" });
+    fireEvent.click(leftTailwind);
+    expect(leftTailwind.getAttribute("aria-pressed")).toBe("true");
+    expect(rightTailwind.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("renders unavailable and stale dataset errors", async () => {
