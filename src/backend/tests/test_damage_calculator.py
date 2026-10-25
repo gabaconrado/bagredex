@@ -94,6 +94,15 @@ def calculator_data() -> dict[str, Any]:
         ruleset=[],
         mechanics_profile=mechanics,
     )
+    historical_regulation = Regulation.objects.create(
+        version=version,
+        canonical_id="m-b",
+        name="Regulation M-B",
+        showdown_format_id="gen9championsvgc2026regmb",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=mechanics,
+    )
     serious = Nature.objects.create(
         version=version,
         canonical_id="serious",
@@ -276,6 +285,7 @@ def calculator_data() -> dict[str, Any]:
     return {
         "version": version,
         "regulation": regulation,
+        "historical_regulation": historical_regulation,
         "capability": capability,
         "nature": serious,
     }
@@ -340,7 +350,7 @@ def test_calculator_requires_authentication(calculator_data: dict[str, Any], url
 def test_page_exposes_exact_active_bootstrap(
     calculator_data: dict[str, Any], authenticated_client: Client
 ) -> None:
-    response = authenticated_client.get("/damage-calculator/?regulation=m-c")
+    response = authenticated_client.get("/damage-calculator/")
     assert response.status_code == 200
     assert response.context["damage_calculator_bootstrap"] == {
         "schema_version": "damage-calculator-bootstrap-v1",
@@ -348,6 +358,24 @@ def test_page_exposes_exact_active_bootstrap(
         "regulation": {"id": "m-c", "name": "Regulation M-C"},
         "dataset_url": f"/damage-calculator/data/{VERSION_ID}/m-c/",
     }
+
+
+@pytest.mark.django_db
+def test_page_canonicalizes_latest_and_keeps_historical_selection_explicit(
+    calculator_data: dict[str, Any], authenticated_client: Client
+) -> None:
+    canonical = authenticated_client.get("/damage-calculator/?tag=first&tag=second&regulation=m-c")
+
+    assert canonical.status_code == 302
+    assert canonical.headers["Location"] == "/damage-calculator/?tag=first&tag=second"
+    historical = authenticated_client.get("/damage-calculator/?tag=first&regulation=m-b")
+    assert historical.status_code == 200
+    assert historical.context["damage_calculator_bootstrap"]["regulation"]["id"] == "m-b"
+    assert historical.context["regulation_selector"]["navigation_suffix"] == "?regulation=m-b"
+    stale = authenticated_client.get("/damage-calculator/data/old/m-b/")
+    assert stale.status_code == 409
+    assert stale.json()["error"]["reload_url"] == "/damage-calculator/?regulation=m-b"
+    assert authenticated_client.get("/damage-calculator/?regulation=m-a").status_code == 400
 
 
 @pytest.mark.django_db
@@ -456,9 +484,11 @@ def test_missing_capability_fails_closed(
     calculator_data: dict[str, Any], authenticated_client: Client
 ) -> None:
     calculator_data["capability"].delete()
-    page = authenticated_client.get("/damage-calculator/?regulation=m-c")
+    page = authenticated_client.get("/damage-calculator/")
+    explicit = authenticated_client.get("/damage-calculator/?regulation=m-c")
     dataset = authenticated_client.get(f"/damage-calculator/data/{VERSION_ID}/m-c/")
     assert page.status_code == 503
+    assert explicit.status_code == 400
     assert dataset.status_code == 503
     assert dataset.json()["error"]["code"] == "data-unavailable"
 
@@ -468,7 +498,7 @@ def test_calculator_requests_have_bounded_query_counts(
     calculator_data: dict[str, Any], authenticated_client: Client
 ) -> None:
     with CaptureQueriesContext(connection) as page_queries:
-        assert authenticated_client.get("/damage-calculator/?regulation=m-c").status_code == 200
+        assert authenticated_client.get("/damage-calculator/").status_code == 200
     with CaptureQueriesContext(connection) as dataset_queries:
         assert (
             authenticated_client.get(f"/damage-calculator/data/{VERSION_ID}/m-c/").status_code

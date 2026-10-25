@@ -284,7 +284,10 @@ test("creates a keyboard-first local draft and protects it from navigation", asy
     page.getByRole("button", { name: "Add Pokémon" }).first(),
   ).toBeFocused();
 
-  await page.getByRole("button", { name: "Add Pokémon" }).nth(5).click();
+  await page.keyboard.press("6");
+  await expect(
+    page.getByRole("dialog", { name: "Choose a Pokémon" }),
+  ).toBeVisible();
   await page
     .getByRole("dialog", { name: "Choose a Pokémon" })
     .getByRole("combobox")

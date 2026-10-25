@@ -336,15 +336,19 @@ def test_home_bootstrap_and_regulation_validation(
     assert default_response.context["pokedex_bootstrap"]["regulation"]["id"] == "m-c"
     assert default_response.context["regulation_selector"] == {
         "selected_id": "m-c",
+        "navigation_suffix": "",
         "choices": [
-            {"id": "m-c", "label": "Regulation M-C", "url": "/?regulation=m-c"},
+            {"id": "m-c", "label": "Regulation M-C", "url": "/"},
             {"id": "m-b", "label": "Regulation M-B", "url": "/?regulation=m-b"},
             {"id": "m-a", "label": "Regulation M-A", "url": "/?regulation=m-a"},
         ],
         "preserved_query": [],
     }
 
-    preserved_response = authenticated_client.get("/?view=grid&tag=first&tag=second&regulation=m-c")
+    canonical = authenticated_client.get("/?view=grid&tag=first&tag=second&regulation=m-c")
+    assert canonical.status_code == 302
+    assert canonical.headers["Location"] == "/?view=grid&tag=first&tag=second"
+    preserved_response = authenticated_client.get("/?view=grid&tag=first&tag=second")
     preserved_selector = preserved_response.context["regulation_selector"]
     assert preserved_selector["preserved_query"] == [
         {"name": "view", "value": "grid"},
@@ -353,26 +357,29 @@ def test_home_bootstrap_and_regulation_validation(
     ]
     for choice in preserved_selector["choices"]:
         choice_url = urlsplit(choice["url"])
-        assert parse_qs(choice_url.query) == {
+        expected_query = {
             "view": ["grid"],
             "tag": ["first", "second"],
-            "regulation": [choice["id"]],
         }
+        if choice["id"] != "m-c":
+            expected_query["regulation"] = [choice["id"]]
+        assert parse_qs(choice_url.query) == expected_query
 
     ma_response = authenticated_client.get("/?view=grid&regulation=m-a")
     assert ma_response.status_code == 200
     assert ma_response.context["pokedex_bootstrap"]["regulation"]["id"] == "m-a"
     selector = ma_response.context["regulation_selector"]
     assert selector["selected_id"] == "m-a"
+    assert selector["navigation_suffix"] == "?regulation=m-a"
     assert selector["preserved_query"] == [{"name": "view", "value": "grid"}]
     assert [choice["id"] for choice in selector["choices"]] == ["m-c", "m-b", "m-a"]
     for choice in selector["choices"]:
         choice_url = urlsplit(choice["url"])
         assert choice_url.path == "/"
-        assert parse_qs(choice_url.query) == {
-            "view": ["grid"],
-            "regulation": [choice["id"]],
-        }
+        expected_query = {"view": ["grid"]}
+        if choice["id"] != "m-c":
+            expected_query["regulation"] = [choice["id"]]
+        assert parse_qs(choice_url.query) == expected_query
 
     assert authenticated_client.get("/?regulation=m-c&regulation=m-b").status_code == 400
     assert authenticated_client.get("/?regulation=").status_code == 400
@@ -626,7 +633,7 @@ def test_stale_version_and_boundary_errors(
         "code": "data-version-changed",
         "message": "The active Pokémon data changed. Reload the Pokédex.",
         "active_version": VERSION_ID,
-        "url": "/?regulation=m-c",
+        "url": "/",
     }
     assert authenticated_client.get("/pokedex/data/m-c/index/").status_code == 400
     assert (

@@ -1777,8 +1777,16 @@ export function TeamBuilder({
       const member = draft?.members.find(
         (value) => value.position === Number(event.key) - 1,
       );
-      if (!member) return;
+      if (!draft) return;
       event.preventDefault();
+      if (!member) {
+        const position = Number(event.key) - 1;
+        slotTrigger.current = document.querySelector(
+          `.empty-slot[data-member-slot="${position}"]`,
+        );
+        setPalette(position);
+        return;
+      }
       setPendingMemberSlot(member.position);
       setExpandedMembers((current) => new Set(current).add(member.form_id));
     };
@@ -2254,6 +2262,7 @@ export function TeamBuilder({
                   <button
                     class="empty-slot"
                     type="button"
+                    data-member-slot={position}
                     style={{ order: position }}
                     onClick={(event) => {
                       slotTrigger.current = event.currentTarget;

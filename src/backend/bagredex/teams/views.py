@@ -7,13 +7,14 @@ from typing import Any, cast
 from uuid import UUID
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from bagredex.pokedex import active_version, snapshot_for
 from bagredex.pokemon_data.models import DataVersion, Regulation
 from bagredex.regulations import (
     InvalidRegulationRequest,
+    canonical_regulation_url,
     regulation_selector_context,
     resolve_regulation_request,
 )
@@ -123,12 +124,17 @@ def teams_page(request: HttpRequest) -> HttpResponse:
         )
     snapshot = snapshot_for(version, regulation_request.canonical_id)
     if snapshot is None or not mechanics_supported(snapshot.regulation):
+        if regulation_request.explicit:
+            return HttpResponse("Invalid regulation.", status=400, content_type="text/plain")
         return render(
             request,
             "team_builder.html",
             {"team_builder_unavailable": "The requested regulation is unavailable."},
             status=503,
         )
+    canonical_url = canonical_regulation_url(request, regulation_request)
+    if canonical_url is not None:
+        return redirect(canonical_url)
     teams = list(
         team_queryset()
         .filter(

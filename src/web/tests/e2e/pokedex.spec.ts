@@ -193,6 +193,25 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
+test("keeps historical regulation navigation explicit and latest navigation clean", async ({
+  page,
+}) => {
+  await page.getByLabel("Regulation").selectOption("m-a");
+  await expect(page).toHaveURL(/regulation=m-a/);
+  await page.getByRole("link", { name: "Damage Calculator" }).click();
+  await expect(page).toHaveURL(/\/damage-calculator\/\?regulation=m-a/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-a");
+  await page.getByRole("link", { name: "Pokédex" }).click();
+  await expect(page).toHaveURL(/regulation=m-a/);
+  await page.locator(".site-header__brand").click();
+  await expect(page).toHaveURL(/regulation=m-a/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-a");
+
+  await page.getByLabel("Regulation").selectOption("m-c");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByLabel("Regulation")).toHaveValue("m-c");
+});
+
 test("switches explicit regulations and supports keyboard selection", async ({
   page,
 }, testInfo) => {
@@ -220,9 +239,6 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await page.goForward();
   await expect(page).toHaveURL(/regulation=m-a/);
   await expect(page.getByText(/of \d+ Pokémon/)).toBeVisible();
-  await page.locator(".site-header__brand").click();
-  await expect(page).not.toHaveURL(/regulation=/);
-  await expect(page.getByLabel("Regulation")).toHaveValue("m-c");
   await expect(page.locator(".site-header__brand small")).toHaveText(
     "development",
   );

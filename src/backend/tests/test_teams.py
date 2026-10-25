@@ -74,6 +74,15 @@ def team_data() -> dict[str, Any]:
         ruleset=[],
         mechanics_profile=mechanics,
     )
+    historical_regulation = Regulation.objects.create(
+        version=version,
+        canonical_id="m-b",
+        name="Regulation M-B",
+        showdown_format_id="gen9vgc2026regb",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=mechanics,
+    )
     Nature.objects.create(
         version=version,
         canonical_id="serious",
@@ -268,6 +277,7 @@ def team_data() -> dict[str, Any]:
     return {
         "version": version,
         "regulation": regulation,
+        "historical_regulation": historical_regulation,
         "profile": profile,
         "nature": Nature.objects.get(canonical_id="serious"),
         "alternate_profile": alternate_profile,
@@ -646,6 +656,52 @@ def test_anonymous_team_requests_redirect_to_login(team_data: dict[str, Any]) ->
     response = Client().get("/teams/?regulation=m-c")
     assert response.status_code == 302
     assert response.headers["Location"].startswith("/login/")
+
+
+@pytest.mark.django_db
+def test_team_page_canonicalizes_latest_and_keeps_historical_selection_explicit(
+    team_data: dict[str, Any],
+) -> None:
+    owner = User.objects.create_user(username="team-regulation-urls")
+    client = Client()
+    client.force_login(owner)
+
+    canonical = client.get("/teams/?tag=first&tag=second&regulation=m-c")
+
+    assert canonical.status_code == 302
+    assert canonical.headers["Location"] == "/teams/?tag=first&tag=second"
+    historical = client.get("/teams/?tag=first&regulation=m-b")
+    assert historical.status_code == 200
+    assert historical.context["team_builder_bootstrap"]["regulation"]["id"] == "m-b"
+    selector = historical.context["regulation_selector"]
+    assert selector["navigation_suffix"] == "?regulation=m-b"
+    assert next(choice for choice in selector["choices"] if choice["id"] == "m-c")["url"] == (
+        "/teams/?tag=first"
+    )
+    assert next(choice for choice in selector["choices"] if choice["id"] == "m-b")["url"] == (
+        "/teams/?tag=first&regulation=m-b"
+    )
+    assert client.get("/teams/?regulation=m-a").status_code == 400
+
+
+@pytest.mark.django_db
+def test_team_page_validates_latest_mechanics_before_canonical_redirect(
+    team_data: dict[str, Any],
+) -> None:
+    unsupported = _retained_snapshot(
+        "showdown-unsupported-active-s3-i4-666666666666",
+        supported_mechanics=False,
+    )
+    activate_pokemon_data(unsupported.version_id)
+    owner = User.objects.create_user(username="team-unsupported-latest")
+    client = Client()
+    client.force_login(owner)
+
+    implicit = client.get("/teams/")
+    explicit = client.get("/teams/?regulation=m-c")
+
+    assert implicit.status_code == 503
+    assert explicit.status_code == 400
 
 
 @pytest.mark.django_db
@@ -1107,7 +1163,7 @@ def test_my_teams_filters_by_owner_and_canonical_regulation_in_newest_order(
 
     client = Client()
     client.force_login(owner)
-    response = client.get("/teams/?regulation=m-c")
+    response = client.get("/teams/")
     assert response.status_code == 200
     summaries = response.context["team_builder_bootstrap"]["teams"]
     bootstrap = response.context["team_builder_bootstrap"]
@@ -1142,7 +1198,7 @@ def test_team_summaries_use_ordered_pinned_form_sprite_urls(team_data: dict[str,
 
     client = Client()
     client.force_login(owner)
-    response = client.get("/teams/?regulation=m-c")
+    response = client.get("/teams/")
 
     assert response.status_code == 200
     summary = response.context["team_builder_bootstrap"]["teams"][0]
@@ -1208,7 +1264,7 @@ def test_team_endpoints_have_bounded_query_counts(team_data: dict[str, Any]) -> 
     client = Client()
     client.force_login(owner)
     with CaptureQueriesContext(connection) as page_queries:
-        assert client.get("/teams/?regulation=m-c").status_code == 200
+        assert client.get("/teams/").status_code == 200
     with CaptureQueriesContext(connection) as detail_queries:
         assert client.get(f"/teams/{team.pk}/").status_code == 200
     with CaptureQueriesContext(connection) as dataset_queries:

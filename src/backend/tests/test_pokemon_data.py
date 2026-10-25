@@ -1175,9 +1175,8 @@ def test_committed_releases_load_and_support_audited_rollback_and_reactivation(
     rollback_current = activate_pokemon_data(current.pk)
     assert not Regulation.objects.filter(version=current, canonical_id="m-a").exists()
     unavailable_ma = client.get("/?regulation=m-a")
-    assert unavailable_ma.status_code == 503
-    assert unavailable_ma.context.get("regulation_selector") is None
-    assert "data-regulation-selector" not in unavailable_ma.content.decode()
+    assert unavailable_ma.status_code == 400
+    assert unavailable_ma.content == b"Invalid regulation."
     available_mb = client.get("/?regulation=m-b")
     assert available_mb.status_code == 200
     assert available_mb.context["pokedex_bootstrap"]["regulation"]["id"] == "m-b"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET
@@ -14,6 +14,8 @@ from bagredex.pokedex import active_version, response_etag, snapshot_for
 from bagredex.regulations import (
     REGULATION_IDS,
     InvalidRegulationRequest,
+    canonical_regulation_url,
+    regulation_page_url,
     regulation_selector_context,
     resolve_regulation_request,
 )
@@ -56,6 +58,8 @@ def damage_calculator_page(request: HttpRequest) -> HttpResponse:
         )
     snapshot = snapshot_for(version, regulation_request.canonical_id)
     if snapshot is None or not calculator_supported(snapshot):
+        if regulation_request.explicit:
+            return HttpResponse("Invalid regulation.", status=400, content_type="text/plain")
         return render(
             request,
             "damage_calculator.html",
@@ -66,6 +70,9 @@ def damage_calculator_page(request: HttpRequest) -> HttpResponse:
             },
             status=503,
         )
+    canonical_url = canonical_regulation_url(request, regulation_request)
+    if canonical_url is not None:
+        return redirect(canonical_url)
     bootstrap = {
         "schema_version": BOOTSTRAP_SCHEMA,
         "active_version": version.pk,
@@ -112,7 +119,7 @@ def damage_calculator_data(request: HttpRequest, version: str, regulation: str) 
             "The active Pokémon data changed. Reload the Damage Calculator.",
             409,
             active_version=current.pk,
-            reload_url=f"{reverse('damage-calculator-page')}?regulation={regulation}",
+            reload_url=regulation_page_url(reverse("damage-calculator-page"), regulation),
         )
     snapshot = snapshot_for(current, regulation)
     if snapshot is None:

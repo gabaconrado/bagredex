@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_not_required
 from django.db import DatabaseError, connection
 from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import parse_etags
 from django.views.decorators.http import require_GET
@@ -30,6 +30,8 @@ from .pokemon_data.models import DataVersion, Sprite
 from .regulations import (
     REGULATION_IDS,
     InvalidRegulationRequest,
+    canonical_regulation_url,
+    regulation_page_url,
     regulation_selector_context,
     resolve_regulation_request,
 )
@@ -81,7 +83,7 @@ def _current_snapshot_response(
             "The active Pokémon data changed. Reload the Pokédex.",
             409,
             active_version=version.pk,
-            url=f"{reverse('home')}?regulation={regulation}",
+            url=regulation_page_url(reverse("home"), regulation),
         )
     snapshot = snapshot_for(version, regulation)
     if snapshot is None:
@@ -109,12 +111,17 @@ def home(request: HttpRequest) -> HttpResponse:
         )
     snapshot = snapshot_for(version, regulation_id)
     if snapshot is None:
+        if regulation_request.explicit:
+            return HttpResponse("Invalid regulation.", status=400, content_type="text/plain")
         return render(
             request,
             "home.html",
             {"pokedex_unavailable": "The requested regulation is unavailable."},
             status=503,
         )
+    canonical_url = canonical_regulation_url(request, regulation_request)
+    if canonical_url is not None:
+        return redirect(canonical_url)
     return render(
         request,
         "home.html",

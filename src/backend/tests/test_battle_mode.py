@@ -232,6 +232,15 @@ def _summary(response: Any, team: Team) -> dict[str, Any]:
 def battle_data() -> dict[str, Any]:
     version = _version("showdown-battle-test-s5-i6-0123456789ab")
     regulation = _regulation(version)
+    historical_regulation = Regulation.objects.create(
+        version=version,
+        canonical_id="m-b",
+        name="Regulation M-B",
+        showdown_format_id="gen9championsvgc2026regmb",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=regulation.mechanics_profile,
+    )
     base_profile = _profile(version, regulation, "pikachu")
     alternate_profile = _profile(
         version,
@@ -278,6 +287,7 @@ def battle_data() -> dict[str, Any]:
     return {
         "version": version,
         "regulation": regulation,
+        "historical_regulation": historical_regulation,
         "profile": base_profile,
         "alternate_profile": alternate_profile,
         "extra_profiles": extra_profiles,
@@ -324,6 +334,22 @@ def test_battle_mode_rejects_invalid_regulation_and_method(
 
 
 @pytest.mark.django_db
+def test_battle_mode_canonicalizes_latest_regulation(
+    battle_data: dict[str, Any], authenticated_client: Client
+) -> None:
+    response = authenticated_client.get("/battle-mode/?tag=first&tag=second&regulation=m-c")
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/battle-mode/?tag=first&tag=second"
+    historical = authenticated_client.get("/battle-mode/?tag=first&regulation=m-b")
+    assert historical.status_code == 200
+    assert historical.context["regulation_selector"]["navigation_suffix"] == "?regulation=m-b"
+    assert historical.context["battle_mode_bootstrap"]["team_builder_url"] == (
+        "/teams/?regulation=m-b"
+    )
+
+
+@pytest.mark.django_db
 def test_battle_mode_fails_closed_without_active_data(authenticated_client: Client) -> None:
     response = authenticated_client.get("/battle-mode/?regulation=m-c")
     assert response.status_code == 503
@@ -334,8 +360,10 @@ def test_battle_mode_fails_closed_without_active_data(authenticated_client: Clie
 def test_battle_mode_fails_closed_without_calculator_capability(
     battle_data_without_capability: dict[str, Any], authenticated_client: Client
 ) -> None:
-    response = authenticated_client.get("/battle-mode/?regulation=m-c")
+    response = authenticated_client.get("/battle-mode/")
+    explicit = authenticated_client.get("/battle-mode/?regulation=m-c")
     assert response.status_code == 503
+    assert explicit.status_code == 400
     assert "does not support Battle Mode" in response.content.decode()
 
 
@@ -343,9 +371,9 @@ def test_battle_mode_fails_closed_without_calculator_capability(
 def test_battle_mode_fails_closed_when_requested_regulation_is_absent(
     battle_data: dict[str, Any], authenticated_client: Client
 ) -> None:
-    response = authenticated_client.get("/battle-mode/?regulation=m-b")
-    assert response.status_code == 503
-    assert "does not support Battle Mode" in response.content.decode()
+    response = authenticated_client.get("/battle-mode/?regulation=m-a")
+    assert response.status_code == 400
+    assert "Invalid regulation" in response.content.decode()
 
 
 @pytest.mark.django_db
@@ -363,7 +391,7 @@ def test_battle_bootstrap_is_exact_private_and_species_aware(
     _load(old_version)
     _team(user, old_regulation, old_profile, "Historical team")
 
-    response = authenticated_client.get("/battle-mode/?regulation=m-c")
+    response = authenticated_client.get("/battle-mode/")
     assert response.status_code == 200
     bootstrap = response.context["battle_mode_bootstrap"]
     assert bootstrap == {
@@ -391,7 +419,7 @@ def test_battle_bootstrap_is_exact_private_and_species_aware(
         ],
         "dataset_url": (f"/damage-calculator/data/{battle_data['version'].pk}/m-c/"),
         "team_url_template": "/teams/__TEAM__/",
-        "team_builder_url": "/teams/?regulation=m-c",
+        "team_builder_url": "/teams/",
         "base_species_by_form": {
             "pikachu": "pikachu",
             "pikachurockstar": "pikachu",
@@ -422,7 +450,7 @@ def test_battle_bootstrap_reports_authoritative_team_readiness(
     )
     TeamMember.objects.filter(team=missing_ability).update(ability_profile=None)
 
-    response = authenticated_client.get("/battle-mode/?regulation=m-c")
+    response = authenticated_client.get("/battle-mode/")
 
     assert response.status_code == 200
     summaries = {
@@ -448,7 +476,7 @@ def test_battle_readiness_allows_missing_optional_item_and_moves(
     assert member.item_profile_id is None
     assert not member.moves.exists()
 
-    response = authenticated_client.get("/battle-mode/?regulation=m-c")
+    response = authenticated_client.get("/battle-mode/")
 
     assert response.status_code == 200
     assert _summary(response, team)["battle_ready"] is True
@@ -507,7 +535,7 @@ def test_battle_readiness_rejects_stale_and_illegal_member_contexts(
     invalid_mega = _team(user, regulation, profile, "Invalid Mega")
     TeamMember.objects.filter(team=invalid_mega).update(mega_preview=True)
 
-    response = authenticated_client.get("/battle-mode/?regulation=m-c")
+    response = authenticated_client.get("/battle-mode/")
 
     assert response.status_code == 200
     expectations = (
@@ -572,7 +600,7 @@ def test_battle_mode_queries_are_bounded_by_team_and_member_count(
 ) -> None:
     user = User.objects.get(username="battle-user")
     with CaptureQueriesContext(connection) as empty_queries:
-        empty_response = authenticated_client.get("/battle-mode/?regulation=m-c")
+        empty_response = authenticated_client.get("/battle-mode/")
     assert empty_response.status_code == 200
     assert empty_response.context["battle_mode_bootstrap"]["teams"] == []
 
@@ -589,7 +617,7 @@ def test_battle_mode_queries_are_bounded_by_team_and_member_count(
         move_profile=battle_data["move_profiles"]["query-move"],
     )
     with CaptureQueriesContext(connection) as full_team_queries:
-        full_team_response = authenticated_client.get("/battle-mode/?regulation=m-c")
+        full_team_response = authenticated_client.get("/battle-mode/")
     assert full_team_response.status_code == 200
     assert len(full_team_response.context["battle_mode_bootstrap"]["teams"][0]["members"]) == 6
     assert full_team_response.context["battle_mode_bootstrap"]["teams"][0]["battle_ready"] is True
@@ -597,7 +625,7 @@ def test_battle_mode_queries_are_bounded_by_team_and_member_count(
     for index, profile in enumerate(battle_data["extra_profiles"][6:]):
         _team(user, battle_data["regulation"], profile, f"Team {index}")
     with CaptureQueriesContext(connection) as populated_queries:
-        assert authenticated_client.get("/battle-mode/?regulation=m-c").status_code == 200
+        assert authenticated_client.get("/battle-mode/").status_code == 200
     assert len(empty_queries) <= 15
     assert len(full_team_queries) <= 20
     assert len(populated_queries) == len(full_team_queries)

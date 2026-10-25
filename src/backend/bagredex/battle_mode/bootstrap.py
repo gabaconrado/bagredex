@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from bagredex.pokedex import Snapshot
 from bagredex.pokemon_data.models import LearnsetEntry, MegaItemRelation, PokemonProfile
+from bagredex.regulations import regulation_page_url
 from bagredex.teams.models import Team, TeamMember, TeamMemberMove
 
 BOOTSTRAP_SCHEMA = "battle-mode-bootstrap-v2"
@@ -231,6 +232,6 @@ def battle_mode_bootstrap(user: Any, snapshot: Snapshot) -> dict[str, Any]:
         "team_url_template": reverse("teams-detail", kwargs={"team_id": zero_uuid}).replace(
             str(zero_uuid), "__TEAM__"
         ),
-        "team_builder_url": (f"{reverse('teams-page')}?regulation={regulation.canonical_id}"),
+        "team_builder_url": regulation_page_url(reverse("teams-page"), regulation.canonical_id),
         "base_species_by_form": dict(sorted(form_species)),
     }

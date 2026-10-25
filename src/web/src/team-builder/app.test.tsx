@@ -98,6 +98,122 @@ function BlankAutocomplete({ count = 3 }: { count?: number }) {
   );
 }
 
+const shortcutBootstrap: Bootstrap = {
+  schema_version: "team-builder-bootstrap-v2",
+  active_version: "version-3",
+  regulation: { id: "m-c", name: "Regulation M-C" },
+  data_url: "/teams/data/",
+  create_url: "/teams/",
+  team_url_template: "/teams/__TEAM__/",
+  next_team_number: 1,
+  teams: [],
+};
+
+const shortcutData: BuilderData = {
+  schema_version: "team-builder-data-v3",
+  data_version: "version-3",
+  regulation: shortcutBootstrap.regulation,
+  forms: [
+    {
+      id: "charizard",
+      name: "Charizard",
+      base_species_id: "charizard",
+      types: [{ id: "fire", name: "Fire" }],
+      ability_ids: ["blaze"],
+      move_ids: [],
+      base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
+      sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },
+    },
+  ],
+  types: [{ id: "fire", name: "Fire" }],
+  abilities: [
+    {
+      id: "blaze",
+      name: "Blaze",
+      short_description: "Boosts Fire moves.",
+      description: "Boosts Fire-type moves when HP is low.",
+    },
+  ],
+  moves: [],
+  items: [],
+  natures: [
+    {
+      id: "serious",
+      name: "Serious",
+      increased_stat: null,
+      decreased_stat: null,
+    },
+  ],
+  mega_relations: [],
+  mechanics: {
+    level: 50,
+    iv: 31,
+    sp_min: 0,
+    sp_max: 32,
+    sp_total_max: 66,
+    formula: "champions",
+  },
+};
+
+describe("team slot keyboard shortcuts", () => {
+  afterEach(cleanup);
+
+  it("opens the requested empty slot picker and retains occupied-slot focus", async () => {
+    render(
+      <TeamBuilder bootstrap={shortcutBootstrap} initialData={shortcutData} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "New Team" })[0]!);
+    const teamName = await screen.findByLabelText("Team name");
+    fireEvent.keyDown(teamName, { key: "4" });
+    expect(
+      screen.queryByRole("dialog", { name: "Choose a Pokémon" }),
+    ).toBeNull();
+    const fourthSlot = document.querySelector<HTMLElement>(
+      '.empty-slot[data-member-slot="3"]',
+    )!;
+    fireEvent.keyDown(fourthSlot, { key: "4", altKey: true });
+    expect(
+      screen.queryByRole("dialog", { name: "Choose a Pokémon" }),
+    ).toBeNull();
+    fireEvent.keyDown(fourthSlot, { key: "4", repeat: true });
+    expect(
+      screen.queryByRole("dialog", { name: "Choose a Pokémon" }),
+    ).toBeNull();
+    const openDialog = document.createElement("dialog");
+    openDialog.setAttribute("open", "");
+    document.body.append(openDialog);
+    fireEvent.keyDown(fourthSlot, { key: "4" });
+    expect(
+      screen.queryByRole("dialog", { name: "Choose a Pokémon" }),
+    ).toBeNull();
+    openDialog.remove();
+
+    await waitFor(() => {
+      fireEvent.keyDown(fourthSlot, { key: "4" });
+      expect(
+        screen.getByRole("dialog", { name: "Choose a Pokémon" }),
+      ).toBeTruthy();
+    });
+    const picker = screen.getByRole("dialog", { name: "Choose a Pokémon" });
+    expect(picker).toBeTruthy();
+    fireEvent.keyDown(
+      screen.getByRole("combobox", {
+        name: "Search names, moves, abilities, or types",
+      }),
+      { key: "Enter" },
+    );
+    const member = document.querySelector<HTMLElement>(
+      '[data-member-slot="3"].member-card',
+    );
+    expect(member).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Collapse Charizard/ }));
+    fireEvent.keyDown(member!, { key: "4" });
+    await waitFor(() => expect(document.activeElement).toBe(member));
+    expect(member?.getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
 describe("Team Builder initial loading", () => {
   afterEach(() => {
     cleanup();
