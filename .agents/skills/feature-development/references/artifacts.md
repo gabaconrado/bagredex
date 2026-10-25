@@ -78,6 +78,12 @@ Path: `docs/reports/YYYY-MM-DD-topic.md`
 Keep reports concise, record observed outcomes rather than activity transcripts, and link the plan
 and any deferred tasks.
 
+Before the feature commit exists, the report may say that it is included in the pending cycle
+commit. After the deployment agent creates that commit, the architect must replace the pending
+statement with the exact full feature-commit hash and subject. The deployment agent commits that
+report-only correction separately and verifies the completed boundary with
+`./bagredex.sh human-review candidate`. Never amend the feature commit to make it reference itself.
+
 ## Human-review supplements
 
 An explicitly invoked post-completion human-review session leaves the original feature plan,

@@ -146,7 +146,7 @@ candidate_review() {
   [[ "${output}" == *"RESULT_COMMIT: ${CANDIDATE_COMMIT}"* ]]
 }
 
-@test "candidate skips a committed pending current-repository-shaped plan and report" {
+@test "candidate fails closed instead of falling back past a newer pending boundary" {
   create_candidate_repository
   printf '# Human review completion tracking\n' \
     >"${CANDIDATE_REPOSITORY}/docs/plans/2026-10-24-human-review-completion-tracking.md"
@@ -156,9 +156,38 @@ candidate_review() {
   git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: add pending completion tracking artifacts'
 
   run candidate_review candidate
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"still has pending commit evidence"* ]]
+  [[ "${output}" == *"human-review-completion-tracking"* ]]
+}
+
+@test "candidate skips an older pending boundary behind a finalized feature" {
+  create_candidate_repository
+  printf '# Historical pending plan\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/plans/2026-02-01-historical-pending.md"
+  printf '# Historical pending report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-02-01-historical-pending.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'feat: add historical pending boundary'
+
+  printf '# Finalized plan\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/plans/2026-03-01-finalized.md"
+  printf '# Finalized report\n\n## Commits\n\nPending.\n' \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-03-01-finalized.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'feat: add finalized boundary'
+  local finalized_commit
+  finalized_commit="$(git -C "${CANDIDATE_REPOSITORY}" rev-parse HEAD)"
+  printf '# Finalized report\n\n## Commits\n\n`%s`\n' "${finalized_commit}" \
+    >"${CANDIDATE_REPOSITORY}/docs/reports/2026-03-01-finalized.md"
+  git -C "${CANDIDATE_REPOSITORY}" add docs/reports/2026-03-01-finalized.md
+  git -C "${CANDIDATE_REPOSITORY}" commit -qm 'docs: finalize newer boundary'
+
+  run candidate_review candidate
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"TARGET: candidate"* ]]
+  [[ "${output}" == *"TARGET: finalized"* ]]
   [[ "${output}" == *"STATE: available"* ]]
+  [[ "${output}" == *"FEATURE_COMMIT: ${finalized_commit}"* ]]
 }
 
 @test "candidate fails closed for a committed report without a hash or pending marker" {

@@ -71,7 +71,12 @@ Use the `feature-development` skill for every requested feature.
 5. Return every actionable finding to its owner and repeat review until no blockers remain.
 6. Defer only explicitly separable work, recording focused tasks under `docs/tasks`.
 7. Dispatch `architect` to write a concise cycle report under `docs/reports`.
-8. Dispatch `deployment_agent` for final checks and one or more justified local commits.
+8. Dispatch `deployment_agent` for final checks and the justified feature commit.
+9. Dispatch `architect` to replace the report's pending commit statement with the exact full
+   feature-commit hash and subject.
+10. Dispatch `deployment_agent` to validate and commit that narrow report correction, then run
+    `./bagredex.sh human-review candidate`. Do not hand off the completed cycle unless it reports
+    the new target as `available` with the exact feature commit.
 
 After that cycle is complete and committed, the user may explicitly invoke `$human-review` for an
 optional isolated browser-feedback loop. Ordinary requests never enter it implicitly. Focused

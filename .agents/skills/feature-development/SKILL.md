@@ -37,7 +37,14 @@ Use this workflow for every requested Bagredex feature. Read
    `docs/tasks`.
 8. Dispatch the architect to write a concise report in `docs/reports` after review and before final
    staging. Its commits section may state that the report is included in the pending cycle commit.
-9. Dispatch the deployment agent for final local checks and the local commit.
+9. Dispatch the deployment agent for final local checks and the feature commit.
+10. After that commit exists, dispatch the architect to replace the report's pending commit
+    statement with the exact full feature-commit hash and subject. Do not amend or rewrite the
+    feature commit.
+11. Dispatch the deployment agent to validate the narrow report correction, commit it separately,
+    and run `./bagredex.sh human-review candidate`. The reported target, `available` state, and
+    feature commit must match the completed cycle before handoff. Treat an older target, a pending
+    report, malformed evidence, or any other mismatch as a blocking workflow failure.
 
 ## Optional human review
 
@@ -52,5 +59,8 @@ report and reviewed-result commit, then a narrow receipt/report-correction commi
 ## Completion
 
 A cycle is complete only when approved behavior exists, affected interfaces agree, required checks
-pass, blocking findings are resolved, required documentation exists, and local commits are
-reported. A remote repository is never part of completion.
+pass, blocking findings are resolved, required documentation exists, and both the feature commit
+and its narrow report-correction commit are reported. The committed report must name the exact
+feature commit; pending commit language is a hard stop. The post-correction human-review candidate
+query must identify that feature boundary as available before handoff. A remote repository is never
+part of completion.

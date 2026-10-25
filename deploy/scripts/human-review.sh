@@ -434,8 +434,10 @@ human_review_resolve_target() {
 
 human_review_candidate() {
   local plan basename target commit relative_plan relative_report selected_target=""
-  local selected_commit="" rank selected_rank=2147483647
-  local -a plans=() commits_at_rank=() matching_reports=() reported_commits=()
+  local selected_commit="" rank selected_rank=2147483647 pending_rank=2147483647
+  local pending_commit=""
+  local -a plans=() commits_at_rank=() matching_reports=() pending_at_rank=()
+  local -a reported_commits=()
   declare -A commit_rank=()
   require_tools git find awk grep sort sed date
   [[ ! -e "${human_review_marker}" ]] || {
@@ -478,6 +480,21 @@ human_review_candidate() {
     )
     if [[ "${#reported_commits[@]}" -eq 0 ]]; then
       if human_review_report_is_pending "${matching_reports[0]}"; then
+        commit="$(git -C "${script_dir}" log -1 --format=%H -- \
+          "${relative_plan}" "${relative_report}")"
+        [[ -n "${commit}" && -n "${commit_rank[${commit}]+present}" ]] || {
+          printf 'Pending target artifacts have no reachable commit boundary: %s\n' \
+            "${target}" >&2
+          return 2
+        }
+        rank="${commit_rank[${commit}]}"
+        if ((rank < pending_rank)); then
+          pending_rank="${rank}"
+          pending_commit="${commit}"
+          pending_at_rank=("${target}")
+        elif ((rank == pending_rank)); then
+          pending_at_rank+=("${target}")
+        fi
         continue
       fi
       printf 'Target report has malformed completion evidence: %s\n' \
@@ -497,6 +514,12 @@ human_review_candidate() {
       commits_at_rank+=("${target}")
     fi
   done
+  if [[ -n "${pending_commit}" ]] &&
+    { [[ -z "${selected_target}" ]] || ((pending_rank < selected_rank)); }; then
+    printf 'Newest human-review feature boundary still has pending commit evidence: %s (%s)\n' \
+      "${pending_at_rank[*]}" "${pending_commit}" >&2
+    return 2
+  fi
   [[ -n "${selected_target}" ]] || {
     printf 'No eligible completed feature candidate exists.\n' >&2
     return 2
