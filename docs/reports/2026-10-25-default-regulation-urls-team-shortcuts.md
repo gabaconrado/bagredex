@@ -38,16 +38,17 @@ Observed passing checks:
 - Ruff lint and formatting
 - mypy across 65 backend files
 - Django system check and migration dry-run with no model changes
-- regulation URL policy unit tests
+- Backend test suite: 283 passed
 - Web formatting, lint, and type checks
 - Web unit/component tests: 219 passed and 21 skipped
-- Web production build
+- Deployment tests: 79 passed
+- Web production build and static collection
+- Focused Playwright feature coverage: 2 passed
 - `git diff --check`
 
-Database-backed backend tests were not executed because the local PostgreSQL service was
-unavailable at `localhost:5432`. Playwright did not reach browser assertions because Chromium was
-blocked by the managed sandbox and the Firefox projects lacked configured local E2E credentials.
-These environment-limited checks remain for the deployment agent's final validation workflow.
+A broader Playwright attempt encountered an unrelated pre-existing failure in a JavaScript-disabled
+test helper. That case was excluded from the focused feature validation; both regulation-navigation
+and Team Builder shortcut browser scenarios passed.
 
 ## Deferred tasks
 
@@ -55,5 +56,5 @@ None.
 
 ## Commits
 
-This report is included in the pending feature commit. The exact feature commit will be recorded in
-a separate report-only correction after that commit is created.
+Feature commit: `4609a408286080683b0faad1313a2acabd793af7` —
+`feat: clean regulation URLs and add slot shortcuts`.
