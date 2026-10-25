@@ -59,6 +59,7 @@ const combatant = (input: any): Combatant => {
 const move = (input: any): Move => ({
   id: input.facts.id,
   name: input.facts.name,
+  description: input.facts.description ?? input.facts.name,
   type_id: id(input.facts.type),
   category: input.facts.category,
   base_power: input.facts.basePower,

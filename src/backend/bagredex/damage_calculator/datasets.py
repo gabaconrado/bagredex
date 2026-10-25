@@ -24,7 +24,7 @@ from bagredex.pokemon_data.models import (
     TypeEffectiveness,
 )
 
-DATA_SCHEMA = "damage-calculator-data-v1"
+DATA_SCHEMA = "damage-calculator-data-v2"
 CAPABILITY_ID = "damage-calculator-v1"
 
 _ABILITY_SLOT_ORDER = {"0": 0, "1": 1, "H": 2, "S": 3}
@@ -78,6 +78,13 @@ def _gender_fields(form: PokemonForm) -> dict[str, str | list[str]]:
         "gender_options": form.gender_options,
         "default_gender": form.default_gender,
     }
+
+
+def _move_description(profile: MoveProfile) -> str:
+    description = profile.description
+    if not description.strip():
+        raise DamageCalculatorUnavailable("A move description is unavailable.")
+    return description
 
 
 def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
@@ -294,6 +301,7 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
             {
                 "id": profile.move.canonical_id,
                 "name": profile.move.name,
+                "description": _move_description(profile),
                 "type_id": profile.type.canonical_id,
                 "category": profile.category,
                 "base_power": profile.base_power,

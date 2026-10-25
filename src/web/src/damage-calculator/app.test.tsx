@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import fixture from "../../../data/fixtures/damage-calculator-data-v1.json";
+import { damageCalculatorDataV2 as fixture } from "../test-fixtures/damage-calculator-data-v2";
 import { DamageCalculator, ratioScaledCurrentHp } from "./app";
 import type { Bootstrap } from "./contracts";
 

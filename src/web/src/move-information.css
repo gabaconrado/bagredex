@@ -1,0 +1,126 @@
+.move-info-dialog {
+  width: min(calc(100% - 2rem), 36rem);
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-large);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+.move-info-dialog::backdrop {
+  background: rgb(15 23 42 / 60%);
+}
+.move-info-dialog .info-dialog__surface {
+  padding: 1.25rem;
+}
+.move-info-dialog .info-dialog__surface header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.move-info-dialog .dialog-close {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.5rem;
+}
+.move-info-dialog .info-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+.move-info-dialog .info-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: auto;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-weight: 700;
+}
+.move-info-dialog .info-flags,
+.move-info-dialog .info-pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.move-info-dialog .info-flags {
+  margin: 1rem 0;
+}
+.move-info__type {
+  display: inline-block;
+  padding: 0.15rem 0.42rem;
+  border-radius: 999px;
+  background: var(--type-color, #64748b);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1.5;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 40%);
+}
+.move-info__type--normal {
+  --type-color: #73706f;
+}
+.move-info__type--fire {
+  --type-color: #c64d24;
+}
+.move-info__type--water {
+  --type-color: #2878bd;
+}
+.move-info__type--electric {
+  --type-color: #9a7600;
+}
+.move-info__type--grass {
+  --type-color: #36813a;
+}
+.move-info__type--ice {
+  --type-color: #247f8b;
+}
+.move-info__type--fighting {
+  --type-color: #a52c27;
+}
+.move-info__type--poison {
+  --type-color: #874590;
+}
+.move-info__type--ground {
+  --type-color: #9b671e;
+}
+.move-info__type--flying {
+  --type-color: #6857b3;
+}
+.move-info__type--psychic {
+  --type-color: #ca3e72;
+}
+.move-info__type--bug {
+  --type-color: #687b18;
+}
+.move-info__type--rock {
+  --type-color: #817228;
+}
+.move-info__type--ghost {
+  --type-color: #5d487a;
+}
+.move-info__type--dragon {
+  --type-color: #5d36ae;
+}
+.move-info__type--dark {
+  --type-color: #54443c;
+}
+.move-info__type--steel {
+  --type-color: #686888;
+}
+.move-info__type--fairy {
+  --type-color: #b64f82;
+}

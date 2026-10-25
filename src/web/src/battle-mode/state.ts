@@ -26,6 +26,9 @@ export type SideField = {
   reflect: boolean;
   lightScreen: boolean;
   auroraVeil: boolean;
+  friendGuard: boolean;
+  helpingHand: boolean;
+  singleTarget: boolean;
 };
 export type BattleField = {
   weather: string;
@@ -35,12 +38,12 @@ export type BattleField = {
   opponent: SideField;
 };
 export type BattleState = {
-  started: boolean;
+  currentTeamId: string | null;
   members: BattleMember[];
+  initialOwnMembers: BattleMember[];
   board: Record<BattleSide, [string | null, string | null]>;
   placementId: string | null;
   attackerId: string | null;
-  singleTargetOverride: boolean;
   field: BattleField;
 };
 
@@ -56,14 +59,17 @@ const sideField = (): SideField => ({
   reflect: false,
   lightScreen: false,
   auroraVeil: false,
+  friendGuard: false,
+  helpingHand: false,
+  singleTarget: false,
 });
 export const emptyBattleState = (): BattleState => ({
-  started: false,
+  currentTeamId: null,
   members: [],
+  initialOwnMembers: [],
   board: { own: [null, null], opponent: [null, null] },
   placementId: null,
   attackerId: null,
-  singleTargetOverride: false,
   field: {
     weather: "",
     terrain: "",
@@ -74,16 +80,14 @@ export const emptyBattleState = (): BattleState => ({
 });
 
 export type BattleAction =
-  | { type: "start"; members: BattleMember[] }
-  | { type: "start-over" }
+  | { type: "install-team"; teamId: string; members: BattleMember[] }
   | { type: "add"; member: BattleMember }
   | { type: "remove"; id: string }
   | { type: "bench"; id: string }
   | { type: "select"; id: string }
   | { type: "place"; side: BattleSide; slot: 0 | 1 }
   | { type: "update"; id: string; patch: Partial<BattleMember> }
-  | { type: "field"; field: BattleField }
-  | { type: "single-target"; value: boolean };
+  | { type: "field"; field: BattleField };
 
 const boardWithout = (
   board: BattleState["board"],
@@ -109,9 +113,14 @@ export function battleReducer(
   state: BattleState,
   action: BattleAction,
 ): BattleState {
-  if (action.type === "start")
-    return { ...emptyBattleState(), started: true, members: action.members };
-  if (action.type === "start-over") return emptyBattleState();
+  if (action.type === "install-team")
+    return {
+      ...emptyBattleState(),
+      currentTeamId: action.teamId,
+      members: action.members,
+      initialOwnMembers: action.members,
+    };
+  if (!state.currentTeamId) return state;
   if (action.type === "add")
     return { ...state, members: [...state.members, action.member] };
   if (action.type === "update")
@@ -122,8 +131,6 @@ export function battleReducer(
       ),
     };
   if (action.type === "field") return { ...state, field: action.field };
-  if (action.type === "single-target")
-    return { ...state, singleTargetOverride: action.value };
   if (action.type === "select") {
     const member = state.members.find(({ id }) => id === action.id);
     if (!member) return state;
@@ -133,7 +140,6 @@ export function battleReducer(
           ...state,
           attackerId: member.id,
           placementId: null,
-          singleTargetOverride: false,
         }
       : { ...state, placementId: member.id };
   }
@@ -145,7 +151,6 @@ export function battleReducer(
       board,
       placementId: state.placementId === action.id ? null : state.placementId,
       attackerId: state.attackerId === action.id ? null : state.attackerId,
-      singleTargetOverride: false,
     };
   }
   if (action.type === "bench") {
@@ -157,7 +162,6 @@ export function battleReducer(
       board: boardWithout(state.board, action.id),
       placementId: state.placementId === action.id ? null : state.placementId,
       attackerId: state.attackerId === action.id ? null : state.attackerId,
-      singleTargetOverride: false,
     };
   }
   if (action.type === "place") {
@@ -176,10 +180,24 @@ export function battleReducer(
       board: { ...without, [action.side]: nextSide },
       placementId: null,
       attackerId: member.id,
-      singleTargetOverride: false,
     };
   }
   return state;
+}
+
+export function hasBattleProgress(state: BattleState) {
+  if (!state.currentTeamId) return false;
+  const empty = emptyBattleState();
+  return (
+    state.members.some(({ side }) => side === "opponent") ||
+    state.board.own.some(Boolean) ||
+    state.board.opponent.some(Boolean) ||
+    state.placementId !== null ||
+    state.attackerId !== null ||
+    JSON.stringify(state.field) !== JSON.stringify(empty.field) ||
+    JSON.stringify(state.members.filter(({ side }) => side === "own")) !==
+      JSON.stringify(state.initialOwnMembers)
+  );
 }
 
 export const opponentCurrentHp = (maximum: number, percentage: number) =>

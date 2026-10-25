@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import fixture from "../../../data/fixtures/damage-calculator-data-v1.json";
+import { damageCalculatorDataV2 as fixture } from "../test-fixtures/damage-calculator-data-v2";
 import { BattleMode } from "./app";
 import type { BattleBootstrap } from "./contracts";
 
@@ -11,7 +11,7 @@ const searchable = (
   .filter(({ searchable, is_mega }) => searchable && !is_mega)
   .map(({ id }) => [id, id]);
 const bootstrap: BattleBootstrap = {
-  schema_version: "battle-mode-bootstrap-v1",
+  schema_version: "battle-mode-bootstrap-v2",
   active_version: fixture.data_version,
   regulation: fixture.regulation,
   teams: [
@@ -22,6 +22,8 @@ const bootstrap: BattleBootstrap = {
       regulation: fixture.regulation,
       members: [],
       updated_at: "2026-10-25T00:00:00Z",
+      battle_ready: true,
+      battle_unavailable_reason: null,
     },
   ],
   dataset_url: "/damage-data/",
@@ -37,7 +39,7 @@ afterEach(() => {
 });
 
 describe("Battle Mode departure protection", () => {
-  it("intercepts link and regulation navigation immediately after Start battle", async () => {
+  it("intercepts navigation while a selected team is loading", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn((url: string | URL | Request) => {
@@ -71,10 +73,8 @@ describe("Battle Mode departure protection", () => {
     regulationForm.append(regulation);
     document.body.append(regulationForm);
     render(<BattleMode bootstrap={bootstrap} />);
-    fireEvent.click(
-      await screen.findByRole("radio", { name: /Navigation test/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Start battle" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Your team/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Navigation test/ }));
     external.focus();
     expect(document.activeElement).toBe(external);
     fireEvent.click(external);
@@ -84,7 +84,7 @@ describe("Battle Mode departure protection", () => {
     expect(document.activeElement).toBe(external);
     expect(
       screen
-        .getByRole("button", { name: "Loading team…" })
+        .getByRole("button", { name: /Navigation test/ })
         .hasAttribute("disabled"),
     ).toBe(true);
 

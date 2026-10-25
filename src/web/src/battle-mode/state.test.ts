@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   battleReducer,
   emptyBattleState,
+  hasBattleProgress,
   opponentCurrentHp,
   zeroStages,
   type BattleMember,
@@ -39,9 +40,60 @@ const selectAndPlace = (
   });
 
 describe("Battle Mode state", () => {
+  it("installs teams atomically and detects only meaningful progress", () => {
+    const installed = battleReducer(emptyBattleState(), {
+      type: "install-team",
+      teamId: "team-one",
+      members: [member("ally", "own")],
+    });
+    expect(installed.currentTeamId).toBe("team-one");
+    expect(hasBattleProgress(installed)).toBe(false);
+    expect(
+      hasBattleProgress(
+        battleReducer(installed, {
+          type: "field",
+          field: {
+            ...installed.field,
+            own: { ...installed.field.own, friendGuard: true },
+          },
+        }),
+      ),
+    ).toBe(true);
+    const replacement = battleReducer(installed, {
+      type: "install-team",
+      teamId: "team-two",
+      members: [member("replacement", "own")],
+    });
+    expect(replacement).toMatchObject({
+      currentTeamId: "team-two",
+      board: { own: [null, null], opponent: [null, null] },
+      field: {
+        own: {
+          friendGuard: false,
+          helpingHand: false,
+          singleTarget: false,
+        },
+        opponent: {
+          friendGuard: false,
+          helpingHand: false,
+          singleTarget: false,
+        },
+      },
+    });
+    expect(hasBattleProgress(replacement)).toBe(false);
+  });
+
+  it("ignores battle mutations until a team is installed", () => {
+    const empty = emptyBattleState();
+    expect(
+      battleReducer(empty, { type: "add", member: member("foe", "opponent") }),
+    ).toBe(empty);
+  });
+
   it("clears only stages when an occupied slot benches a member", () => {
     let state = battleReducer(emptyBattleState(), {
-      type: "start",
+      type: "install-team",
+      teamId: "team",
       members: [member("first", "own"), member("second", "own")],
     });
     state = selectAndPlace(state, "first", "own", 0);
@@ -52,23 +104,27 @@ describe("Battle Mode state", () => {
     expect(benched.hp).toBe(100);
   });
 
-  it("resets the transient spread override on attacker and board changes", () => {
+  it("keeps Single Target independent by attacking side", () => {
     let state = battleReducer(emptyBattleState(), {
-      type: "start",
+      type: "install-team",
+      teamId: "team",
       members: [member("ally", "own"), member("foe", "opponent")],
     });
-    state = selectAndPlace(state, "ally", "own", 0);
-    state = battleReducer(state, { type: "single-target", value: true });
-    state = selectAndPlace(state, "foe", "opponent", 0);
-    expect(state.singleTargetOverride).toBe(false);
-    state = battleReducer(state, { type: "single-target", value: true });
-    state = battleReducer(state, { type: "select", id: "ally" });
-    expect(state.singleTargetOverride).toBe(false);
+    state = battleReducer(state, {
+      type: "field",
+      field: {
+        ...state.field,
+        own: { ...state.field.own, singleTarget: true },
+      },
+    });
+    expect(state.field.own.singleTarget).toBe(true);
+    expect(state.field.opponent.singleTarget).toBe(false);
   });
 
   it("removes an active opponent and clamps percentage HP deterministically", () => {
     let state = battleReducer(emptyBattleState(), {
-      type: "start",
+      type: "install-team",
+      teamId: "team",
       members: [member("foe", "opponent")],
     });
     state = selectAndPlace(state, "foe", "opponent", 0);
@@ -78,9 +134,10 @@ describe("Battle Mode state", () => {
     expect(opponentCurrentHp(1, 1)).toBe(1);
   });
 
-  it("keeps field state while switching and resets override on replacement", () => {
+  it("keeps field state while switching", () => {
     let state = battleReducer(emptyBattleState(), {
-      type: "start",
+      type: "install-team",
+      teamId: "team",
       members: [member("first", "own"), member("second", "own")],
     });
     state = battleReducer(state, {
@@ -89,18 +146,46 @@ describe("Battle Mode state", () => {
         ...state.field,
         weather: "rain",
         trickRoom: true,
-        own: { ...state.field.own, tailwind: true },
+        own: {
+          ...state.field.own,
+          tailwind: true,
+          helpingHand: true,
+          singleTarget: true,
+        },
       },
     });
     state = selectAndPlace(state, "first", "own", 0);
-    state = battleReducer(state, { type: "single-target", value: true });
     state = selectAndPlace(state, "second", "own", 0);
     expect(state.field).toMatchObject({
       weather: "rain",
       trickRoom: true,
-      own: { tailwind: true },
+      own: { tailwind: true, helpingHand: true, singleTarget: true },
     });
-    expect(state.singleTargetOverride).toBe(false);
+  });
+
+  it("resets both Helping Hand toggles when installing another team", () => {
+    let state = battleReducer(emptyBattleState(), {
+      type: "install-team",
+      teamId: "team-one",
+      members: [member("first", "own")],
+    });
+    state = battleReducer(state, {
+      type: "field",
+      field: {
+        ...state.field,
+        own: { ...state.field.own, helpingHand: true },
+        opponent: { ...state.field.opponent, helpingHand: true },
+      },
+    });
+
+    state = battleReducer(state, {
+      type: "install-team",
+      teamId: "team-two",
+      members: [member("second", "own")],
+    });
+
+    expect(state.field.own.helpingHand).toBe(false);
+    expect(state.field.opponent.helpingHand).toBe(false);
   });
 
   it("benches either side with persistent knowledge and cleared stages", () => {
@@ -112,16 +197,15 @@ describe("Battle Mode state", () => {
       moveIds: ["known-move", null, null, null],
     };
     let state = battleReducer(emptyBattleState(), {
-      type: "start",
+      type: "install-team",
+      teamId: "team",
       members: [own, foe],
     });
     state = selectAndPlace(state, "ally", "own", 0);
     state = selectAndPlace(state, "foe", "opponent", 0);
     state = battleReducer(state, { type: "select", id: "ally" });
-    state = battleReducer(state, { type: "single-target", value: true });
     state = battleReducer(state, { type: "bench", id: "foe" });
     expect(state.board.opponent).toEqual([null, null]);
-    expect(state.singleTargetOverride).toBe(false);
     expect(state.members.find(({ id }) => id === "foe")).toMatchObject({
       hp: 43,
       status: "par",

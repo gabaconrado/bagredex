@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CalculatorData, Form } from "../damage-calculator/contracts";
 import {
+  availableOpponentForms,
+  calculationField,
   deriveSpeedOrder,
   formatBattleDamage,
-  friendGuardPartner,
   spreadContext,
+  stagedStatValue,
+  unavailableOpponentItemIds,
   unavailableBuildReason,
 } from "./app";
 import { emptyBattleState, zeroStages, type BattleMember } from "./state";
@@ -82,6 +85,31 @@ const member = (id: string, side: "own" | "opponent"): BattleMember => ({
 });
 
 describe("Battle Mode calculation adapters", () => {
+  it("shows authoritative staged stats without changing the stored base stat", () => {
+    const base = 172;
+    expect(stagedStatValue(base, 0)).toBe(172);
+    expect(stagedStatValue(base, 1)).toBe(258);
+    expect(stagedStatValue(base, -1)).toBe(114);
+    expect(base).toBe(172);
+  });
+
+  it("excludes every form of a species already on the opponent roster", () => {
+    const options = availableOpponentForms(data, new Set(["fast-species"]), {
+      fast: "fast-species",
+      twin: "fast-species",
+      slow: "slow-species",
+    });
+    expect(options.map(({ id }) => id)).toEqual(["slow"]);
+  });
+
+  it("excludes held items from other opponents but retains the current member's item", () => {
+    const current = { ...member("fast", "opponent"), itemId: "fastite" };
+    const other = { ...member("slow", "opponent"), itemId: "other-item" };
+    expect(unavailableOpponentItemIds([current, other], current.id)).toEqual(
+      new Set(["other-item"]),
+    );
+  });
+
   it("formats opponent damage as floored percentages and own damage as raw HP", () => {
     expect(formatBattleDamage("opponent", [30, 40], 151)).toBe("19.8–26.4%");
     expect(formatBattleDamage("own", [30, 40], 151)).toBe("30–40 HP");
@@ -101,6 +129,51 @@ describe("Battle Mode calculation adapters", () => {
     expect(spreadContext(1, false).source).toBe("automatic-one");
   });
 
+  it("maps only the defending side's explicit Friend Guard toggle", () => {
+    const field = emptyBattleState().field;
+    field.own.friendGuard = true;
+    field.opponent.friendGuard = false;
+    expect(calculationField(field, "own", true).defender.friendGuard).toBe(
+      false,
+    );
+    expect(calculationField(field, "opponent", true).defender.friendGuard).toBe(
+      true,
+    );
+  });
+
+  it("maps Helping Hand only from the attacking side", () => {
+    const field = emptyBattleState().field;
+    field.own.helpingHand = true;
+    field.opponent.helpingHand = false;
+    expect(calculationField(field, "own", true).attacker.helpingHand).toBe(
+      true,
+    );
+    expect(calculationField(field, "opponent", true).attacker.helpingHand).toBe(
+      false,
+    );
+
+    field.own.helpingHand = false;
+    field.opponent.helpingHand = true;
+    expect(calculationField(field, "own", true).attacker.helpingHand).toBe(
+      false,
+    );
+    expect(calculationField(field, "opponent", true).attacker.helpingHand).toBe(
+      true,
+    );
+  });
+
+  it("maps the resolved Single Target value only for the current attack", () => {
+    const field = emptyBattleState().field;
+    field.own.singleTarget = true;
+    field.opponent.singleTarget = false;
+    expect(calculationField(field, "own", true).attacker.singleTarget).toBe(
+      true,
+    );
+    expect(
+      calculationField(field, "opponent", false).attacker.singleTarget,
+    ).toBe(false);
+  });
+
   it("groups ties and reverses unequal groups under Trick Room", () => {
     const members = [
       member("fast", "own"),
@@ -116,6 +189,9 @@ describe("Battle Mode calculation adapters", () => {
     expect(
       normal.groups.map((group) => group.map(({ member }) => member.id)),
     ).toEqual([["fast", "twin"], ["slow"]]);
+    expect(normal.groups[0]?.map(({ result }) => result.value)).toEqual([
+      120, 120,
+    ]);
     const trick = deriveSpeedOrder(data, members, board, {
       ...base.field,
       trickRoom: true,
@@ -135,16 +211,6 @@ describe("Battle Mode calculation adapters", () => {
         abilityId: null,
       }),
     ).toBe("ability is unknown");
-  });
-
-  it("infers Friend Guard only from the other active defending partner", () => {
-    const target = member("fast", "own");
-    const guard = {
-      ...member("slow", "own"),
-      abilityId: "friendguard",
-    };
-    expect(friendGuardPartner(data, [target, guard], target)?.id).toBe("slow");
-    expect(friendGuardPartner(data, [target], target)).toBeNull();
   });
 
   it("uses a legal Mega relation's locked ability instead of requiring a base ability", () => {

@@ -3,7 +3,7 @@ import { parseBootstrap, parseCalculatorData } from "./contracts";
 
 const stats = { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 };
 const dataset = {
-  schema_version: "damage-calculator-data-v1",
+  schema_version: "damage-calculator-data-v2",
   data_version: "version-1",
   regulation: { id: "m-c", name: "Regulation M-C" },
   mechanics: {
@@ -74,6 +74,7 @@ const dataset = {
     {
       id: "protect",
       name: "Protect",
+      description: "Protects the user from most attacks.",
       type_id: "fire",
       category: "Status",
       base_power: 0,
@@ -114,6 +115,34 @@ const dataset = {
 };
 
 describe("damage calculator contracts", () => {
+  it("requires the v2 move description contract", () => {
+    expect(parseCalculatorData(dataset).moves[0]?.description).toBe(
+      "Protects the user from most attacks.",
+    );
+    expect(() =>
+      parseCalculatorData({
+        ...dataset,
+        schema_version: "damage-calculator-data-v1",
+      }),
+    ).toThrow("unsupported format");
+    const { description: _missing, ...missingDescription } = dataset.moves[0]!;
+    expect(() =>
+      parseCalculatorData({ ...dataset, moves: [missingDescription] }),
+    ).toThrow("move keys");
+    expect(() =>
+      parseCalculatorData({
+        ...dataset,
+        moves: [{ ...dataset.moves[0], description: "" }],
+      }),
+    ).toThrow("move facts");
+    expect(() =>
+      parseCalculatorData({
+        ...dataset,
+        moves: [{ ...dataset.moves[0], description: 42 }],
+      }),
+    ).toThrow("move facts");
+  });
+
   it("accepts the versioned same-origin bootstrap", () => {
     expect(
       parseBootstrap({

@@ -7,10 +7,12 @@ export type BattleTeamSummary = {
   regulation: Named;
   members: { position: number; sprite_url: string }[];
   updated_at: string;
+  battle_ready: boolean;
+  battle_unavailable_reason: string | null;
 };
 
 export type BattleBootstrap = {
-  schema_version: "battle-mode-bootstrap-v1";
+  schema_version: "battle-mode-bootstrap-v2";
   active_version: string;
   regulation: Named;
   teams: BattleTeamSummary[];
@@ -50,7 +52,7 @@ export function parseBattleBootstrap(value: unknown): BattleBootstrap {
   const row = record(value);
   if (
     !row ||
-    row.schema_version !== "battle-mode-bootstrap-v1" ||
+    row.schema_version !== "battle-mode-bootstrap-v2" ||
     !text(row.active_version) ||
     !named(row.regulation) ||
     !Array.isArray(row.teams) ||
@@ -92,12 +94,25 @@ export function parseBattleBootstrap(value: unknown): BattleBootstrap {
       !named(team.regulation) ||
       !Array.isArray(team.members) ||
       team.members.length > 6 ||
-      !text(team.updated_at)
+      !text(team.updated_at) ||
+      typeof team.battle_ready !== "boolean" ||
+      (team.battle_ready
+        ? team.battle_unavailable_reason !== null
+        : !text(team.battle_unavailable_reason))
     )
       throw new Error("The Battle Mode team list is invalid.");
     exactKeys(
       team,
-      ["id", "name", "pinned_version", "regulation", "members", "updated_at"],
+      [
+        "id",
+        "name",
+        "pinned_version",
+        "regulation",
+        "members",
+        "updated_at",
+        "battle_ready",
+        "battle_unavailable_reason",
+      ],
       "team list",
     );
     seenTeams.add(team.id);

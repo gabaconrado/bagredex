@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseBattleBootstrap } from "./contracts";
 
 const valid = () => ({
-  schema_version: "battle-mode-bootstrap-v1",
+  schema_version: "battle-mode-bootstrap-v2",
   active_version: "release-1",
   regulation: { id: "m-a", name: "Regulation M-A" },
   teams: [
@@ -13,6 +13,8 @@ const valid = () => ({
       regulation: { id: "m-a", name: "Regulation M-A" },
       members: [{ position: 0, sprite_url: "/sprites/pelipper.webp" }],
       updated_at: "2026-10-24T00:00:00Z",
+      battle_ready: true,
+      battle_unavailable_reason: null,
     },
   ],
   dataset_url: "/damage-calculator/data/release-1/m-a/",
@@ -36,5 +38,20 @@ describe("Battle Mode bootstrap", () => {
     expect(() =>
       parseBattleBootstrap({ ...valid(), dataset_url: "https://example.test" }),
     ).toThrow(/configuration/);
+  });
+
+  it("rejects contradictory readiness fields", () => {
+    expect(() =>
+      parseBattleBootstrap({
+        ...valid(),
+        teams: [
+          {
+            ...valid().teams[0],
+            battle_ready: false,
+            battle_unavailable_reason: null,
+          },
+        ],
+      }),
+    ).toThrow(/team list/);
   });
 });

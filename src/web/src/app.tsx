@@ -45,6 +45,9 @@ import {
   type MoveSort,
   type MoveSortKey,
 } from "./model";
+import { MoveInformationDialog } from "./move-information";
+
+export { formatMoveTarget } from "./move-information";
 
 type LoadState = "loading" | "ready" | "error" | "stale";
 type ModalInfo = { kind: "ability" | "move"; id: string } | null;
@@ -432,55 +435,6 @@ function PokemonTable({
   );
 }
 
-export function formatMoveTarget(target: string) {
-  const spaced = target
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
-function MoveInfo({ move }: { move: MoveDetail }) {
-  return (
-    <div>
-      <div class="info-grid">
-        <Types values={[move.type]} />
-        <span>{move.category}</span>
-        <span>
-          <b>Power:</b> {move.base_power}
-        </span>
-        <span>
-          <b>Accuracy:</b> {move.always_hits ? "Always hits" : move.accuracy}
-        </span>
-        <span>
-          <b>PP:</b> {move.pp}
-        </span>
-        <span>
-          <b>Priority:</b> {move.priority}
-        </span>
-        <span>
-          <b>Target:</b>{" "}
-          <span class="info-pill">{formatMoveTarget(move.target)}</span>
-        </span>
-      </div>
-      <p class="info-description">{move.description}</p>
-      <div class="info-flags">
-        <b>Flags:</b>
-        {move.flags.length ? (
-          <span class="info-pill-list">
-            {move.flags.map((flag) => (
-              <span class="info-pill" key={flag}>
-                {flag}
-              </span>
-            ))}
-          </span>
-        ) : (
-          <span>None</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function InformationDialog({
   info,
   maps,
@@ -555,11 +509,7 @@ function InformationDialog({
             ×
           </button>
         </header>
-        {info.kind === "move" ? (
-          <MoveInfo move={value as MoveDetail} />
-        ) : (
-          <p class="info-description">{(value as BulkAbility).description}</p>
-        )}
+        <p class="info-description">{(value as BulkAbility).description}</p>
       </div>
     </dialog>
   );
@@ -910,7 +860,29 @@ function RefinedDetailPane({
           ))}
         </div>
       </section>
-      {modal && (
+      {modal?.kind === "move" && maps.moves.get(modal.id) && (
+        <MoveInformationDialog
+          move={(() => {
+            const move = maps.moves.get(modal.id)!;
+            return {
+              name: move.name,
+              type: move.type,
+              category: move.category,
+              basePower: move.base_power,
+              accuracy: move.accuracy,
+              alwaysHits: move.always_hits,
+              pp: move.pp,
+              priority: move.priority,
+              target: move.target,
+              flags: move.flags,
+              description: move.description,
+            };
+          })()}
+          invoker={modalInvoker}
+          onClose={onCloseModal}
+        />
+      )}
+      {modal?.kind === "ability" && (
         <InformationDialog
           info={modal}
           maps={maps}

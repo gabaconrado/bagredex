@@ -56,6 +56,7 @@ const target = form("target", ["fire", "dragon"], [78, 130, 111, 130, 85, 100]);
 const move: Move = {
   id: "earthquake",
   name: "Earthquake",
+  description: "An earthquake that strikes every Pokémon around the user.",
   type_id: "ground",
   category: "Physical",
   base_power: 100,

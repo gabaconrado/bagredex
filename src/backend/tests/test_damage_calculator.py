@@ -15,6 +15,7 @@ from bagredex.accounts.models import User
 from bagredex.damage_calculator.datasets import (
     DamageCalculatorUnavailable,
     _gender_fields,
+    _move_description,
 )
 from bagredex.pokemon_data.models import (
     Ability,
@@ -375,6 +376,7 @@ def test_dataset_is_closed_normalized_and_deterministic(
         "type_effectiveness",
     }
     assert payload["mechanics"]["hp_formula"] == "base + sp + 75"
+    assert payload["schema_version"] == "damage-calculator-data-v2"
     assert payload["state_input_policy"] == STATE_INPUT_POLICY
     assert payload["capability"] == {
         "id": "damage-calculator-v1",
@@ -406,7 +408,15 @@ def test_dataset_is_closed_normalized_and_deterministic(
             "locked_ability_id": "toughclaws",
         }
     ]
+    assert payload["moves"][0]["description"] == "May burn adjacent foes."
     assert payload["moves"][0]["flags"] == ["protect"]
+
+
+def test_dataset_fails_closed_when_full_move_description_is_empty() -> None:
+    profile = MoveProfile(description="")
+
+    with pytest.raises(DamageCalculatorUnavailable, match="move description"):
+        _move_description(profile)
 
 
 @pytest.mark.django_db

@@ -43,6 +43,7 @@ export type Item = Named & {
   contextual_inputs: ContextInput[];
 };
 export type Move = Named & {
+  description: string;
   type_id: string;
   category: "Physical" | "Special" | "Status";
   base_power: number;
@@ -61,7 +62,7 @@ export type MegaRelation = {
   locked_ability_id: string;
 };
 export type CalculatorData = {
-  schema_version: "damage-calculator-data-v1";
+  schema_version: "damage-calculator-data-v2";
   data_version: string;
   regulation: Named;
   sprite_url_template: string;
@@ -228,7 +229,7 @@ export function parseCalculatorData(value: unknown): CalculatorData {
   const row = object(value);
   if (
     !row ||
-    row.schema_version !== "damage-calculator-data-v1" ||
+    row.schema_version !== "damage-calculator-data-v2" ||
     !text(row.data_version) ||
     !named(row.regulation) ||
     !localUrl(row.sprite_url_template)
@@ -569,6 +570,7 @@ export function parseCalculatorData(value: unknown): CalculatorData {
       [
         "id",
         "name",
+        "description",
         "type_id",
         "category",
         "base_power",
@@ -584,6 +586,7 @@ export function parseCalculatorData(value: unknown): CalculatorData {
     );
     if (
       !named(entry) ||
+      !text(entry.description) ||
       !ids.type.has(entry.type_id) ||
       !["Physical", "Special", "Status"].includes(entry.category) ||
       !Number.isInteger(entry.base_power) ||
