@@ -6,6 +6,7 @@ import {
   applyMod,
   calculate,
   chainMods,
+  effectiveSpeedWithEvidence,
   pokeRound,
   stats,
   type Combatant,
@@ -144,6 +145,26 @@ describe("damage engine", () => {
     expect(pokeRound(10.51)).toBe(11);
     expect(chainMods([5324, 3072])).toBe(3993);
     expect(applyMod(101, 3072)).toBe(76);
+  });
+  it("returns structured evidence from the shared effective Speed path", () => {
+    const fighter = {
+      ...combatant(charizard),
+      status: "par",
+      stages: { ...combatant(charizard).stages, spe: 1 },
+    };
+    const result = effectiveSpeedWithEvidence(
+      fighter,
+      stats(fighter).spe,
+      "",
+      "",
+      true,
+    );
+    expect(result).toMatchObject({ base: 120, value: 180 });
+    expect(result.modifiers.map(({ label }) => label)).toEqual([
+      "Speed +1",
+      "Tailwind",
+      "Paralysis",
+    ]);
   });
   it("applies Rivalry only for gendered same/opposite pairs", () => {
     const attacker = {

@@ -5,11 +5,13 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 from . import views
+from .battle_mode import views as battle_mode_views
 from .damage_calculator import views as damage_calculator_views
 from .teams import views as team_views
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("battle-mode/", battle_mode_views.battle_mode_page, name="battle-mode-page"),
     path(
         "damage-calculator/",
         damage_calculator_views.damage_calculator_page,

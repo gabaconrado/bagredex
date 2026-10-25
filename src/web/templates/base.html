@@ -18,6 +18,7 @@
             <a href="{% url 'home' %}{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "home" or url_name == "pokedex-index" or url_name == "pokedex-details" or url_name == "pokedex-form-detail" %} aria-current="page"{% endif %}>Pokédex</a>
             <a href="/teams/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "teams-page" or url_name == "teams-detail" %} aria-current="page"{% endif %}>Team Builder</a>
             <a href="/damage-calculator/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "damage-calculator-page" %} aria-current="page"{% endif %}>Damage Calculator</a>
+            <a href="/battle-mode/{% if regulation_selector %}?regulation={{ regulation_selector.selected_id|urlencode }}{% endif %}"{% if url_name == "battle-mode-page" %} aria-current="page"{% endif %}>Battle Mode</a>
           {% endwith %}
         </nav>
         {% if regulation_selector %}

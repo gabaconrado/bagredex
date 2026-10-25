@@ -1177,21 +1177,87 @@ function contextualPower(
   return power;
 }
 
-function effectiveSpeed(
+export type SpeedModifier = {
+  source: "stage" | "tailwind" | "status" | "ability" | "item";
+  label: string;
+  numerator: number;
+  denominator: number;
+};
+
+export type EffectiveSpeed = {
+  base: number;
+  value: number;
+  modifiers: SpeedModifier[];
+};
+
+export function effectiveSpeed(
   combatant: Combatant,
   raw: number,
   weather: string,
   terrain: string,
   tailwind: boolean,
 ): number {
+  return effectiveSpeedWithEvidence(combatant, raw, weather, terrain, tailwind)
+    .value;
+}
+
+export function effectiveSpeedWithEvidence(
+  combatant: Combatant,
+  raw: number,
+  weather: string,
+  terrain: string,
+  tailwind: boolean,
+): EffectiveSpeed {
   let speed = applyBattleStage(raw, combatant.stages.spe);
-  if (tailwind) speed = applyMod(speed, 8192);
-  if (combatant.ability?.id === "slowstart" && combatant.context.ability_active)
+  const modifiers: SpeedModifier[] = [];
+  if (combatant.stages.spe) {
+    const amount = combatant.stages.spe;
+    modifiers.push({
+      source: "stage",
+      label: `Speed ${amount > 0 ? "+" : ""}${amount}`,
+      numerator: amount >= 0 ? 2 + amount : 2,
+      denominator: amount >= 0 ? 2 : 2 - amount,
+    });
+  }
+  if (tailwind) {
+    modifiers.push({
+      source: "tailwind",
+      label: "Tailwind",
+      numerator: 2,
+      denominator: 1,
+    });
+    speed = applyMod(speed, 8192);
+  }
+  if (
+    combatant.ability?.id === "slowstart" &&
+    combatant.context.ability_active
+  ) {
+    modifiers.push({
+      source: "ability",
+      label: combatant.ability.name,
+      numerator: 1,
+      denominator: 2,
+    });
     speed = applyMod(speed, 2048);
-  if (combatant.status === "par" && combatant.ability?.id !== "quickfeet")
+  }
+  if (combatant.status === "par" && combatant.ability?.id !== "quickfeet") {
+    modifiers.push({
+      source: "status",
+      label: "Paralysis",
+      numerator: 1,
+      denominator: 2,
+    });
     speed = applyMod(speed, 2048);
-  if (combatant.ability?.id === "quickfeet" && combatant.status)
+  }
+  if (combatant.ability?.id === "quickfeet" && combatant.status) {
+    modifiers.push({
+      source: "ability",
+      label: combatant.ability.name,
+      numerator: 3,
+      denominator: 2,
+    });
     speed = applyMod(speed, 6144);
+  }
   if (
     (combatant.ability?.id === "chlorophyll" && weather === "sun") ||
     (combatant.ability?.id === "swiftswim" && weather === "rain") ||
@@ -1199,8 +1265,15 @@ function effectiveSpeed(
     (combatant.ability?.id === "slushrush" && weather === "snow") ||
     (combatant.ability?.id === "surgesurfer" && terrain === "electric") ||
     (combatant.ability?.id === "unburden" && combatant.context.ability_active)
-  )
+  ) {
+    modifiers.push({
+      source: "ability",
+      label: combatant.ability?.name ?? "Speed ability",
+      numerator: 2,
+      denominator: 1,
+    });
     speed = applyMod(speed, 8192);
+  }
   const paradoxActive =
     activeItem(combatant)?.id === "boosterenergy" ||
     (combatant.ability?.id === "quarkdrive" && terrain === "electric") ||
@@ -1209,16 +1282,45 @@ function effectiveSpeed(
     paradoxActive &&
     ["quarkdrive", "protosynthesis"].includes(combatant.ability?.id ?? "") &&
     highestNonHpStat(combatant, stats(combatant)) === "spe"
-  )
+  ) {
+    modifiers.push({
+      source: "ability",
+      label: combatant.ability?.name ?? "Paradox ability",
+      numerator: 3,
+      denominator: 2,
+    });
     speed = applyMod(speed, 6144);
+  }
   if (
     activeItem(combatant)?.id === "quickpowder" &&
     combatant.form.id.startsWith("ditto")
-  )
+  ) {
+    modifiers.push({
+      source: "item",
+      label: activeItem(combatant)?.name ?? "Quick Powder",
+      numerator: 2,
+      denominator: 1,
+    });
     speed = applyMod(speed, 8192);
-  if (activeItem(combatant)?.id === "choicescarf")
+  }
+  if (activeItem(combatant)?.id === "choicescarf") {
+    modifiers.push({
+      source: "item",
+      label: activeItem(combatant)?.name ?? "Choice Scarf",
+      numerator: 3,
+      denominator: 2,
+    });
     speed = applyMod(speed, 6144);
-  if (activeItem(combatant)?.id === "ironball") speed = applyMod(speed, 2048);
+  }
+  if (activeItem(combatant)?.id === "ironball") {
+    modifiers.push({
+      source: "item",
+      label: activeItem(combatant)?.name ?? "Iron Ball",
+      numerator: 1,
+      denominator: 2,
+    });
+    speed = applyMod(speed, 2048);
+  }
   if (
     new Set([
       "machobrace",
@@ -1229,9 +1331,16 @@ function effectiveSpeed(
       "powerlens",
       "powerweight",
     ]).has(activeItem(combatant)?.id ?? "")
-  )
+  ) {
+    modifiers.push({
+      source: "item",
+      label: activeItem(combatant)?.name ?? "Speed-reducing item",
+      numerator: 1,
+      denominator: 2,
+    });
     speed = applyMod(speed, 2048);
-  return speed;
+  }
+  return { base: raw, value: speed, modifiers };
 }
 
 function weightBasedPower(

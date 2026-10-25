@@ -304,6 +304,12 @@ h1 {
   .site-header__nav {
     order: 3;
     width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .site-header__nav a {
+    flex: none;
   }
   .site-header__regulation {
     margin-left: auto;

@@ -1,8 +1,25 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 
-async function createDraftWithDescribedItem(page: Page) {
-  await page.getByRole("button", { name: "New Team" }).click();
+let retainedFixtureTeamId = "";
+
+const describedItemTeamName = (testInfo: TestInfo) =>
+  [
+    "Item-E2E",
+    testInfo.project.name.replace(/[^a-z0-9]+/gi, "-").slice(0, 12),
+    testInfo.title.replace(/[^a-z0-9]+/gi, "-").slice(0, 12),
+    `w${testInfo.workerIndex}`,
+    `r${testInfo.retry}`,
+    Date.now().toString(36),
+    crypto.randomUUID().slice(0, 8),
+  ].join("-");
+
+async function createDraftWithDescribedItem(page: Page, testInfo: TestInfo) {
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  await page.getByLabel("Team name").fill(describedItemTeamName(testInfo));
   await page.getByRole("button", { name: "Add Pokémon" }).first().click();
   await page
     .getByRole("dialog", { name: "Choose a Pokémon" })
@@ -21,12 +38,16 @@ async function createDraftWithDescribedItem(page: Page) {
   await item.press("Enter");
   await expect(item).not.toHaveValue("");
   await expect(
+    member.getByRole("combobox", { name: "Move 1", exact: true }),
+  ).toBeFocused();
+  await expect(
     member.getByRole("button", { name: /item information/i }),
   ).toHaveCount(1);
   return { member, item };
 }
 
 test.beforeEach(async ({ page }) => {
+  retainedFixtureTeamId = "";
   const username = process.env.BAGREDEX_E2E_USERNAME;
   const password = process.env.BAGREDEX_E2E_PASSWORD;
   if (!username || !password)
@@ -36,6 +57,25 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page).toHaveURL(/\/teams\//);
+  await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible({
+    timeout: 15_000,
+  });
+});
+
+test.afterEach(async ({ page }) => {
+  if (!retainedFixtureTeamId || page.isClosed()) return;
+  const csrf = (await page.context().cookies()).find(
+    ({ name }) => name === "csrftoken",
+  )?.value;
+  if (!csrf) throw new Error("Missing CSRF token for retained-team cleanup.");
+  const response = await page.request.delete(
+    `/teams/${retainedFixtureTeamId}/`,
+    { headers: { "X-CSRFToken": csrf }, maxRedirects: 0 },
+  );
+  if (![204, 404].includes(response.status()))
+    throw new Error(
+      `Could not remove retained Team Builder fixture (${response.status()}).`,
+    );
 });
 
 test("renders a centralized initial loading state", async ({ page }) => {
@@ -344,11 +384,20 @@ test("creates a keyboard-first local draft and protects it from navigation", asy
 
 test("keeps a retained legacy Item editable without offering unavailable information", async ({
   page,
-}) => {
-  const { item } = await createDraftWithDescribedItem(page);
+}, testInfo) => {
+  const { item } = await createDraftWithDescribedItem(page, testInfo);
   const itemName = await item.inputValue();
   const teamName = await page.getByLabel("Team name").inputValue();
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/teams/",
+  );
   await page.getByRole("button", { name: "Save" }).click();
+  const createdPayload = await (await created).json();
+  retainedFixtureTeamId = String(createdPayload.data?.id ?? "");
+  if (!retainedFixtureTeamId)
+    throw new Error("The retained Team Builder fixture has no ID.");
   await expect(page.getByText("Team saved.")).toBeVisible();
 
   const retainedVersion = "showdown-retained-s3-i4-111111111111";
@@ -406,7 +455,10 @@ test("keeps a retained legacy Item editable without offering unavailable informa
     await route.fulfill({ status: 200, json: retainedDataset });
   });
 
-  await page.getByRole("button", { name: "New Team" }).click();
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
   await page
     .getByRole("complementary", { name: "My Teams" })
     .locator("li button")
@@ -448,9 +500,9 @@ test("keeps a retained legacy Item editable without offering unavailable informa
 
 test("opens described Item information by touch without a request", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const { member, item } = await createDraftWithDescribedItem(page);
+  const { member, item } = await createDraftWithDescribedItem(page, testInfo);
   const information = member.getByRole("button", {
     name: /item information/i,
   });

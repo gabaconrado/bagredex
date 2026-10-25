@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load vite %}
+
+{% block title %}Battle Mode · Bagredex{% endblock %}
+{% block main_class %} site-main--battle-mode{% endblock %}
+
+{% block head %}
+  {% if battle_mode_bootstrap %}{% vite_styles 'src/battle-mode.tsx' %}{% endif %}
+{% endblock %}
+
+{% block content %}
+  {% if battle_mode_unavailable %}
+    <section class="state-card state-card--error" aria-labelledby="battle-unavailable-title">
+      <p class="eyebrow">Live VGC reference</p>
+      <h1 id="battle-unavailable-title">Battle Mode unavailable</h1>
+      <p>{{ battle_mode_unavailable }}</p>
+    </section>
+  {% else %}
+    {{ battle_mode_bootstrap|json_script:"battle-mode-bootstrap" }}
+    <div data-battle-mode-root>
+      <div class="page-loading" role="status" aria-busy="true" data-battle-mode-fallback>
+        <span class="page-loading__spinner" aria-hidden="true"></span>
+        <span class="visually-hidden">Loading Battle Mode…</span>
+      </div>
+    </div>
+    <noscript><p class="state-card state-card--error">JavaScript is required to use Battle Mode.</p></noscript>
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {% if battle_mode_bootstrap %}<script type="module" src="{% vite_asset 'src/battle-mode.tsx' %}"></script>{% endif %}
+{% endblock %}

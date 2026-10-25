@@ -13,6 +13,7 @@ export default defineConfig({
         pokedex: "src/pokedex.tsx",
         "team-builder": "src/team-builder.tsx",
         "damage-calculator": "src/damage-calculator.tsx",
+        "battle-mode": "src/battle-mode.tsx",
       },
     },
   },
