@@ -70,4 +70,6 @@ and other excluded features remain non-goals rather than deferred work from this
 
 ## Commits
 
-This report and the reviewed implementation are included in the pending cycle commit.
+The reviewed implementation was committed as
+`306d632767d9914cb94e8124f4c79014ab39c642`
+(`feat(battle): add live battle mode`).
