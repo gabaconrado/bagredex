@@ -71,4 +71,5 @@ It is not part of this reviewed Battle Mode result.
 
 ## Commits
 
-This report is included in the pending reviewed-result commit.
+Reviewed result: `e7dfe0c770740f86cdf8a123ec3a6a62321934ad` —
+`feat: refine battle mode from human review`.
