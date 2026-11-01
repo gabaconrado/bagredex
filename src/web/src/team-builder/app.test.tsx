@@ -15,6 +15,7 @@ import {
   PokemonPalette,
   TeamBuilder,
   TeamTextDialog,
+  canonicalPokePasteUrl,
   fieldPathToDomPath,
   prepareDraftForSave,
 } from "./app";
@@ -100,12 +101,13 @@ function BlankAutocomplete({ count = 3 }: { count?: number }) {
 }
 
 const shortcutBootstrap: Bootstrap = {
-  schema_version: "team-builder-bootstrap-v2",
+  schema_version: "team-builder-bootstrap-v3",
   active_version: "version-3",
   regulation: { id: "m-c", name: "Regulation M-C" },
   data_url: "/teams/data/",
   create_url: "/teams/",
   team_url_template: "/teams/__TEAM__/",
+  pokepaste_import_url: "/teams/import/pokepaste/",
   next_team_number: 1,
   teams: [],
 };
@@ -234,12 +236,13 @@ describe("Team Builder initial loading", () => {
       vi.fn(() => new Promise(() => undefined)),
     );
     const bootstrap: Bootstrap = {
-      schema_version: "team-builder-bootstrap-v2",
+      schema_version: "team-builder-bootstrap-v3",
       active_version: "v1",
       regulation: { id: "m-c", name: "Regulation M-C" },
       data_url: "/teams/data/",
       create_url: "/teams/",
       team_url_template: "/teams/__TEAM__/",
+      pokepaste_import_url: "/teams/import/pokepaste/",
       next_team_number: 1,
       teams: [],
     };
@@ -1154,12 +1157,13 @@ describe("team builder autocomplete", () => {
     cleanup();
     const savedMember = overTotal.team.members[0]!;
     const bootstrap: Bootstrap = {
-      schema_version: "team-builder-bootstrap-v2",
+      schema_version: "team-builder-bootstrap-v3",
       active_version: saveData.data_version,
       regulation: saveData.regulation,
       data_url: "/teams/data/",
       create_url: "/teams/",
       team_url_template: "/teams/__TEAM__/",
+      pokepaste_import_url: "/teams/import/pokepaste/",
       next_team_number: 2,
       teams: [
         {
@@ -1351,6 +1355,264 @@ describe("team import and export dialog", () => {
     mega_preview: false,
   };
 
+  it("recognizes only one exact canonical PokéPaste URL", () => {
+    expect(
+      canonicalPokePasteUrl("  https://pokepast.es/be093acb4f35b92a\n"),
+    ).toBe("https://pokepast.es/be093acb4f35b92a");
+    for (const value of [
+      "http://pokepast.es/be093acb4f35b92a",
+      "https://www.pokepast.es/be093acb4f35b92a",
+      "https://pokepast.es:443/be093acb4f35b92a",
+      "https://pokepast.es/BE093ACB4F35B92A",
+      "https://pokepast.es/be093acb4f35b92a/",
+      "https://pokepast.es/be093acb4f35b92a?raw=1",
+      "https://pokepast.es/be093acb4f35b92a#team",
+      "https://pokepast.es/be093acb4f35b92a\nCharizard",
+    ])
+      expect(canonicalPokePasteUrl(value)).toBeNull();
+  });
+
+  it("retrieves canonical URLs for review before importing", async () => {
+    const fetchedText = "Charizard\nAbility: Blaze\nSerious Nature";
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schema_version: "pokepaste-import-v1",
+        data: { text: fetchedText },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const csrfInput = document.createElement("input");
+    csrfInput.name = "csrfmiddlewaretoken";
+    csrfInput.value = "csrf-value";
+    document.body.append(csrfInput);
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    fireEvent.input(textbox, {
+      target: { value: "https://pokepast.es/be093acb4f35b92a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Retrieving…",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    await waitFor(() =>
+      expect((textbox as HTMLTextAreaElement).value).toBe(fetchedText),
+    );
+    expect(onImport).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/teams/import/pokepaste/",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": "csrf-value",
+        },
+        body: JSON.stringify({
+          url: "https://pokepast.es/be093acb4f35b92a",
+        }),
+      }),
+    );
+    expect(
+      screen.getByText(
+        "Team text retrieved. Review it, then choose Import again.",
+      ),
+    ).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(textbox));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(onImport).toHaveBeenCalledOnce();
+    csrfInput.remove();
+  });
+
+  it("preserves a failed URL for retry and rejects invalid envelopes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({
+          schema_version: "pokepaste-import-v1",
+          error: { code: "rate-limit", message: "Try again shortly." },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ bad: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    const url = "https://pokepast.es/be093acb4f35b92a";
+    fireEvent.input(textbox, { target: { value: url } });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(await screen.findByText("Try again shortly.")).toBeTruthy();
+    expect((textbox as HTMLTextAreaElement).value).toBe(url);
+    expect(onImport).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(
+      await screen.findByText("PokéPaste returned an invalid response."),
+    ).toBeTruthy();
+    expect((textbox as HTMLTextAreaElement).value).toBe(url);
+  });
+
+  it("preserves the URL and draft when the network request rejects", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    const url = "https://pokepast.es/be093acb4f35b92a";
+    fireEvent.input(textbox, { target: { value: url } });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(
+      await screen.findByText("PokéPaste could not be retrieved. Try again."),
+    ).toBeTruthy();
+    expect((textbox as HTMLTextAreaElement).value).toBe(url);
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it("aborts retrieval on teardown and ignores its late response", async () => {
+    let resolveFetch!: (response: unknown) => void;
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options?: RequestInit) => {
+        signal = options?.signal ?? undefined;
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      }),
+    );
+    const onImport = vi.fn();
+    const view = render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    fireEvent.input(screen.getByRole("textbox", { name: "Team text" }), {
+      target: { value: "https://pokepast.es/be093acb4f35b92a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    resolveFetch({
+      ok: true,
+      json: async () => ({
+        schema_version: "pokepaste-import-v1",
+        data: { text: "Charizard\nSerious Nature" },
+      }),
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it("keeps unsupported fetched text visible after parser rejection", async () => {
+    const fetchedText = "Charizard\nLevel: 50\nSerious Nature";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          schema_version: "pokepaste-import-v1",
+          data: { text: fetchedText },
+        }),
+      }),
+    );
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    fireEvent.input(textbox, {
+      target: { value: "https://pokepast.es/be093acb4f35b92a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect((textbox as HTMLTextAreaElement).value).toBe(fetchedText),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(await screen.findByText(/Level is not supported/)).toBeTruthy();
+    expect((textbox as HTMLTextAreaElement).value).toBe(fetchedText);
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it("aborts and invalidates retrieval when the text changes", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options?: RequestInit) => {
+        signal = options?.signal ?? undefined;
+        return new Promise(() => undefined);
+      }),
+    );
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    fireEvent.input(textbox, {
+      target: { value: "https://pokepast.es/be093acb4f35b92a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(signal?.aborted).toBe(false);
+    fireEvent.input(textbox, { target: { value: "Charizard" } });
+    expect(signal?.aborted).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Import" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
   it("prefills, copies, reports errors atomically, and imports valid text", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", {
@@ -1362,6 +1624,7 @@ describe("team import and export dialog", () => {
       <TeamTextDialog
         data={shortcutData}
         members={[member]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
         initiator={null}
         onImport={onImport}
         onClose={() => undefined}
@@ -1410,6 +1673,7 @@ describe("team import and export dialog", () => {
       <TeamTextDialog
         data={shortcutData}
         members={[]}
+        pokepasteImportUrl="/teams/import/pokepaste/"
         initiator={initiator}
         onImport={() => undefined}
         onClose={onClose}

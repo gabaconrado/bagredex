@@ -16,12 +16,13 @@ export type TeamSummary = {
 };
 
 export type Bootstrap = {
-  schema_version: "team-builder-bootstrap-v2";
+  schema_version: "team-builder-bootstrap-v3";
   active_version: string;
   regulation: Named;
   data_url: string;
   create_url: string;
   team_url_template: string;
+  pokepaste_import_url: string;
   next_team_number: number;
   teams: TeamSummary[];
 };
@@ -139,7 +140,10 @@ const record = (value: unknown): Record<string, unknown> | null =>
 const text = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
 const localUrl = (value: unknown): value is string =>
-  text(value) && value.startsWith("/") && !value.startsWith("//");
+  text(value) &&
+  value.startsWith("/") &&
+  !value.startsWith("//") &&
+  !/[\\\u0000-\u001f\u007f]/.test(value);
 const statIds: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
 const modifiableStatIds: ItemStatModifier["stat"][] = [
   "atk",
@@ -198,12 +202,13 @@ export function parseBootstrap(value: unknown): Bootstrap {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-bootstrap-v2" ||
+    item.schema_version !== "team-builder-bootstrap-v3" ||
     !text(item.active_version) ||
     !localUrl(item.dataset_url) ||
     !localUrl(item.create_url) ||
     !localUrl(item.team_url_template) ||
     !String(item.team_url_template).includes("__TEAM__") ||
+    !localUrl(item.pokepaste_import_url) ||
     !Number.isInteger(item.next_team_number) ||
     Number(item.next_team_number) < 1 ||
     !Array.isArray(item.teams)

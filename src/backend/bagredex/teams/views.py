@@ -6,6 +6,7 @@ import json
 from typing import Any, cast
 from uuid import UUID
 
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -22,6 +23,13 @@ from bagredex.regulations import (
 
 from .datasets import builder_dataset
 from .models import Team
+from .pokepaste import (
+    POKEPASTE_SCHEMA,
+    PokePasteFetchError,
+    fetch_pokepaste,
+    parse_pokepaste_url,
+    reserve_fetch_attempt,
+)
 from .services import (
     API_SCHEMA,
     BOOTSTRAP_SCHEMA,
@@ -36,6 +44,7 @@ from .services import (
 )
 
 MAX_JSON_BYTES = 65_536
+MAX_POKEPASTE_JSON_BYTES = 512
 
 
 def _error(
@@ -55,6 +64,18 @@ def _error(
 
 def _success(data: dict[str, Any], status: int = 200) -> JsonResponse:
     return JsonResponse({"schema_version": API_SCHEMA, "data": data}, status=status)
+
+
+def _pokepaste_response(payload: dict[str, Any], status: int = 200) -> JsonResponse:
+    response = JsonResponse({"schema_version": POKEPASTE_SCHEMA, **payload}, status=status)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _pokepaste_error(error: PokePasteFetchError) -> JsonResponse:
+    return _pokepaste_response(
+        {"error": {"code": error.code, "message": error.message}}, error.status
+    )
 
 
 def _aggregate_response(team: Team, status: int = 200) -> JsonResponse:
@@ -164,6 +185,7 @@ def teams_page(request: HttpRequest) -> HttpResponse:
         "team_url_template": reverse("teams-detail", kwargs={"team_id": UUID(int=0)}).replace(
             str(UUID(int=0)), "__TEAM__"
         ),
+        "pokepaste_import_url": reverse("teams-pokepaste-import"),
     }
     return render(
         request,
@@ -273,3 +295,65 @@ def teams_detail(request: HttpRequest, team_id: UUID) -> HttpResponse:
             return _validation_response(error)
         return _aggregate_response(team_queryset().get(pk=saved.pk))
     return _error("method-not-allowed", "Use GET, PUT, or DELETE.", 405)
+
+
+def teams_pokepaste_import(request: HttpRequest) -> HttpResponse:
+    """Return bounded raw team text for one canonical public PokéPaste URL."""
+    if request.method != "POST":
+        return _pokepaste_error(
+            PokePasteFetchError("method-not-allowed", "This endpoint requires POST.", 405)
+        )
+    if request.content_type != "application/json":
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    content_length = request.META.get("CONTENT_LENGTH", "")
+    try:
+        declared_length = int(content_length) if content_length else 0
+    except ValueError:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    if declared_length < 0 or declared_length > MAX_POKEPASTE_JSON_BYTES:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    try:
+        body = request.body
+    except RequestDataTooBig:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    if len(body) > MAX_POKEPASTE_JSON_BYTES:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    try:
+        payload = json.loads(body)
+    except UnicodeDecodeError, json.JSONDecodeError:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    if not isinstance(payload, dict) or set(payload) != {"url"}:
+        return _pokepaste_error(
+            PokePasteFetchError("invalid-request", "Send one JSON URL object.", 400)
+        )
+    try:
+        parse_pokepaste_url(payload["url"])
+    except PokePasteFetchError as error:
+        return _pokepaste_error(error)
+
+    retry_after = reserve_fetch_attempt(request.session)
+    if retry_after is not None:
+        response = _pokepaste_error(
+            PokePasteFetchError(
+                "rate-limit", "Too many PokéPaste requests. Try again shortly.", 429
+            )
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        return response
+    try:
+        text = fetch_pokepaste(payload["url"])
+    except PokePasteFetchError as error:
+        return _pokepaste_error(error)
+    return _pokepaste_response({"data": {"text": text}})

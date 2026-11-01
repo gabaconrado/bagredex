@@ -103,6 +103,32 @@ const same = (a: Team, b: Team) => JSON.stringify(a) === JSON.stringify(b);
 const csrf = () =>
   document.querySelector<HTMLInputElement>("[name=csrfmiddlewaretoken]")
     ?.value ?? "";
+export const canonicalPokePasteUrl = (value: string) =>
+  /^https:\/\/pokepast\.es\/[0-9a-f]{16}$/.test(value.trim())
+    ? value.trim()
+    : null;
+
+type PokePasteResult =
+  | { ok: true; text: string }
+  | { ok: false; message: string };
+
+const parsePokePasteResult = (value: unknown): PokePasteResult => {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return { ok: false, message: "PokéPaste returned an invalid response." };
+  const result = value as Record<string, unknown>;
+  if (result.schema_version !== "pokepaste-import-v1")
+    return { ok: false, message: "PokéPaste returned an invalid response." };
+  if (result.data && typeof result.data === "object") {
+    const text = (result.data as Record<string, unknown>).text;
+    if (typeof text === "string") return { ok: true, text };
+  }
+  if (result.error && typeof result.error === "object") {
+    const message = (result.error as Record<string, unknown>).message;
+    if (typeof message === "string" && message.length > 0)
+      return { ok: false, message };
+  }
+  return { ok: false, message: "PokéPaste returned an invalid response." };
+};
 
 export function Autocomplete({
   label,
@@ -1653,12 +1679,14 @@ export function ConfirmationDialog({
 export function TeamTextDialog({
   data,
   members,
+  pokepasteImportUrl,
   initiator,
   onImport,
   onClose,
 }: {
   data: BuilderData;
   members: Member[];
+  pokepasteImportUrl: string;
   initiator: HTMLElement | null;
   onImport: (members: Member[]) => void;
   onClose: () => void;
@@ -1666,27 +1694,91 @@ export function TeamTextDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const errorSummary = useRef<HTMLDivElement>(null);
+  const request = useRef<AbortController | null>(null);
+  const requestGeneration = useRef(0);
   const [text, setText] = useState(() => exportTeamText(members, data));
   const [errors, setErrors] = useState<string[]>([]);
   const [copyStatus, setCopyStatus] = useState("");
+  const [fetchPending, setFetchPending] = useState(false);
   useEffect(() => {
     const element = dialog.current;
     if (typeof element?.showModal === "function") element.showModal();
     if (element && !element.open) element.setAttribute("open", "");
     textarea.current?.focus();
     textarea.current?.select();
-    return () => initiator?.focus();
+    return () => {
+      requestGeneration.current += 1;
+      request.current?.abort();
+      initiator?.focus();
+    };
   }, [initiator]);
   const close = () => {
+    requestGeneration.current += 1;
+    request.current?.abort();
     dialog.current?.close();
     onClose();
   };
-  const submit = () => {
+  const showErrors = (nextErrors: string[]) => {
+    setErrors(nextErrors);
+    setCopyStatus("");
+    requestAnimationFrame(() => errorSummary.current?.focus());
+  };
+  const submit = async () => {
+    const pasteUrl = canonicalPokePasteUrl(text);
+    if (pasteUrl) {
+      const generation = requestGeneration.current + 1;
+      requestGeneration.current = generation;
+      const controller = new AbortController();
+      request.current = controller;
+      setFetchPending(true);
+      setErrors([]);
+      setCopyStatus("Retrieving team text from PokéPaste…");
+      try {
+        const response = await fetch(pokepasteImportUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrf(),
+          },
+          body: JSON.stringify({ url: pasteUrl }),
+          signal: controller.signal,
+        });
+        const payload = parsePokePasteResult(await response.json());
+        if (generation !== requestGeneration.current) return;
+        if (!response.ok || !payload.ok) {
+          showErrors([
+            payload.ok
+              ? "PokéPaste could not be retrieved. Try again."
+              : payload.message,
+          ]);
+          return;
+        }
+        setText(payload.text);
+        setErrors([]);
+        setCopyStatus(
+          "Team text retrieved. Review it, then choose Import again.",
+        );
+        requestAnimationFrame(() => {
+          textarea.current?.focus();
+          textarea.current?.select();
+        });
+      } catch (error) {
+        if (generation !== requestGeneration.current) return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        showErrors(["PokéPaste could not be retrieved. Try again."]);
+      } finally {
+        if (generation === requestGeneration.current) {
+          request.current = null;
+          setFetchPending(false);
+        }
+      }
+      return;
+    }
     const result = importTeamText(text, data);
     if (!result.ok) {
-      setErrors(result.errors);
-      setCopyStatus("");
-      requestAnimationFrame(() => errorSummary.current?.focus());
+      showErrors(result.errors);
       return;
     }
     onImport(result.members);
@@ -1755,6 +1847,10 @@ export function TeamTextDialog({
           aria-invalid={errors.length > 0}
           aria-describedby={errors.length ? "team-text-errors" : undefined}
           onInput={(event) => {
+            requestGeneration.current += 1;
+            request.current?.abort();
+            request.current = null;
+            setFetchPending(false);
             setText(event.currentTarget.value);
             setErrors([]);
             setCopyStatus("");
@@ -1813,8 +1909,14 @@ export function TeamTextDialog({
           >
             Copy
           </button>
-          <button class="button button--primary" type="button" onClick={submit}>
-            Import
+          <button
+            class="button button--primary"
+            type="button"
+            disabled={fetchPending}
+            aria-busy={fetchPending}
+            onClick={() => void submit()}
+          >
+            {fetchPending ? "Retrieving…" : "Import"}
           </button>
         </div>
       </div>
@@ -2604,6 +2706,7 @@ export function TeamBuilder({
         <TeamTextDialog
           data={data}
           members={draft.members}
+          pokepasteImportUrl={bootstrap.pokepaste_import_url}
           initiator={teamTextInitiator.current}
           onClose={() => setTeamTextOpen(false)}
           onImport={(members) => {

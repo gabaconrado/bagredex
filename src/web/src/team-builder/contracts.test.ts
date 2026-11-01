@@ -20,7 +20,7 @@ const copy = <T>(value: T): T => structuredClone(value);
 describe("team builder contracts", () => {
   it("strictly parses and adapts the bootstrap", () => {
     const parsed = parseBootstrap({
-      schema_version: "team-builder-bootstrap-v2",
+      schema_version: "team-builder-bootstrap-v3",
       active_version: "version-3",
       next_team_number: 4,
       regulation: named,
@@ -42,10 +42,21 @@ describe("team builder contracts", () => {
       create_url: "/teams/",
       dataset_url: "/teams/data/version-3/m-c/",
       team_url_template: "/teams/__TEAM__/",
+      pokepaste_import_url: "/teams/import/pokepaste/",
     });
     expect(parsed.data_url).toContain("/data/");
     expect(parsed.teams[0]?.data_version).toBe("version-3");
     expect(parsed.next_team_number).toBe(4);
+    expect(parsed.pokepaste_import_url).toBe("/teams/import/pokepaste/");
+    for (const pokepaste_import_url of [
+      "https://pokepast.es/import",
+      "//evil.example/import",
+      "/\\evil.example/import",
+      "/teams/import/\npokepaste/",
+    ])
+      expect(() =>
+        parseBootstrap({ ...parsed, pokepaste_import_url }),
+      ).toThrow();
     expect(() => parseBootstrap({ schema_version: "bad" })).toThrow();
     expect(() =>
       parseBootstrap({

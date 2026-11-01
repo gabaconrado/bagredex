@@ -28,6 +28,11 @@ urlpatterns = [
         team_views.teams_data,
         name="teams-data",
     ),
+    path(
+        "teams/import/pokepaste/",
+        team_views.teams_pokepaste_import,
+        name="teams-pokepaste-import",
+    ),
     path("teams/<uuid:team_id>/", team_views.teams_detail, name="teams-detail"),
     path(
         "pokedex/data/<str:regulation>/index/",

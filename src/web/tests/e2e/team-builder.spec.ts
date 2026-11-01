@@ -99,6 +99,99 @@ test("renders a centralized initial loading state", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
 });
 
+test("retrieves a PokéPaste URL for review before import and save", async ({
+  page,
+}) => {
+  const pasteUrl = "https://pokepast.es/be093acb4f35b92a";
+  const fetchedText = [
+    "Remote (Charizard)",
+    "Ability: Blaze",
+    "Serious Nature",
+  ].join("\n");
+  let attempts = 0;
+  let saves = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/teams/"
+    )
+      saves += 1;
+  });
+  await page.route("**/teams/import/pokepaste/", async (route) => {
+    attempts += 1;
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ url: pasteUrl });
+    expect(route.request().headers()["x-csrftoken"]).toBeTruthy();
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({
+          schema_version: "pokepaste-import-v1",
+          error: {
+            code: "upstream-unavailable",
+            message: "PokéPaste is temporarily unavailable.",
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        schema_version: "pokepaste-import-v1",
+        data: { text: fetchedText },
+      }),
+    });
+  });
+
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  const teamName = `Pokepaste-E2E-${Date.now().toString(36)}`;
+  await page.getByRole("textbox", { name: "Team name" }).fill(teamName);
+  await page.getByRole("button", { name: "Import/Export" }).click();
+  const dialog = page.getByRole("dialog", { name: "Import or export team" });
+  const text = dialog.getByRole("textbox", { name: "Team text" });
+  await text.fill(pasteUrl);
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "PokéPaste is temporarily unavailable.",
+  );
+  await expect(text).toHaveValue(pasteUrl);
+  await expect(page.locator(".member-card")).toHaveCount(0);
+  expect(saves).toBe(0);
+
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(text).toHaveValue(fetchedText);
+  await expect(text).toBeFocused();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Team text retrieved. Review it, then choose Import again.",
+  );
+  await expect(page.locator(".member-card")).toHaveCount(0);
+  expect(saves).toBe(0);
+
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Charizard" })).toBeVisible();
+  expect(saves).toBe(0);
+
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/teams/",
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  const createdPayload = await (await created).json();
+  retainedFixtureTeamId = String(
+    createdPayload.data?.id ?? createdPayload.id ?? "",
+  );
+  expect(retainedFixtureTeamId).not.toBe("");
+  expect(saves).toBe(1);
+});
+
 test("imports and exports a draft atomically before explicit save", async ({
   page,
 }) => {

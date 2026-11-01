@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from email.message import Message
+from http.client import HTTPException, IncompleteRead
+from io import BytesIO
+from threading import Barrier, Lock
+from time import sleep
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request
 
 import pytest
 from django.conf import settings
-from django.db import IntegrityError, connection, transaction
+from django.contrib.sessions.backends.db import SessionStore
+from django.contrib.sessions.models import Session
+from django.db import IntegrityError, close_old_connections, connection, transaction
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -40,8 +50,18 @@ from bagredex.pokemon_data.models import (
     Type,
 )
 from bagredex.pokemon_data.services import activate_pokemon_data, load_pokemon_data
+from bagredex.teams import pokepaste as pokepaste_service
+from bagredex.teams import views as team_views
 from bagredex.teams.datasets import builder_dataset
 from bagredex.teams.models import Team, TeamMember, TeamMemberMove
+from bagredex.teams.pokepaste import (
+    POKEPASTE_MAX_BYTES,
+    POKEPASTE_TIMEOUT_SECONDS,
+    PokePasteFetchError,
+    fetch_pokepaste,
+    parse_pokepaste_url,
+    reserve_fetch_attempt,
+)
 from bagredex.teams.services import replace_team
 
 
@@ -1521,7 +1541,8 @@ def test_my_teams_filters_by_owner_and_canonical_regulation_in_newest_order(
     assert response.status_code == 200
     summaries = response.context["team_builder_bootstrap"]["teams"]
     bootstrap = response.context["team_builder_bootstrap"]
-    assert bootstrap["schema_version"] == "team-builder-bootstrap-v2"
+    assert bootstrap["schema_version"] == "team-builder-bootstrap-v3"
+    assert bootstrap["pokepaste_import_url"] == "/teams/import/pokepaste/"
     assert bootstrap["next_team_number"] == 4
     assert [summary["name"] for summary in summaries] == ["Newest version", "Older version"]
     assert summaries[1]["pinned_version"] == retained.version_id
@@ -1719,3 +1740,376 @@ def test_durable_team_constraints_reject_invalid_rows(team_data: dict[str, Any])
         TeamMemberMove.objects.create(member=first, position=4, move_profile=move)
     with pytest.raises(IntegrityError), transaction.atomic():
         TeamMember.objects.filter(pk=first.pk).update(sp_attack=33)
+
+
+class _FakePokePasteResponse:
+    def __init__(
+        self,
+        body: bytes,
+        *,
+        status: int = 200,
+        content_type: str = "text/plain; charset=utf-8",
+    ) -> None:
+        self.status = status
+        self.headers = {"Content-Type": content_type}
+        self.body = body
+        self.read_size: int | None = None
+
+    def __enter__(self) -> _FakePokePasteResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self, size: int) -> bytes:
+        self.read_size = size
+        return self.body[:size]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://pokepast.es/be093acb4f35b92a",
+        "https://www.pokepast.es/be093acb4f35b92a",
+        "https://pokepast.es.evil.test/be093acb4f35b92a",
+        "https://user@pokepast.es/be093acb4f35b92a",
+        "https://pokepast.es:443/be093acb4f35b92a",
+        "https://pokepast.es/be093acb4f35b92a/",
+        "https://pokepast.es/be093acb4f35b92a/raw",
+        "https://pokepast.es/be093acb4f35b92a?x=1",
+        "https://pokepast.es/be093acb4f35b92a#x",
+        "https://pokepast.es/BE093ACB4F35B92A",
+        "https://pokepast.es/too-short",
+        " https://pokepast.es/be093acb4f35b92a",
+        "https://pokepast.es/be093acb4f35b92a\nPikachu",
+        None,
+    ],
+)
+def test_pokepaste_url_validation_rejects_every_noncanonical_shape(value: object) -> None:
+    with pytest.raises(PokePasteFetchError) as caught:
+        parse_pokepaste_url(value)
+    assert caught.value.code == "invalid-url"
+    assert caught.value.status == 400
+
+
+def test_pokepaste_fetch_uses_only_fixed_request_parts_and_returns_exact_text() -> None:
+    response = _FakePokePasteResponse("Flabébé @ Choice Scarf\n".encode())
+    captured: dict[str, object] = {}
+
+    def open_request(request: Request, timeout: float) -> _FakePokePasteResponse:
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return response
+
+    text = fetch_pokepaste("https://pokepast.es/be093acb4f35b92a", open_request=open_request)
+
+    request = captured["request"]
+    assert isinstance(request, Request)
+    assert request.full_url == "https://pokepast.es/be093acb4f35b92a/raw"
+    assert request.method == "GET"
+    assert request.get_header("Accept") == "text/plain"
+    assert request.get_header("Accept-encoding") == "identity"
+    assert request.get_header("User-agent") == "Bagredex/1 PokepasteImporter"
+    assert captured["timeout"] == POKEPASTE_TIMEOUT_SECONDS
+    assert response.read_size == POKEPASTE_MAX_BYTES + 1
+    assert text == "Flabébé @ Choice Scarf\n"
+
+
+@pytest.mark.parametrize(
+    ("response", "code", "status"),
+    [
+        (_FakePokePasteResponse(b"missing", status=404), "not-found", 404),
+        (_FakePokePasteResponse(b"redirect", status=302), "upstream-unavailable", 502),
+        (_FakePokePasteResponse(b"error", status=500), "upstream-unavailable", 502),
+        (_FakePokePasteResponse(b"<html>", content_type="text/html"), "invalid-content", 502),
+        (_FakePokePasteResponse(b"text", content_type=""), "invalid-content", 502),
+        (_FakePokePasteResponse(b"\xff"), "invalid-content", 502),
+        (
+            _FakePokePasteResponse(b"x" * (POKEPASTE_MAX_BYTES + 1)),
+            "response-too-large",
+            502,
+        ),
+    ],
+)
+def test_pokepaste_fetch_normalizes_invalid_responses(
+    response: _FakePokePasteResponse, code: str, status: int
+) -> None:
+    with pytest.raises(PokePasteFetchError) as caught:
+        fetch_pokepaste(
+            "https://pokepast.es/be093acb4f35b92a",
+            open_request=lambda request, timeout: response,
+        )
+    assert caught.value.code == code
+    assert caught.value.status == status
+    assert "be093acb4f35b92a" not in caught.value.message
+    assert "https://" not in caught.value.message
+
+
+@pytest.mark.parametrize(
+    ("error", "code", "status"),
+    [
+        (TimeoutError(), "timeout", 504),
+        (URLError(TimeoutError()), "timeout", 504),
+        (URLError("dns failure"), "upstream-unavailable", 502),
+        (HTTPException("protocol details"), "upstream-unavailable", 502),
+        (IncompleteRead(b"partial private body", 50), "upstream-unavailable", 502),
+        (
+            HTTPError(
+                "https://pokepast.es/fixed/raw",
+                404,
+                "upstream body",
+                Message(),
+                BytesIO(),
+            ),
+            "not-found",
+            404,
+        ),
+        (
+            HTTPError(
+                "https://pokepast.es/fixed/raw",
+                301,
+                "redirect target",
+                Message(),
+                BytesIO(),
+            ),
+            "upstream-unavailable",
+            502,
+        ),
+    ],
+)
+def test_pokepaste_fetch_normalizes_transport_failures(
+    error: Exception, code: str, status: int
+) -> None:
+    def fail(request: Request, timeout: float) -> _FakePokePasteResponse:
+        raise error
+
+    with pytest.raises(PokePasteFetchError) as caught:
+        fetch_pokepaste("https://pokepast.es/be093acb4f35b92a", open_request=fail)
+    assert caught.value.code == code
+    assert caught.value.status == status
+    assert "fixed" not in caught.value.message
+    assert "upstream body" not in caught.value.message
+    assert "partial private body" not in caught.value.message
+    assert "protocol details" not in caught.value.message
+
+
+def test_pokepaste_http_error_body_is_closed() -> None:
+    body = BytesIO(b"private upstream response")
+    error = HTTPError("https://pokepast.es/fixed/raw", 500, "private reason", Message(), body)
+
+    def fail(request: Request, timeout: float) -> _FakePokePasteResponse:
+        raise error
+
+    with pytest.raises(PokePasteFetchError):
+        fetch_pokepaste("https://pokepast.es/be093acb4f35b92a", open_request=fail)
+    assert body.closed
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pokepaste_throttle_is_rolling_and_stores_only_timestamps() -> None:
+    session = SessionStore()
+    session.create()
+
+    assert [reserve_fetch_attempt(session, now=100.0) for _ in range(5)] == [None] * 5
+    assert reserve_fetch_attempt(session, now=100.0) == 60
+    assert session["pokepaste_fetch_attempts"] == [100.0] * 5
+    assert reserve_fetch_attempt(session, now=159.5) == 1
+    assert reserve_fetch_attempt(session, now=160.0) is None
+    assert session["pokepaste_fetch_attempts"] == [160.0]
+
+    clock_rollback_session = SessionStore()
+    clock_rollback_session.create()
+    assert reserve_fetch_attempt(clock_rollback_session, now=101.0) is None
+    assert [reserve_fetch_attempt(clock_rollback_session, now=100.0) for _ in range(4)] == [
+        None
+    ] * 4
+    assert reserve_fetch_attempt(clock_rollback_session, now=100.0) == 60
+
+
+@pytest.mark.django_db
+def test_pokepaste_endpoint_returns_versioned_no_store_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = User.objects.create_user(username="pokepaste-success")
+    client = Client()
+    client.force_login(owner)
+    supplied: list[object] = []
+
+    def fake_fetch(url: object) -> str:
+        supplied.append(url)
+        return "Pikachu @ Choice Scarf\n"
+
+    monkeypatch.setattr(team_views, "fetch_pokepaste", fake_fetch)
+    response = client.post(
+        "/teams/import/pokepaste/",
+        data=json.dumps({"url": "https://pokepast.es/be093acb4f35b92a"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json() == {
+        "schema_version": "pokepaste-import-v1",
+        "data": {"text": "Pikachu @ Choice Scarf\n"},
+    }
+    assert supplied == ["https://pokepast.es/be093acb4f35b92a"]
+
+
+@pytest.mark.django_db
+def test_pokepaste_endpoint_requires_authentication_and_csrf() -> None:
+    path = "/teams/import/pokepaste/"
+    anonymous = Client().post(
+        path,
+        data=json.dumps({"url": "https://pokepast.es/be093acb4f35b92a"}),
+        content_type="application/json",
+    )
+    assert anonymous.status_code == 302
+    assert anonymous.headers["Location"].startswith("/login/")
+
+    owner = User.objects.create_user(username="pokepaste-csrf")
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(owner)
+    rejected = csrf_client.post(
+        path,
+        data=json.dumps({"url": "https://pokepast.es/be093acb4f35b92a"}),
+        content_type="application/json",
+    )
+    assert rejected.status_code == 403
+
+
+@pytest.mark.django_db
+def test_pokepaste_endpoint_rejects_malformed_requests_before_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = User.objects.create_user(username="pokepaste-invalid")
+    client = Client()
+    client.force_login(owner)
+
+    def unexpected_fetch(url: object) -> str:
+        pytest.fail("invalid requests must not reach the outbound boundary")
+
+    monkeypatch.setattr(team_views, "fetch_pokepaste", unexpected_fetch)
+    responses = [
+        client.get("/teams/import/pokepaste/"),
+        client.post("/teams/import/pokepaste/", data="url=x", content_type="text/plain"),
+        client.post("/teams/import/pokepaste/", data="{", content_type="application/json"),
+        client.post(
+            "/teams/import/pokepaste/", data=json.dumps([]), content_type="application/json"
+        ),
+        client.post(
+            "/teams/import/pokepaste/",
+            data=json.dumps({"url": "https://pokepast.es/be093acb4f35b92a", "extra": 1}),
+            content_type="application/json",
+        ),
+        client.post(
+            "/teams/import/pokepaste/",
+            data=json.dumps({"url": "https://evil.test/be093acb4f35b92a"}),
+            content_type="application/json",
+        ),
+        client.post(
+            "/teams/import/pokepaste/",
+            data=json.dumps({"url": "x" * 600}),
+            content_type="application/json",
+        ),
+    ]
+    assert [response.status_code for response in responses] == [405, 400, 400, 400, 400, 400, 400]
+    assert all(response.headers["Cache-Control"] == "no-store" for response in responses)
+    assert responses[0].json()["error"]["code"] == "method-not-allowed"
+    assert all(response.json()["schema_version"] == "pokepaste-import-v1" for response in responses)
+
+
+@pytest.mark.django_db
+def test_pokepaste_endpoint_throttles_failures_per_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = User.objects.create_user(username="pokepaste-throttle")
+    client = Client()
+    client.force_login(owner)
+    calls = 0
+
+    def unavailable(url: object) -> str:
+        nonlocal calls
+        calls += 1
+        raise PokePasteFetchError(
+            "upstream-unavailable", "PokéPaste is unavailable. Try again later.", 502
+        )
+
+    monkeypatch.setattr(team_views, "fetch_pokepaste", unavailable)
+    payload = json.dumps({"url": "https://pokepast.es/be093acb4f35b92a"})
+    failures = [
+        client.post("/teams/import/pokepaste/", data=payload, content_type="application/json")
+        for _ in range(5)
+    ]
+    limited = client.post("/teams/import/pokepaste/", data=payload, content_type="application/json")
+
+    assert calls == 5
+    assert all(response.status_code == 502 for response in failures)
+    assert limited.status_code == 429
+    assert limited.json()["error"]["code"] == "rate-limit"
+    assert 1 <= int(limited.headers["Retry-After"]) <= 60
+    assert "be093acb4f35b92a" not in limited.content.decode()
+    assert limited.headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pokepaste_endpoint_reserves_concurrent_attempts_across_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = User.objects.create_user(username="pokepaste-concurrent")
+    authenticated = Client()
+    authenticated.force_login(owner)
+    session_cookie = authenticated.cookies[settings.SESSION_COOKIE_NAME].value
+    barrier = Barrier(8)
+    reservation_barrier = Barrier(8)
+    call_lock = Lock()
+    calls = 0
+    lock_hook_calls = 0
+
+    def hold_first_reservation_lock() -> None:
+        nonlocal lock_hook_calls
+        with call_lock:
+            lock_hook_calls += 1
+            first = lock_hook_calls == 1
+        if first:
+            sleep(0.15)
+
+    def fetched(url: object) -> str:
+        nonlocal calls
+        with call_lock:
+            calls += 1
+        sleep(0.05)
+        return "Pikachu\n"
+
+    monkeypatch.setattr(team_views, "fetch_pokepaste", fetched)
+    monkeypatch.setattr(
+        pokepaste_service, "_before_attempt_lock", lambda: reservation_barrier.wait()
+    )
+    monkeypatch.setattr(pokepaste_service, "_attempt_lock_acquired", hold_first_reservation_lock)
+    payload = json.dumps({"url": "https://pokepast.es/be093acb4f35b92a"})
+
+    def submit() -> int:
+        close_old_connections()
+        client = Client()
+        client.cookies[settings.SESSION_COOKIE_NAME] = session_cookie
+        barrier.wait()
+        try:
+            return client.post(
+                "/teams/import/pokepaste/",
+                data=payload,
+                content_type="application/json",
+            ).status_code
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(lambda _: submit(), range(8)))
+
+    assert calls == 5
+    assert lock_hook_calls == 8
+    assert sorted(statuses) == [200, 200, 200, 200, 200, 429, 429, 429]
+    session_key = authenticated.session.session_key
+    assert session_key is not None
+    stored_attempts = Session.objects.get(session_key=session_key).get_decoded()[
+        "pokepaste_fetch_attempts"
+    ]
+    assert len(stored_attempts) == 5
