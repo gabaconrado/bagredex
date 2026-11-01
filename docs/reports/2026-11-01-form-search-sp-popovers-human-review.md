@@ -59,11 +59,10 @@ pin, and lifecycle marker semantics agree.
   tests passed 35/35, and release tests passed 10/10.
 - `.codex/lint.sh` and `git diff --check` passed during final integration re-review.
 
-Final aggregate validation, reviewed-result commit creation, report hash correction, completion
-receipt, and lifecycle completion acknowledgment remain pending for the deployment workflow. The
-initial host-only backend test attempt could not reach PostgreSQL; runtime migration, i8 load and
-activation, and authenticated browser checks subsequently succeeded in the isolated human-review
-environment.
+The initial host-only backend test attempt could not reach PostgreSQL; runtime migration, i8 load
+and activation, and authenticated browser checks subsequently succeeded in the isolated
+human-review environment. Final lifecycle completion acknowledgment follows the narrow completion
+record.
 
 ## Deferred tasks
 
@@ -72,4 +71,5 @@ cycle and is intentionally outside this report.
 
 ## Commits
 
-This report is included in the pending reviewed-result commit.
+Reviewed-result commit: `bed7801d816049599904af2b9c1898cdd53d58cf` —
+`feat: apply human review corrections`.
