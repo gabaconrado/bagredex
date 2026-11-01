@@ -60,4 +60,5 @@ None.
 
 ## Commits
 
-This report is included in the pending feature commit.
+Feature commit: `4b8ee76977316e13473309d1878ca68624275c4b` (`feat: add cross-tool form
+selection`).
