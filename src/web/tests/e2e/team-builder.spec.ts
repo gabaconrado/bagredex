@@ -185,13 +185,15 @@ test("imports and exports a draft atomically before explicit save", async ({
   expect(saveRequests).toBe(1);
   await expect(page.getByText("Unsaved changes")).toBeVisible();
 
-  const updated = page.waitForRequest(
-    (request) =>
-      request.method() === "PUT" &&
-      new URL(request.url()).pathname === `/teams/${retainedFixtureTeamId}/`,
+  const updated = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === `/teams/${retainedFixtureTeamId}/`,
   );
   await page.getByRole("button", { name: "Save" }).click();
-  const submitted = (await updated).postDataJSON();
+  const updatedResponse = await updated;
+  expect(updatedResponse.ok()).toBe(true);
+  const submitted = updatedResponse.request().postDataJSON();
   expect(submitted.members).toEqual([
     {
       position: 0,
