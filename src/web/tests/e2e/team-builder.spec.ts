@@ -99,6 +99,123 @@ test("renders a centralized initial loading state", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
 });
 
+test("imports and exports a draft atomically before explicit save", async ({
+  page,
+}) => {
+  let saveRequests = 0;
+  page.on("request", (request) => {
+    if (
+      ["POST", "PUT"].includes(request.method()) &&
+      new URL(request.url()).pathname.startsWith("/teams/")
+    )
+      saveRequests += 1;
+  });
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  const teamName = page.getByRole("textbox", { name: "Team name" });
+  await expect(teamName).toBeVisible();
+  await expect(page.locator('label[for="team-name"]')).toHaveCount(0);
+  const importedName = `Import-E2E-${Date.now().toString(36)}`;
+  await teamName.fill(importedName);
+  await page.getByRole("button", { name: "Import/Export" }).click();
+  let dialog = page.getByRole("dialog", { name: "Import or export team" });
+  const text = dialog.getByRole("textbox", { name: "Team text" });
+  await expect(text).toHaveValue("");
+  const canonicalSet = [
+    "Blaze (Charizard) @ Sitrus Berry",
+    "Ability: Blaze",
+    "Shiny: Yes",
+    "SPs: 32 HP / 2 SpA / 32 Spe",
+    "Serious Nature",
+    "- Heat Wave",
+    "- Protect",
+  ].join("\n");
+  await text.fill(canonicalSet);
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Charizard" })).toBeVisible();
+  expect(saveRequests).toBe(0);
+
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/teams/",
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  const createdPayload = await (await created).json();
+  retainedFixtureTeamId = String(
+    createdPayload.data?.id ?? createdPayload.id ?? "",
+  );
+  expect(retainedFixtureTeamId).not.toBe("");
+
+  await page.reload();
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button")
+    .filter({ has: page.getByText(importedName, { exact: true }) })
+    .click();
+  await expect(page.getByRole("textbox", { name: "Team name" })).toHaveValue(
+    importedName,
+  );
+
+  await page.getByRole("button", { name: "Import/Export" }).click();
+  dialog = page.getByRole("dialog", { name: "Import or export team" });
+  const exported = dialog.getByRole("textbox", { name: "Team text" });
+  await expect(exported).toHaveValue(canonicalSet);
+  await exported.fill("Missingno");
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("unknown");
+  await expect(page.getByRole("heading", { name: "Charizard" })).toBeVisible();
+  expect(saveRequests).toBe(1);
+
+  const variedSet = [
+    "blaze (charizard) (M) @ sitrus-berry",
+    "Trait: BLAZE",
+    "Shiny: Yes",
+    "SPs: 32 hp / 2 spa / 32 spe",
+    "serious Nature",
+    "- heat wave",
+    "- protect",
+  ].join("\n");
+  await exported.fill(variedSet);
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(saveRequests).toBe(1);
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+
+  const updated = page.waitForRequest(
+    (request) =>
+      request.method() === "PUT" &&
+      new URL(request.url()).pathname === `/teams/${retainedFixtureTeamId}/`,
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  const submitted = (await updated).postDataJSON();
+  expect(submitted.members).toEqual([
+    {
+      position: 0,
+      pokemon: "charizard",
+      nickname: "blaze",
+      ability: "blaze",
+      item: "sitrusberry",
+      moves: ["heatwave", "protect", null, null],
+      nature: "serious",
+      sp: {
+        hp: 32,
+        attack: 0,
+        defense: 0,
+        special_attack: 2,
+        special_defense: 0,
+        speed: 32,
+      },
+      shiny: true,
+      mega_preview: false,
+    },
+  ]);
+  expect(saveRequests).toBe(2);
+});
+
 test("groups selectable forms and keeps both Meowstic identities", async ({
   page,
 }) => {

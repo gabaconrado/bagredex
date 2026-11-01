@@ -678,6 +678,79 @@
   justify-content: space-between;
   gap: 1rem;
 }
+.team-text-dialog {
+  width: min(calc(100% - 2rem), 46rem);
+  max-height: calc(100svh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+.team-text-dialog::backdrop {
+  background: rgb(15 23 42 / 60%);
+}
+.team-text-dialog__surface {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.25rem;
+}
+.team-text-dialog__surface header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.team-text-dialog__surface h2,
+.team-text-dialog__surface p {
+  margin: 0;
+}
+.team-text-dialog__surface > label {
+  font-weight: 750;
+}
+.team-text-dialog textarea {
+  width: 100%;
+  min-height: min(48svh, 25rem);
+  resize: vertical;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font:
+    0.9rem/1.45 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  tab-size: 2;
+}
+.team-text-dialog textarea[aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+.team-text-dialog__errors {
+  max-height: 10rem;
+  padding: 0.75rem;
+  overflow: auto;
+  border-radius: 0.6rem;
+  background: var(--color-error-surface);
+  color: var(--color-error);
+}
+.team-text-dialog__errors ul {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+.team-text-dialog__copy-status {
+  min-height: 1.5em;
+  color: var(--color-text-muted);
+}
+.team-text-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
 .dialog-close {
   min-width: 2.75rem;
   min-height: 2.75rem;
@@ -915,6 +988,7 @@
 }
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 select:focus-visible,
 a:focus-visible {
   outline: 3px solid var(--color-accent);
@@ -939,6 +1013,19 @@ a:focus-visible {
   }
 }
 @media (max-width: 680px) {
+  .team-text-dialog {
+    width: calc(100% - 0.5rem);
+    max-height: calc(100svh - 0.5rem);
+  }
+  .team-text-dialog__surface {
+    padding: 1rem;
+  }
+  .team-text-dialog textarea {
+    min-height: 45svh;
+  }
+  .team-text-dialog__actions .button {
+    flex: 1 1 7rem;
+  }
   .palette-backdrop {
     padding: 0.25rem;
   }

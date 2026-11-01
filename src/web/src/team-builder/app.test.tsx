@@ -14,6 +14,7 @@ import {
   MemberEditor,
   PokemonPalette,
   TeamBuilder,
+  TeamTextDialog,
   fieldPathToDomPath,
   prepareDraftForSave,
 } from "./app";
@@ -1324,5 +1325,259 @@ describe("team builder confirmation dialog", () => {
     unmount();
     expect(initiator).toBe(document.activeElement);
     initiator.remove();
+  });
+});
+
+describe("team import and export dialog", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const member: Member = {
+    position: 0,
+    form_id: "charizard",
+    nickname: "Ace",
+    ability_id: "blaze",
+    item_id: null,
+    move_ids: [null, null, null, null],
+    nature_id: "serious",
+    sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    shiny: true,
+    mega_preview: false,
+  };
+
+  it("prefills, copies, reports errors atomically, and imports valid text", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText },
+    });
+    const onImport = vi.fn();
+    render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[member]}
+        initiator={null}
+        onImport={onImport}
+        onClose={() => undefined}
+      />,
+    );
+    const textbox = screen.getByRole("textbox", { name: "Team text" });
+    expect((textbox as HTMLTextAreaElement).value).toContain("Ace (Charizard)");
+    expect((textbox as HTMLTextAreaElement).value).toContain("Shiny: Yes");
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(screen.getByText("Team text copied.")).toBeTruthy();
+    writeText.mockRejectedValueOnce(new Error("blocked"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await screen.findByText(
+      "Copy was blocked. Select and copy the text manually.",
+    );
+
+    fireEvent.input(textbox, {
+      target: { value: "Charizard\nLevel: 50" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(onImport).not.toHaveBeenCalled();
+    const alert = screen.getByRole("alert");
+    await waitFor(() => expect(document.activeElement).toBe(alert));
+    expect(alert.textContent).toContain("not supported");
+
+    fireEvent.input(textbox, {
+      target: { value: "Charizard (M)\nAbility: Blaze" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    expect(onImport).toHaveBeenCalledWith([
+      expect.objectContaining({
+        form_id: "charizard",
+        ability_id: "blaze",
+        shiny: false,
+      }),
+    ]);
+  });
+
+  it("traps focus and restores it when dismissed", () => {
+    const initiator = document.createElement("button");
+    document.body.append(initiator);
+    initiator.focus();
+    const onClose = vi.fn();
+    const view = render(
+      <TeamTextDialog
+        data={shortcutData}
+        members={[]}
+        initiator={initiator}
+        onImport={() => undefined}
+        onClose={onClose}
+      />,
+    );
+    const textarea = screen.getByRole("textbox", { name: "Team text" });
+    expect(document.activeElement).toBe(textarea);
+    const importButton = screen.getByRole("button", { name: "Import" });
+    importButton.focus();
+    fireEvent.keyDown(importButton, { key: "Tab" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close import and export" }),
+    );
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    view.unmount();
+    expect(document.activeElement).toBe(initiator);
+    initiator.remove();
+  });
+
+  it("keeps the team name accessible without a visible label", async () => {
+    render(
+      <TeamBuilder bootstrap={shortcutBootstrap} initialData={shortcutData} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "New Team" })[0]!);
+    const teamName = await screen.findByRole("textbox", { name: "Team name" });
+    expect(document.querySelector('label[for="team-name"]')).toBeNull();
+    expect(teamName.getAttribute("aria-label")).toBe("Team name");
+    expect(screen.getByRole("button", { name: "Import/Export" })).toBeTruthy();
+  });
+
+  it("replaces and clears a saved draft while clearing stale editor state", async () => {
+    const bootstrap: Bootstrap = {
+      ...shortcutBootstrap,
+      teams: [
+        {
+          id: "saved-team",
+          name: "Saved team",
+          data_version: shortcutData.data_version,
+          regulation: shortcutData.regulation,
+          members: [{ position: 0, sprite_url: "/normal.webp" }],
+          updated_at: "2026-11-01T00:00:00Z",
+        },
+      ],
+    };
+    const savedTeam = {
+      schema_version: "team-api-v1",
+      data: {
+        id: "saved-team",
+        name: "Saved team",
+        updated_at: "2026-11-01T00:00:00Z",
+        pinned: {
+          version: shortcutData.data_version,
+          regulation: shortcutData.regulation,
+        },
+        members: [
+          {
+            position: 0,
+            pokemon: "charizard",
+            nickname: "Ace",
+            ability: "blaze",
+            item: null,
+            moves: [null, null, null, null],
+            nature: "serious",
+            sp: {
+              hp: 0,
+              attack: 0,
+              defense: 0,
+              special_attack: 0,
+              special_defense: 0,
+              speed: 0,
+            },
+            shiny: false,
+            mega_preview: false,
+          },
+        ],
+      },
+    };
+    const fetchMock = vi.fn(async (_url: string, options?: RequestInit) => {
+      if (options?.method === "PUT")
+        return {
+          ok: false,
+          json: async () => ({
+            schema_version: "team-api-v1",
+            error: {
+              code: "invalid_team",
+              message: "The saved draft is stale.",
+              fields: { "members.0.ability": ["Stale ability error."] },
+            },
+          }),
+        };
+      return { ok: true, json: async () => savedTeam };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<TeamBuilder bootstrap={bootstrap} initialData={shortcutData} />);
+    fireEvent.click(screen.getByRole("button", { name: /Saved team/ }));
+    await screen.findByRole("textbox", { name: "Team name" });
+    expect(screen.getByText("Saved")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import/Export" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Team text" }), {
+      target: {
+        value: "Fresh (Charizard)\nAbility: Blaze\nShiny: Yes\nSerious Nature",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Import or export team" }),
+      ).toBeNull(),
+    );
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Stale ability error.")).toBeTruthy();
+    fireEvent.click(
+      document.querySelector<HTMLElement>(".collapsed-member__surface")!,
+    );
+    const ability = screen.getByRole("combobox", { name: "Ability" });
+    fireEvent.input(ability, { target: { value: "Not an ability" } });
+    fireEvent.blur(ability);
+    expect((ability as HTMLInputElement).value).toBe("Not an ability");
+
+    fireEvent.click(screen.getByRole("button", { name: "Import/Export" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Team text" }), {
+      target: {
+        value: "Second (Charizard)\nAbility: Blaze\nSerious Nature",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Import or export team" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByText("Stale ability error.")).toBeNull();
+    expect(document.querySelector(".member-card--collapsed")).toBeTruthy();
+    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    expect(
+      screen.getByText("Team imported. Choose Save to keep these changes."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Team imported. Changes are not saved yet."),
+    ).toBeTruthy();
+    fireEvent.click(
+      document.querySelector<HTMLElement>(".collapsed-member__surface")!,
+    );
+    expect(
+      (screen.getByRole("combobox", { name: "Ability" }) as HTMLInputElement)
+        .value,
+    ).toBe("Blaze");
+
+    fireEvent.click(screen.getByRole("button", { name: "Import/Export" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Team text" }), {
+      target: { value: "Missingno" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Import or export team" }),
+      ).toBeNull(),
+    );
+    expect(document.querySelector(".member-card")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import/Export" }));
+    fireEvent.input(screen.getByRole("textbox", { name: "Team text" }), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    await waitFor(() =>
+      expect(document.querySelector(".member-card")).toBeNull(),
+    );
+    expect(document.querySelectorAll(".empty-slot")).toHaveLength(6);
   });
 });

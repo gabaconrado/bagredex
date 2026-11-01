@@ -57,6 +57,7 @@ import {
   statLabels as pokedexStatLabels,
   type Sort,
 } from "../model";
+import { exportTeamText, importTeamText } from "./team-text";
 
 type Status = {
   kind: "idle" | "loading" | "saving" | "success" | "error";
@@ -1649,6 +1650,178 @@ export function ConfirmationDialog({
   );
 }
 
+export function TeamTextDialog({
+  data,
+  members,
+  initiator,
+  onImport,
+  onClose,
+}: {
+  data: BuilderData;
+  members: Member[];
+  initiator: HTMLElement | null;
+  onImport: (members: Member[]) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const errorSummary = useRef<HTMLDivElement>(null);
+  const [text, setText] = useState(() => exportTeamText(members, data));
+  const [errors, setErrors] = useState<string[]>([]);
+  const [copyStatus, setCopyStatus] = useState("");
+  useEffect(() => {
+    const element = dialog.current;
+    if (typeof element?.showModal === "function") element.showModal();
+    if (element && !element.open) element.setAttribute("open", "");
+    textarea.current?.focus();
+    textarea.current?.select();
+    return () => initiator?.focus();
+  }, [initiator]);
+  const close = () => {
+    dialog.current?.close();
+    onClose();
+  };
+  const submit = () => {
+    const result = importTeamText(text, data);
+    if (!result.ok) {
+      setErrors(result.errors);
+      setCopyStatus("");
+      requestAnimationFrame(() => errorSummary.current?.focus());
+      return;
+    }
+    onImport(result.members);
+  };
+  return (
+    <dialog
+      ref={dialog}
+      class="team-text-dialog"
+      aria-labelledby="team-text-title"
+      aria-describedby="team-text-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          close();
+          return;
+        }
+        if (event.key !== "Tab") return;
+        const controls = [
+          ...event.currentTarget.querySelectorAll<HTMLElement>(
+            "textarea, button:not([disabled])",
+          ),
+        ];
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+    >
+      <div class="team-text-dialog__surface">
+        <header>
+          <div>
+            <p class="eyebrow">Move a team</p>
+            <h2 id="team-text-title">Import or export team</h2>
+          </div>
+          <button
+            type="button"
+            class="dialog-close"
+            aria-label="Close import and export"
+            onClick={close}
+          >
+            ×
+          </button>
+        </header>
+        <p id="team-text-description">
+          Copy this team, or replace the text and import it. Imports use SPs and
+          remain unsaved until you choose Save.
+        </p>
+        <label for="team-text-value">Team text</label>
+        <textarea
+          ref={textarea}
+          id="team-text-value"
+          value={text}
+          spellcheck={false}
+          aria-invalid={errors.length > 0}
+          aria-describedby={errors.length ? "team-text-errors" : undefined}
+          onInput={(event) => {
+            setText(event.currentTarget.value);
+            setErrors([]);
+            setCopyStatus("");
+          }}
+        />
+        {errors.length > 0 && (
+          <div
+            ref={errorSummary}
+            id="team-text-errors"
+            class="team-text-dialog__errors"
+            role="alert"
+            tabIndex={-1}
+          >
+            <strong>Import was not applied.</strong>
+            <ul>
+              {errors.map((error) => (
+                <li>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p
+          class="team-text-dialog__copy-status"
+          role="status"
+          aria-live="polite"
+        >
+          {copyStatus}
+        </p>
+        <div class="team-text-dialog__actions">
+          <button
+            class="button button--secondary"
+            type="button"
+            onClick={close}
+          >
+            Cancel
+          </button>
+          <button
+            class="button button--secondary"
+            type="button"
+            onClick={() => {
+              if (!navigator.clipboard) {
+                setCopyStatus(
+                  "Copy is unavailable. Select and copy the text manually.",
+                );
+                return;
+              }
+              void navigator.clipboard
+                .writeText(text)
+                .then(() => setCopyStatus("Team text copied."))
+                .catch(() =>
+                  setCopyStatus(
+                    "Copy was blocked. Select and copy the text manually.",
+                  ),
+                );
+            }}
+          >
+            Copy
+          </button>
+          <button class="button button--primary" type="button" onClick={submit}>
+            Import
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
 export function TeamBuilder({
   bootstrap,
   initialData,
@@ -1683,6 +1856,8 @@ export function TeamBuilder({
   const loadGeneration = useRef(0);
   const [announcement, setAnnouncement] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [teamTextOpen, setTeamTextOpen] = useState(false);
+  const teamTextInitiator = useRef<HTMLElement | null>(null);
   const confirmationPending = useRef(false);
   const unloadBypass = useRef(false);
   const [autocompleteTransients, setAutocompleteTransients] = useState<
@@ -1832,6 +2007,7 @@ export function TeamBuilder({
         !/^[1-6]$/.test(event.key) ||
         palette !== null ||
         confirmation ||
+        teamTextOpen ||
         document.querySelector("dialog[open]") ||
         (event.target instanceof Element &&
           event.target.closest(
@@ -1857,7 +2033,7 @@ export function TeamBuilder({
     };
     document.addEventListener("keydown", shortcuts);
     return () => document.removeEventListener("keydown", shortcuts);
-  }, [confirmation, draft, palette]);
+  }, [confirmation, draft, palette, teamTextOpen]);
   useLayoutEffect(() => {
     if (pendingMemberSlot === null) return;
     const member = draft?.members.find(
@@ -2208,10 +2384,10 @@ export function TeamBuilder({
         ) : draft ? (
           <>
             <header class="team-toolbar">
-              <div>
-                <label for="team-name">Team name</label>
+              <div class="team-toolbar__name">
                 <input
                   id="team-name"
+                  aria-label="Team name"
                   maxLength={80}
                   value={draft.name}
                   aria-invalid={Boolean(fieldErrors.name)}
@@ -2238,6 +2414,16 @@ export function TeamBuilder({
                 onClick={() => void save()}
               >
                 {status.kind === "saving" ? "Saving…" : "Save"}
+              </button>
+              <button
+                class="button button--secondary"
+                type="button"
+                onClick={(event) => {
+                  teamTextInitiator.current = event.currentTarget;
+                  setTeamTextOpen(true);
+                }}
+              >
+                Import/Export
               </button>
               {draft.id && (
                 <button
@@ -2412,6 +2598,26 @@ export function TeamBuilder({
         <ConfirmationDialog
           confirmation={confirmation}
           onClose={closeConfirmation}
+        />
+      )}
+      {teamTextOpen && draft && data && (
+        <TeamTextDialog
+          data={data}
+          members={draft.members}
+          initiator={teamTextInitiator.current}
+          onClose={() => setTeamTextOpen(false)}
+          onImport={(members) => {
+            setDraft({ ...draft, members });
+            setFieldErrors({});
+            setAutocompleteTransients(new Map());
+            setExpandedMembers(new Set());
+            setTeamTextOpen(false);
+            setStatus({
+              kind: "success",
+              message: "Team imported. Choose Save to keep these changes.",
+            });
+            setAnnouncement("Team imported. Changes are not saved yet.");
+          }}
         />
       )}
       {announcement && (
