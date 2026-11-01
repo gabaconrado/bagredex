@@ -49,22 +49,22 @@ Observed passing during implementation and review:
 
 - initial pure PokéPaste tests: 28 passed;
 - after backend review fixes, 30 non-database PokéPaste URL, fetch, and protocol tests passed;
+- focused PostgreSQL concurrency coverage: 1 passed;
+- complete backend suite: 332 passed;
 - backend Ruff, mypy, Django system check, and migration dry-run;
 - focused Team Builder contract, parser, and component tests: 70 passed;
 - Web reviewer contract and component subset: 36 passed;
-- Web formatting, ESLint, TypeScript, and production build; and
-- repository `git diff --check` and `./.codex/lint.sh`.
+- complete Web suite: 283 passed and 21 skipped;
+- Web formatting, ESLint, TypeScript, and production build;
+- Playwright Team Builder coverage on desktop and tablet: 26 passed;
+- deployment validation: 82 passed; and
+- repository lint, staged checks, and diff validation.
 
-The architect independently reran the 70 focused Web tests, Ruff, mypy, and the Django system
-check. Its migration dry-run found no changes but warned that PostgreSQL was unavailable in that
-review environment.
-
-Deployment validation must still run the repository's full local checks and the configured
-Playwright Team Builder path against the managed local runtime. It must confirm desktop and tablet
-fetch, review, import, failure recovery, and explicit Save without contacting live PokéPaste. The
-deployment agent must also run the PostgreSQL-backed backend checks: the attempted focused run
-reached 26 passing tests before four database setup errors because PostgreSQL was unavailable, and
-no complete backend suite was observed passing in the implementation environment.
+An earlier architect review environment lacked PostgreSQL, so its migration check emitted a
+connection warning and its focused database attempt stopped after 26 passing tests and four setup
+errors. Final deployment validation subsequently observed the complete PostgreSQL-backed suite,
+concurrency test, and migration check passing. All browser tests used local routing and did not
+contact live PokéPaste.
 
 ## Deferred tasks
 
@@ -73,5 +73,5 @@ accepted non-goal; the approved feature uses atomic per-session limits.
 
 ## Commits
 
-This report is included in the pending PokéPaste URL import cycle commit. After that commit exists,
-the report will be corrected separately with its exact full hash and subject.
+Feature commit: `093fc415870ce27783bc8bfa5691ac894bee6459`
+(`feat(teams): import PokéPaste URLs`).
