@@ -1,4 +1,4 @@
-import type { BuilderData, Member, Named, StatId } from "./contracts";
+import type { BuilderData, Member, Named, Nature, StatId } from "./contracts";
 import { newMember, spTotal, statIds, validateLocal } from "./model";
 
 const MAX_TEAM_TEXT_LENGTH = 32_000;
@@ -23,7 +23,8 @@ export type TeamTextImportResult =
 
 type SpeciesChoice = {
   formId: string;
-  itemId: string | null;
+  megaTargetId: string | null;
+  requiredItemId: string | null;
 };
 
 type Lookup<T> = Map<string, T[]>;
@@ -52,6 +53,27 @@ function namedLookup(values: Named[]): Lookup<Named> {
   const lookup: Lookup<Named> = new Map();
   values.forEach((value) =>
     addLookup(lookup, value.name, value, (left, right) => left.id === right.id),
+  );
+  return lookup;
+}
+
+function canonicalNatureName(nature: Nature): string {
+  if (!nature.increased_stat || !nature.decreased_stat) return nature.name;
+  const suffix = ` (+${statNames[nature.increased_stat]}/-${statNames[nature.decreased_stat]})`;
+  return nature.name.endsWith(suffix)
+    ? nature.name.slice(0, -suffix.length)
+    : nature.name;
+}
+
+function natureLookup(values: Nature[]): Lookup<Nature> {
+  const lookup: Lookup<Nature> = new Map();
+  values.forEach((value) =>
+    addLookup(
+      lookup,
+      canonicalNatureName(value),
+      value,
+      (left, right) => left.id === right.id,
+    ),
   );
   return lookup;
 }
@@ -103,12 +125,14 @@ export function importTeamText(
   const errors: string[] = [];
   const species: Lookup<SpeciesChoice> = new Map();
   const sameSpecies = (left: SpeciesChoice, right: SpeciesChoice) =>
-    left.formId === right.formId && left.itemId === right.itemId;
+    left.formId === right.formId &&
+    left.megaTargetId === right.megaTargetId &&
+    left.requiredItemId === right.requiredItemId;
   data.forms.forEach((form) =>
     addLookup(
       species,
       form.name,
-      { formId: form.id, itemId: null },
+      { formId: form.id, megaTargetId: null, requiredItemId: null },
       sameSpecies,
     ),
   );
@@ -116,7 +140,7 @@ export function importTeamText(
     addLookup(
       species,
       entry.name,
-      { formId: entry.form_id, itemId: null },
+      { formId: entry.form_id, megaTargetId: null, requiredItemId: null },
       sameSpecies,
     ),
   );
@@ -124,14 +148,18 @@ export function importTeamText(
     addLookup(
       species,
       entry.name,
-      { formId: entry.base_form_id, itemId: entry.item_id },
+      {
+        formId: entry.base_form_id,
+        megaTargetId: entry.id,
+        requiredItemId: entry.item_id,
+      },
       sameSpecies,
     ),
   );
   const abilities = namedLookup(data.abilities);
   const items = namedLookup(data.items);
   const moves = namedLookup(data.moves);
-  const natures = namedLookup(data.natures);
+  const natures = natureLookup(data.natures);
   const serious = seriousNature(data);
   if (!serious)
     return {
@@ -205,25 +233,37 @@ export function importTeamText(
     let item = itemText
       ? resolve(items, itemText, "item", location, errors)
       : null;
-    if (choice.itemId) {
-      if (item && item.id !== choice.itemId)
+    if (choice.requiredItemId) {
+      if (!itemText)
         errors.push(
           `${location}: ${identity} requires its matching Mega Stone.`,
         );
-      item = data.items.find(({ id }) => id === choice!.itemId) ?? null;
+      else if (item && item.id !== choice.requiredItemId)
+        errors.push(
+          `${location}: ${identity} requires its matching Mega Stone.`,
+        );
     }
     member.item_id = item?.id ?? null;
+    const megaRelation = choice.megaTargetId
+      ? data.mega_relations.find(
+          ({ form_id, item_id, target }) =>
+            form_id === choice!.formId &&
+            item_id === choice!.requiredItemId &&
+            target.id === choice!.megaTargetId,
+        )
+      : data.mega_relations.find(
+          ({ form_id, item_id }) =>
+            form_id === member.form_id && item_id === member.item_id,
+        );
     const seen = new Set<string>();
     const parsedMoves: string[] = [];
 
     for (const detail of group.lines.slice(1)) {
       const detailLocation = `Set ${setIndex + 1}, line ${detail.line}`;
-      const unsupported = detail.text.match(
-        /^(Level|EVs|IVs|Tera\s+Type)\s*:/i,
-      );
+      const unsupported = detail.text.match(/^(Level|IVs|Tera\s+Type)\s*:/i);
       if (unsupported) {
         errors.push(
-          `${detailLocation}: ${unsupported[1]} is not supported; use SPs only.`,
+          `${detailLocation}: ${unsupported[1]} is not supported; use Champions SPs or EVs only.`,
         );
         continue;
       }
@@ -233,14 +273,25 @@ export function importTeamText(
           errors.push(`${detailLocation}: ability appears more than once.`);
         else {
           seen.add("ability");
-          member.ability_id =
-            resolve(
-              abilities,
-              abilityMatch[2]!,
-              "ability",
-              detailLocation,
-              errors,
-            )?.id ?? null;
+          const ability = resolve(
+            abilities,
+            abilityMatch[2]!,
+            "ability",
+            detailLocation,
+            errors,
+          );
+          const form = data.forms.find(({ id }) => id === member.form_id)!;
+          if (!ability) member.ability_id = null;
+          else if (form.ability_ids.includes(ability.id))
+            member.ability_id = ability.id;
+          else if (megaRelation?.target.ability_ids.includes(ability.id))
+            member.ability_id = form.default_ability_id;
+          else {
+            member.ability_id = null;
+            errors.push(
+              `${detailLocation}: ${ability.name} is not legal for ${form.name} or its selected Mega Evolution.`,
+            );
+          }
         }
         continue;
       }
@@ -256,21 +307,31 @@ export function importTeamText(
         }
         continue;
       }
-      const spMatch = detail.text.match(/^SPs\s*:\s*(.+)$/i);
-      if (spMatch) {
-        if (seen.has("sp")) {
-          errors.push(`${detailLocation}: SPs appears more than once.`);
+      const allocationMatch = detail.text.match(/^(SPs|EVs)\s*:\s*(.+)$/i);
+      if (allocationMatch) {
+        const allocationLabel =
+          allocationMatch[1]!.toLowerCase() === "evs" ? "EVs" : "SPs";
+        const previousLabel = [...seen].find((value) =>
+          value.startsWith("allocation:"),
+        );
+        if (previousLabel) {
+          const previous = previousLabel.slice("allocation:".length);
+          errors.push(
+            previous === allocationLabel
+              ? `${detailLocation}: ${allocationLabel} appears more than once.`
+              : `${detailLocation}: ${previous} and ${allocationLabel} cannot be combined; use one Champions point allocation line.`,
+          );
           continue;
         }
-        seen.add("sp");
+        seen.add(`allocation:${allocationLabel}`);
         const usedStats = new Set<StatId>();
-        for (const allocation of spMatch[1]!.split("/")) {
+        for (const allocation of allocationMatch[2]!.split("/")) {
           const match = allocation
             .trim()
             .match(/^(-?\d+)\s+(HP|Atk|Def|SpA|SpD|Spe)$/i);
           if (!match) {
             errors.push(
-              `${detailLocation}: invalid SP allocation “${allocation.trim()}”.`,
+              `${detailLocation}: invalid ${allocationLabel} allocation “${allocation.trim()}”.`,
             );
             continue;
           }
@@ -278,7 +339,7 @@ export function importTeamText(
           const value = Number(match[1]);
           if (usedStats.has(stat))
             errors.push(
-              `${detailLocation}: ${statNames[stat]} SP appears more than once.`,
+              `${detailLocation}: ${statNames[stat]} Champions point appears more than once.`,
             );
           else if (
             !Number.isInteger(value) ||
@@ -286,7 +347,7 @@ export function importTeamText(
             value > data.mechanics.sp_max
           )
             errors.push(
-              `${detailLocation}: ${statNames[stat]} SP must be from ${data.mechanics.sp_min} to ${data.mechanics.sp_max}.`,
+              `${detailLocation}: ${statNames[stat]} Champions points must be from ${data.mechanics.sp_min} to ${data.mechanics.sp_max}.`,
             );
           else {
             usedStats.add(stat);
@@ -295,7 +356,7 @@ export function importTeamText(
         }
         if (spTotal(member.sp) > data.mechanics.sp_total_max)
           errors.push(
-            `${detailLocation}: SP total must not exceed ${data.mechanics.sp_total_max}.`,
+            `${detailLocation}: Champions point total must not exceed ${data.mechanics.sp_total_max}.`,
           );
         continue;
       }
@@ -335,9 +396,8 @@ export function importTeamText(
       ...parsedMoves,
       ...Array(4 - parsedMoves.length).fill(null),
     ];
-    member.mega_preview = data.mega_relations.some(
-      ({ form_id, item_id }) =>
-        form_id === member.form_id && item_id === member.item_id,
+    member.mega_preview = Boolean(
+      megaRelation && megaRelation.item_id === member.item_id,
     );
     members.push(member);
   }
@@ -375,7 +435,7 @@ export function exportTeamText(members: Member[], data: BuilderData): string {
         .filter((id) => member.sp[id] > 0)
         .map((id) => `${member.sp[id]} ${statNames[id]}`);
       if (allocations.length) lines.push(`SPs: ${allocations.join(" / ")}`);
-      if (nature) lines.push(`${nature.name} Nature`);
+      if (nature) lines.push(`${canonicalNatureName(nature)} Nature`);
       member.move_ids.forEach((id) => {
         const move = data.moves.find((choice) => choice.id === id);
         if (move) lines.push(`- ${move.name}`);

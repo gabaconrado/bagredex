@@ -65,7 +65,7 @@ describe("team builder contracts", () => {
 
   it("parses the exact dataset and builds same-origin sprites", () => {
     const dataset = {
-      schema_version: "team-builder-data-v6",
+      schema_version: "team-builder-data-v7",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -77,6 +77,7 @@ describe("team builder contracts", () => {
           national_dex_number: 6,
           type_ids: ["fire"],
           ability_ids: ["blaze"],
+          default_ability_id: "blaze",
           move_ids: ["protect"],
           base_stats: stats,
           sprite_form: "charizard",
@@ -192,7 +193,7 @@ describe("team builder contracts", () => {
     const parsed = parseBuilderData(dataset);
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
     expect(parsed.forms[0]?.is_nfe).toBe(false);
-    expect(parsed.schema_version).toBe("team-builder-data-v6");
+    expect(parsed.schema_version).toBe("team-builder-data-v7");
     expect(parsed.mega_search_entries[0]?.base_form_id).toBe("charizard");
     expect(parsed.items[0]?.description).toContain("Mega Charizard X");
     expect(parsed.items[0]?.stat_modifiers[0]).toEqual({
@@ -259,6 +260,18 @@ describe("team builder contracts", () => {
     const malformedForm = copy(dataset);
     malformedForm.forms[0]!.is_nfe = "false" as never;
     expect(() => parseBuilderData(malformedForm)).toThrow(/Pokémon form/i);
+
+    const missingDefaultAbility = copy(dataset);
+    delete (missingDefaultAbility.forms[0] as any).default_ability_id;
+    expect(() => parseBuilderData(missingDefaultAbility)).toThrow(
+      /form choices/i,
+    );
+
+    const illegalDefaultAbility = copy(dataset);
+    illegalDefaultAbility.forms[0]!.default_ability_id = "toughclaws";
+    expect(() => parseBuilderData(illegalDefaultAbility)).toThrow(
+      /form choices/i,
+    );
   });
 
   it("requires paired non-empty Item descriptions or paired legacy nulls", () => {
@@ -270,7 +283,7 @@ describe("team builder contracts", () => {
       stat_modifiers: [],
     };
     const base = {
-      schema_version: "team-builder-data-v6",
+      schema_version: "team-builder-data-v7",
       data_version: "version-3",
       regulation: named,
       forms: [],
@@ -315,7 +328,7 @@ describe("team builder contracts", () => {
 
   it("rejects malformed or dangling Mega search entries", () => {
     const base = {
-      schema_version: "team-builder-data-v6",
+      schema_version: "team-builder-data-v7",
       data_version: "version-3",
       regulation: named,
       forms: [],

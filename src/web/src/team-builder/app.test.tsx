@@ -111,7 +111,7 @@ const shortcutBootstrap: Bootstrap = {
 };
 
 const shortcutData: BuilderData = {
-  schema_version: "team-builder-data-v6",
+  schema_version: "team-builder-data-v7",
   data_version: "version-3",
   regulation: shortcutBootstrap.regulation,
   forms: [
@@ -122,6 +122,7 @@ const shortcutData: BuilderData = {
       is_nfe: false,
       types: [{ id: "fire", name: "Fire" }],
       ability_ids: ["blaze"],
+      default_ability_id: "blaze",
       move_ids: [],
       base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
       sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },
@@ -267,7 +268,7 @@ describe("Team Builder team loading", () => {
     });
     const newerDataVersion = "version-newer";
     const newerData = {
-      schema_version: "team-builder-data-v6",
+      schema_version: "team-builder-data-v7",
       data_version: "version-newer",
       regulation: shortcutBootstrap.regulation,
       forms: [
@@ -279,6 +280,7 @@ describe("Team Builder team loading", () => {
           national_dex_number: 6,
           type_ids: ["fire"],
           ability_ids: ["blaze"],
+          default_ability_id: "blaze",
           move_ids: [],
           base_stats: {
             hp: 78,
@@ -762,7 +764,7 @@ describe("team builder autocomplete", () => {
       mega_preview: false,
     };
     const data = {
-      schema_version: "team-builder-data-v6",
+      schema_version: "team-builder-data-v7",
       data_version: "version-3",
       regulation: { id: "m-c", name: "Regulation M-C" },
       forms: [
@@ -773,6 +775,7 @@ describe("team builder autocomplete", () => {
           is_nfe: false,
           types: [{ id: "fire", name: "Fire" }],
           ability_ids: ["blaze"],
+          default_ability_id: "blaze",
           move_ids: ["protect"],
           base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
           sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },
@@ -836,6 +839,7 @@ describe("team builder autocomplete", () => {
             is_nfe: false,
             types: [{ id: "fire", name: "Fire" }],
             ability_ids: ["toughclaws"],
+            default_ability_id: "blaze",
             move_ids: [],
             base_stats: {
               hp: 78,

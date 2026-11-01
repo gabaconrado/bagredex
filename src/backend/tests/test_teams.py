@@ -258,6 +258,9 @@ def team_data() -> dict[str, Any]:
         bst=320,
     )
     RegulationMembership.objects.create(profile=alternate_profile)
+    PokemonProfileAbility.objects.create(
+        profile=alternate_profile, ability_profile=ability_profile, slot="0"
+    )
     extra_profiles: list[PokemonProfile] = []
     for index in range(1, 6):
         extra_form_id = uuid.uuid4()
@@ -285,6 +288,9 @@ def team_data() -> dict[str, Any]:
             bst=300,
         )
         RegulationMembership.objects.create(profile=extra_profile)
+        PokemonProfileAbility.objects.create(
+            profile=extra_profile, ability_profile=ability_profile, slot="0"
+        )
         extra_profiles.append(extra_profile)
     DataVersion.objects.filter(pk=version.pk).update(status=DataVersion.Status.LOADED)
     version.status = DataVersion.Status.LOADED
@@ -408,12 +414,15 @@ def _retained_snapshot(
     ability = Ability.objects.create(
         version=version, canonical_id="foreignability", name="Foreign Ability"
     )
-    AbilityProfile.objects.create(
+    ability_profile = AbilityProfile.objects.create(
         version=version,
         regulation=regulation,
         ability=ability,
         short_description="Foreign.",
         description="Foreign.",
+    )
+    PokemonProfileAbility.objects.create(
+        profile=foreign_profile, ability_profile=ability_profile, slot="0"
     )
     item = Item.objects.create(version=version, canonical_id="foreignitem", name="Foreign Item")
     ItemProfile.objects.create(
@@ -439,6 +448,99 @@ def _retained_snapshot(
     DataVersion.objects.filter(pk=version.pk).update(status=DataVersion.Status.LOADED)
     version.status = DataVersion.Status.LOADED
     return regulation
+
+
+def _ability_contract_snapshot(*, include_hidden: bool, slot_zero: bool) -> Snapshot:
+    identifier = f"showdown-ability-contract-{uuid.uuid4().hex[:12]}"
+    version = DataVersion.objects.create(
+        id=identifier,
+        bundle_hash="c" * 64,
+        bundle_schema_version="7",
+        importer_version="9",
+        source_shape_version="test",
+        provenance={},
+        validation_summary={},
+        semantic_inventory={},
+        semantic_diff={},
+        manifest={},
+    )
+    mechanics = MechanicsProfile.objects.create(
+        version=version,
+        canonical_id="champions",
+        level=50,
+        sp_minimum=0,
+        sp_maximum=32,
+        sp_total_max=66,
+        hp_formula="base + sp + 75",
+        other_formula="truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages={"hindering": 90, "neutral": 100, "increasing": 110},
+    )
+    regulation = Regulation.objects.create(
+        version=version,
+        canonical_id="m-c",
+        name="Regulation M-C",
+        showdown_format_id="ability-contract",
+        mod="champions",
+        ruleset=[],
+        mechanics_profile=mechanics,
+    )
+    Nature.objects.create(
+        version=version,
+        canonical_id="serious",
+        name="Serious",
+        increased_stat=None,
+        decreased_stat=None,
+    )
+    form_id = uuid.uuid4()
+    form = PokemonForm.objects.create(
+        id=form_id,
+        version=version,
+        canonical_id="raichu",
+        name="Raichu",
+        national_dex_number=26,
+        base_form_id=form_id,
+        is_mega=False,
+        sprite_id="raichu",
+    )
+    profile = PokemonProfile.objects.create(
+        version=version,
+        regulation=regulation,
+        form=form,
+        hp=60,
+        attack=90,
+        defense=55,
+        special_attack=90,
+        special_defense=80,
+        speed=110,
+        bst=485,
+    )
+    RegulationMembership.objects.create(profile=profile)
+    static = Ability.objects.create(version=version, canonical_id="static", name="Static")
+    static_profile = AbilityProfile.objects.create(
+        version=version,
+        regulation=regulation,
+        ability=static,
+        short_description="May paralyze.",
+        description="May paralyze on contact.",
+    )
+    PokemonProfileAbility.objects.create(
+        profile=profile, ability_profile=static_profile, slot="0" if slot_zero else "H"
+    )
+    if include_hidden:
+        lightning_rod = Ability.objects.create(
+            version=version, canonical_id="lightningrod", name="Lightning Rod"
+        )
+        lightning_rod_profile = AbilityProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            ability=lightning_rod,
+            short_description="Draws in Electric moves.",
+            description="Draws in Electric moves to raise Special Attack.",
+        )
+        PokemonProfileAbility.objects.create(
+            profile=profile, ability_profile=lightning_rod_profile, slot="H"
+        )
+    return Snapshot(version, regulation)
 
 
 @pytest.mark.django_db
@@ -1082,7 +1184,8 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
     owner_response = client.get(url)
     assert owner_response.status_code == 200
     owner_payload = owner_response.json()
-    assert owner_payload["schema_version"] == "team-builder-data-v6"
+    assert owner_payload["schema_version"] == "team-builder-data-v7"
+    assert owner_payload["forms"][0]["default_ability_id"] == "foreignability"
     assert owner_payload["forms"][0]["is_nfe"] is False
     assert owner_payload["items"] == [
         {
@@ -1093,7 +1196,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
             "stat_modifiers": [],
         }
     ]
-    old_etag = response_etag(retained.version_id, retained.canonical_id, "team-builder-data-v5")
+    old_etag = response_etag(retained.version_id, retained.canonical_id, "team-builder-data-v6")
     changed_schema_response = client.get(url, headers={"If-None-Match": old_etag})
     assert changed_schema_response.status_code == 200
     assert changed_schema_response.headers["ETag"] != old_etag
@@ -1107,7 +1210,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
 
 
 @pytest.mark.django_db
-def test_builder_dataset_v5_has_pinned_held_item_mechanics(
+def test_builder_dataset_v7_has_pinned_held_item_mechanics(
     team_data: dict[str, Any],
 ) -> None:
     owner = User.objects.create_user(username="dataset-details")
@@ -1119,7 +1222,7 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, max-age=3600"
     payload = response.json()
-    assert payload["schema_version"] == "team-builder-data-v6"
+    assert payload["schema_version"] == "team-builder-data-v7"
     assert payload["data_version"] == team_data["version"].pk
     assert payload["regulation"]["id"] == "m-c"
     assert payload["abilities"] == [
@@ -1149,6 +1252,7 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
         }
     ]
     assert payload["forms"][0]["ability_ids"] == ["static"]
+    assert payload["forms"][0]["default_ability_id"] == "static"
     assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
     assert payload["forms"][0]["is_nfe"] is True
     assert payload["pokemon_search_entries"] == [
@@ -1214,6 +1318,23 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
     assert team_data["version"].pk in payload["sprite_url_template"]
 
 
+@pytest.mark.django_db
+def test_builder_dataset_uses_showdown_slot_zero_as_default_ability() -> None:
+    dataset = builder_dataset(_ability_contract_snapshot(include_hidden=True, slot_zero=True))
+    raichu = dataset["forms"][0]
+
+    assert raichu["ability_ids"] == ["lightningrod", "static"]
+    assert raichu["default_ability_id"] == "static"
+
+
+@pytest.mark.django_db
+def test_builder_dataset_rejects_legal_profile_without_slot_zero_ability() -> None:
+    snapshot = _ability_contract_snapshot(include_hidden=False, slot_zero=False)
+
+    with pytest.raises(ValueError, match="'raichu' must have exactly one slot-0 ability"):
+        builder_dataset(snapshot)
+
+
 @pytest.mark.django_db(transaction=True)
 def test_actual_release_mega_search_entries_have_no_dangling_draft_references() -> None:
     release = (
@@ -1232,6 +1353,10 @@ def test_actual_release_mega_search_entries_have_no_dangling_draft_references() 
         item_ids = {record["id"] for record in dataset["items"]}
 
         assert {"meowstic", "meowsticf"} <= form_ids
+        assert all(form["default_ability_id"] in form["ability_ids"] for form in dataset["forms"])
+        if regulation.canonical_id == "m-c":
+            raichu = next(form for form in dataset["forms"] if form["id"] == "raichu")
+            assert raichu["default_ability_id"] == "static"
         entries_by_form = {entry["form_id"]: entry for entry in dataset["pokemon_search_entries"]}
         assert entries_by_form["meowstic"]["name"] == "Meowstic-Male"
         assert entries_by_form["meowsticf"]["name"] == "Meowstic-Female"

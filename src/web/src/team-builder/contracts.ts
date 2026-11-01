@@ -31,6 +31,7 @@ export type BuilderForm = Named & {
   is_nfe: boolean;
   types: Named[];
   ability_ids: string[];
+  default_ability_id: string;
   move_ids: string[];
   base_stats: Stats;
   sprites: { normal: string; shiny: string };
@@ -78,7 +79,7 @@ export type MegaSearchEntry = BuilderForm & {
   item_id: string;
 };
 export type BuilderData = {
-  schema_version: "team-builder-data-v6";
+  schema_version: "team-builder-data-v7";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
@@ -218,7 +219,7 @@ export function parseBootstrap(value: unknown): Bootstrap {
   return { ...(value as Bootstrap), data_url: item.dataset_url as string };
 }
 
-function assertForm(value: unknown) {
+function assertForm(value: unknown, requireDefaultAbility = false) {
   const item = record(value);
   if (
     !item ||
@@ -232,7 +233,12 @@ function assertForm(value: unknown) {
   )
     throw new Error("Invalid Pokémon form.");
   assertNamedArray(item.types);
-  if ([...item.ability_ids, ...item.move_ids].some((id) => !text(id)))
+  if (
+    [...item.ability_ids, ...item.move_ids].some((id) => !text(id)) ||
+    (requireDefaultAbility &&
+      (!text(item.default_ability_id) ||
+        !item.ability_ids.includes(item.default_ability_id)))
+  )
     throw new Error("Invalid form choices.");
   assertStats(item.base_stats);
   const sprites = record(item.sprites);
@@ -244,7 +250,7 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v6" ||
+    item.schema_version !== "team-builder-data-v7" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
     !Array.isArray(item.pokemon_search_entries) ||
@@ -290,6 +296,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       (form.type_ids as string[]).includes(type.id),
     ),
     ability_ids: form.ability_ids as string[],
+    default_ability_id: String(form.default_ability_id),
     move_ids: form.move_ids as string[],
     base_stats: convertStats(form.base_stats),
     sprites: {
@@ -297,7 +304,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       shiny: sprite(String(form.sprite_form), "shiny"),
     },
   }));
-  forms.forEach(assertForm);
+  forms.forEach((form) => assertForm(form, true));
   const pokemonSearchEntries = parsePokemonSearchEntries(
     item.pokemon_search_entries,
     forms,
@@ -446,6 +453,9 @@ export function parseBuilderData(value: unknown): BuilderData {
           types:
             forms.find((form) => form.id === relation.base_form)?.types ?? [],
           ability_ids: abilityIds,
+          default_ability_id:
+            forms.find((form) => form.id === relation.base_form)
+              ?.default_ability_id ?? "",
           move_ids: [],
           base_stats: convertStats(target.base_stats),
           sprites: {
@@ -496,6 +506,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       is_nfe: entry.is_nfe as boolean,
       types: types.filter((type) => typeIds.includes(type.id)),
       ability_ids: abilityIds,
+      default_ability_id: base.default_ability_id,
       move_ids: moveIds,
       base_stats: convertStats(entry.base_stats),
       sprites: {
@@ -504,7 +515,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       },
     };
   });
-  megaSearchEntries.forEach(assertForm);
+  megaSearchEntries.forEach((entry) => assertForm(entry));
   if (
     new Set(megaSearchEntries.map(({ id }) => id)).size !==
     megaSearchEntries.length
@@ -525,7 +536,7 @@ export function parseBuilderData(value: unknown): BuilderData {
         : nature.name,
   }));
   return {
-    schema_version: "team-builder-data-v6",
+    schema_version: "team-builder-data-v7",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
     pokemon_search_entries: pokemonSearchEntries,

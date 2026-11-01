@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { BuilderData, Member } from "./contracts";
+import type { BuilderData, Member, Nature } from "./contracts";
 import { exportTeamText, importTeamText } from "./team-text";
 
 const data: BuilderData = {
-  schema_version: "team-builder-data-v6",
+  schema_version: "team-builder-data-v7",
   data_version: "test-version",
   regulation: { id: "m-c", name: "Regulation M-C" },
   forms: [
@@ -14,6 +14,7 @@ const data: BuilderData = {
       is_nfe: false,
       types: [],
       ability_ids: ["soundproof"],
+      default_ability_id: "soundproof",
       move_ids: ["will-o-wisp", "protect"],
       base_stats: { hp: 40, atk: 45, def: 65, spa: 100, spd: 120, spe: 90 },
       sprites: { normal: "/mime.webp", shiny: "/mime-shiny.webp" },
@@ -24,7 +25,8 @@ const data: BuilderData = {
       base_species_id: "charizard",
       is_nfe: false,
       types: [],
-      ability_ids: ["blaze"],
+      ability_ids: ["blaze", "solar-power"],
+      default_ability_id: "blaze",
       move_ids: ["protect"],
       base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
       sprites: { normal: "/zard.webp", shiny: "/zard-shiny.webp" },
@@ -46,6 +48,20 @@ const data: BuilderData = {
     {
       id: "blaze",
       name: "Blaze",
+      short_description: "",
+      description: "",
+      suppresses_held_item: false,
+    },
+    {
+      id: "solar-power",
+      name: "Solar Power",
+      short_description: "",
+      description: "",
+      suppresses_held_item: false,
+    },
+    {
+      id: "tough-claws",
+      name: "Tough Claws",
       short_description: "",
       description: "",
       suppresses_held_item: false,
@@ -100,19 +116,41 @@ const data: BuilderData = {
     },
   ],
   natures: [
-    {
+    "Adamant",
+    "Bold",
+    "Brave",
+    "Calm",
+    "Careful",
+    "Gentle",
+    "Hasty",
+    "Impish",
+    "Jolly",
+    "Lax",
+    "Lonely",
+    "Mild",
+    "Modest",
+    "Naive",
+    "Naughty",
+    "Quiet",
+    "Rash",
+    "Relaxed",
+    "Sassy",
+    "Timid",
+  ]
+    .map(
+      (name): Nature => ({
+        id: name.toLowerCase(),
+        name: `${name} (+Spe/-Atk)`,
+        increased_stat: "spe",
+        decreased_stat: "atk",
+      }),
+    )
+    .concat({
       id: "serious",
       name: "Serious",
       increased_stat: null,
       decreased_stat: null,
-    },
-    {
-      id: "timid",
-      name: "Timid",
-      increased_stat: "spe",
-      decreased_stat: "atk",
-    },
-  ],
+    }),
   mega_relations: [
     {
       form_id: "charizard",
@@ -123,11 +161,12 @@ const data: BuilderData = {
         base_species_id: "charizard",
         is_nfe: false,
         types: [],
-        ability_ids: ["blaze"],
+        ability_ids: ["tough-claws"],
+        default_ability_id: "blaze",
         move_ids: ["protect"],
         base_stats: { hp: 78, atk: 130, def: 111, spa: 130, spd: 85, spe: 100 },
         sprites: { normal: "/mega.webp", shiny: "/mega-shiny.webp" },
-        ability: { id: "blaze", name: "Blaze" },
+        ability: { id: "tough-claws", name: "Tough Claws" },
       },
     },
   ],
@@ -140,7 +179,8 @@ const data: BuilderData = {
       item_id: "charizardite-x",
       is_nfe: false,
       types: [],
-      ability_ids: ["blaze"],
+      ability_ids: ["tough-claws"],
+      default_ability_id: "blaze",
       move_ids: ["protect"],
       base_stats: { hp: 78, atk: 130, def: 111, spa: 130, spd: 85, spe: 100 },
       sprites: { normal: "/mega.webp", shiny: "/mega-shiny.webp" },
@@ -181,6 +221,68 @@ describe("team text import", () => {
     });
   });
 
+  it("resolves all canonical nature names from decorated selector labels", () => {
+    data.natures.forEach((nature) => {
+      const canonical = nature.name.replace(/ \(.+\)$/, "");
+      expect(successful(`Charizard\n${canonical} Nature`)[0]?.nature_id).toBe(
+        nature.id,
+      );
+    });
+  });
+
+  it.each(["SPs", "EVs"])(
+    "treats %s as the same bounded Champions point allocation",
+    (label) => {
+      expect(
+        successful(`Charizard\n${label}: 2 HP / 32 SpA / 32 Spe`)[0]?.sp,
+      ).toEqual({ hp: 2, atk: 0, def: 0, spa: 32, spd: 0, spe: 32 });
+    },
+  );
+
+  it("preserves reported-paste fields across multiple legal sets", () => {
+    const members = successful(
+      [
+        "heleno (Mega Charizard X) @ Charizardite X",
+        "Ability: Tough Claws",
+        "EVs: 2 HP / 32 SpA / 32 Spe",
+        "Timid Nature",
+        "Shiny: Yes",
+        "- Protect",
+        "",
+        "doidão (Mr. Mime) @ Leftovers",
+        "Ability: Soundproof",
+        "EVs: 32 HP / 2 SpA / 32 Spe",
+        "Modest Nature",
+        "Shiny: Yes",
+        "- Will-O-Wisp",
+        "- Protect",
+      ].join("\n"),
+    );
+    expect(members).toMatchObject([
+      {
+        nickname: "heleno",
+        form_id: "charizard",
+        item_id: "charizardite-x",
+        ability_id: "blaze",
+        nature_id: "timid",
+        shiny: true,
+        mega_preview: true,
+        move_ids: ["protect", null, null, null],
+        sp: { hp: 2, atk: 0, def: 0, spa: 32, spd: 0, spe: 32 },
+      },
+      {
+        nickname: "doidão",
+        form_id: "mr-mime",
+        item_id: "leftovers",
+        ability_id: "soundproof",
+        nature_id: "modest",
+        shiny: true,
+        move_ids: ["will-o-wisp", "protect", null, null],
+        sp: { hp: 32, atk: 0, def: 0, spa: 2, spd: 0, spe: 32 },
+      },
+    ]);
+  });
+
   it("uses defaults, allows an empty team, and infers Mega preview", () => {
     expect(successful(" ")).toEqual([]);
     expect(successful("Charizard")[0]).toMatchObject({
@@ -189,14 +291,45 @@ describe("team text import", () => {
       item_id: null,
       shiny: false,
     });
-    expect(successful("Mega Charizard X\n- Protect")[0]).toMatchObject({
+    expect(
+      successful("Mega Charizard X @ Charizardite X\n- Protect")[0],
+    ).toMatchObject({
       form_id: "charizard",
       item_id: "charizardite-x",
       mega_preview: true,
     });
   });
 
-  it.each(["Level: 50", "EVs: 4 HP", "IVs: 0 Atk", "Tera Type: Fire"])(
+  it("normalizes Mega-only abilities and preserves legal base abilities", () => {
+    const normalized = successful(
+      "Mega Charizard X @ Charizardite X\nAbility: Tough Claws",
+    );
+    expect(normalized[0]).toMatchObject({
+      form_id: "charizard",
+      item_id: "charizardite-x",
+      ability_id: "blaze",
+      mega_preview: true,
+    });
+    expect(exportTeamText(normalized, data)).toContain(
+      "Charizard @ Charizardite X\nAbility: Blaze",
+    );
+    expect(exportTeamText(normalized, data)).not.toContain("Mega Charizard");
+    expect(exportTeamText(normalized, data)).not.toContain("Tough Claws");
+    expect(
+      successful("Charizard @ Charizardite X\nAbility: Tough Claws")[0],
+    ).toMatchObject({
+      ability_id: "blaze",
+      mega_preview: true,
+    });
+    expect(
+      successful("Charizard @ Charizardite X\nAbility: Solar Power")[0],
+    ).toMatchObject({
+      ability_id: "solar-power",
+      mega_preview: true,
+    });
+  });
+
+  it.each(["Level: 50", "IVs: 0 Atk", "Tera Type: Fire"])(
     "rejects unsupported detail %s",
     (detail) => {
       const result = importTeamText(`Charizard\n${detail}`, data);
@@ -229,8 +362,17 @@ describe("team text import", () => {
     ["Charizard @ Leftovers @ Leftovers", "use “Species @ Item”"],
     ["=== [gen9] Team name ===", "unknown"],
     ["LongNickname (Charizard)", "10 characters"],
-    ["Charizard\nSPs: 1 HP / 2 HP", "HP SP appears more than once"],
+    [
+      "Charizard\nSPs: 1 HP / 2 HP",
+      "HP Champions point appears more than once",
+    ],
     ["Charizard\nSPs: 33 HP", "must be from 0 to 32"],
+    ["Charizard\nEVs: -1 HP", "must be from 0 to 32"],
+    ["Charizard\nEVs: 1.5 HP", "invalid EVs allocation"],
+    ["Charizard\nEVs: 32 HP / 32 Atk / 3 Spe", "must not exceed 66"],
+    ["Charizard\nEVs: 1 HP\nEVs: 2 Atk", "EVs appears more than once"],
+    ["Charizard\nSPs: 1 HP\nSPs: 2 Atk", "SPs appears more than once"],
+    ["Charizard\nEVs: 1 HP\nSPs: 2 Atk", "EVs and SPs cannot be combined"],
     ["Charizard\nShiny: Maybe", "Shiny must be Yes or No"],
     ["Charizard\nShiny: Yes\nShiny: No", "Shiny appears more than once"],
     [
@@ -246,6 +388,11 @@ describe("team text import", () => {
       "Another Pokémon already holds this item",
     ],
     ["Mega Charizard X @ Leftovers", "requires its matching Mega Stone"],
+    ["Mega Charizard X\nAbility: Tough Claws", "matching Mega Stone"],
+    [
+      "Mega Charizard X @ Charizardite X\nAbility: Soundproof",
+      "not legal for Charizard or its selected Mega Evolution",
+    ],
   ])("rejects %s with a focused diagnostic", (text, diagnostic) => {
     const result = importTeamText(text, data);
     expect(result.ok).toBe(false);
@@ -294,6 +441,8 @@ describe("team text export", () => {
     expect(text).toContain("Mimey (Mr. Mime) @ Leftovers");
     expect(text).toContain("Shiny: Yes");
     expect(text).toContain("SPs: 32 HP / 2 SpA / 32 Spe");
+    expect(text).toContain("Timid Nature");
+    expect(text).not.toContain("Timid (+Spe/-Atk) Nature");
     const roundTrip = successful(text);
     expect(
       roundTrip.map(({ position: _position, ...member }) => member),

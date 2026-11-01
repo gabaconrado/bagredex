@@ -49,9 +49,11 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         types.setdefault(type_row["profile_id"], []).append(type_id)
         type_names[type_id] = type_row["type__name"]
     abilities: dict[Any, list[str]] = {}
+    default_abilities: dict[Any, list[str]] = {}
     ability_records: dict[str, dict[str, Any]] = {}
     for ability_row in PokemonProfileAbility.objects.filter(profile_id__in=profile_ids).values(
         "profile_id",
+        "slot",
         "ability_profile__ability__canonical_id",
         "ability_profile__ability__name",
         "ability_profile__short_description",
@@ -60,6 +62,8 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
     ):
         ability_id = ability_row["ability_profile__ability__canonical_id"]
         abilities.setdefault(ability_row["profile_id"], []).append(ability_id)
+        if ability_row["slot"] == "0":
+            default_abilities.setdefault(ability_row["profile_id"], []).append(ability_id)
         ability_records[ability_id] = {
             "id": ability_id,
             "name": ability_row["ability_profile__ability__name"],
@@ -67,6 +71,13 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             "description": ability_row["ability_profile__description"],
             "suppresses_held_item": ability_row["ability_profile__suppresses_held_item"],
         }
+    for profile in profiles:
+        defaults = default_abilities.get(profile.pk, [])
+        if len(defaults) != 1 or defaults[0] not in abilities.get(profile.pk, []):
+            raise ValueError(
+                f"Team builder profile {profile.form.canonical_id!r} must have exactly one "
+                "slot-0 ability."
+            )
     moves: dict[Any, list[str]] = {}
     move_records: dict[str, dict[str, Any]] = {}
     move_profile_ids: dict[Any, str] = {}
@@ -230,6 +241,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             "national_dex_number": profile.form.national_dex_number,
             "type_ids": types.get(profile.pk, []),
             "ability_ids": sorted(abilities.get(profile.pk, [])),
+            "default_ability_id": default_abilities[profile.pk][0],
             "move_ids": sorted(moves.get(profile.pk, [])),
             "base_stats": {
                 "hp": profile.hp,

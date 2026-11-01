@@ -29,6 +29,7 @@ const base: BuilderForm = {
     { id: "flying", name: "Flying" },
   ],
   ability_ids: ["blaze"],
+  default_ability_id: "blaze",
   move_ids: ["heatwave", "protect"],
   base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
   sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },

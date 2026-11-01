@@ -123,16 +123,49 @@ test("imports and exports a draft atomically before explicit save", async ({
   let dialog = page.getByRole("dialog", { name: "Import or export team" });
   const text = dialog.getByRole("textbox", { name: "Team text" });
   await expect(text).toHaveValue("");
+  const importedSet = [
+    "Blaze (Charizard) @ Sitrus Berry",
+    "Ability: Blaze",
+    "Shiny: Yes",
+    "EVs: 32 HP / 2 SpA / 32 Spe",
+    "Timid Nature",
+    "- Heat Wave",
+    "- Protect",
+    "",
+    "heleno (Gengar-Mega) @ Gengarite",
+    "Ability: Shadow Tag",
+    "EVs: 2 HP / 32 SpA / 32 Spe",
+    "Timid Nature",
+    "Shiny: Yes",
+    "",
+    "neneca (Raichu-Mega-X) @ Raichunite X",
+    "Ability: Electric Surge",
+    "EVs: 32 HP / 1 Def / 1 SpD / 32 Spe",
+    "Jolly Nature",
+    "Shiny: Yes",
+  ].join("\n");
   const canonicalSet = [
     "Blaze (Charizard) @ Sitrus Berry",
     "Ability: Blaze",
     "Shiny: Yes",
     "SPs: 32 HP / 2 SpA / 32 Spe",
-    "Serious Nature",
+    "Timid Nature",
     "- Heat Wave",
     "- Protect",
+    "",
+    "heleno (Gengar) @ Gengarite",
+    "Ability: Cursed Body",
+    "Shiny: Yes",
+    "SPs: 2 HP / 32 SpA / 32 Spe",
+    "Timid Nature",
+    "",
+    "neneca (Raichu) @ Raichunite X",
+    "Ability: Static",
+    "Shiny: Yes",
+    "SPs: 32 HP / 1 Def / 1 SpD / 32 Spe",
+    "Jolly Nature",
   ].join("\n");
-  await text.fill(canonicalSet);
+  await text.fill(importedSet);
   await dialog.getByRole("button", { name: "Import", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Charizard" })).toBeVisible();
@@ -174,10 +207,22 @@ test("imports and exports a draft atomically before explicit save", async ({
     "blaze (charizard) (M) @ sitrus-berry",
     "Trait: BLAZE",
     "Shiny: Yes",
-    "SPs: 32 hp / 2 spa / 32 spe",
-    "serious Nature",
+    "EVs: 32 hp / 2 spa / 32 spe",
+    "timid Nature",
     "- heat wave",
     "- protect",
+    "",
+    "heleno (gengar-mega) @ gengarite",
+    "Ability: SHADOW TAG",
+    "EVs: 2 hp / 32 spa / 32 spe",
+    "timid Nature",
+    "Shiny: Yes",
+    "",
+    "neneca (raichu-mega-x) @ raichunite-x",
+    "Ability: ELECTRIC SURGE",
+    "EVs: 32 hp / 1 def / 1 spd / 32 spe",
+    "jolly Nature",
+    "Shiny: Yes",
   ].join("\n");
   await exported.fill(variedSet);
   await dialog.getByRole("button", { name: "Import", exact: true }).click();
@@ -202,7 +247,7 @@ test("imports and exports a draft atomically before explicit save", async ({
       ability: "blaze",
       item: "sitrusberry",
       moves: ["heatwave", "protect", null, null],
-      nature: "serious",
+      nature: "timid",
       sp: {
         hp: 32,
         attack: 0,
@@ -213,6 +258,44 @@ test("imports and exports a draft atomically before explicit save", async ({
       },
       shiny: true,
       mega_preview: false,
+    },
+    {
+      position: 1,
+      pokemon: "gengar",
+      nickname: "heleno",
+      ability: "cursedbody",
+      item: "gengarite",
+      moves: [null, null, null, null],
+      nature: "timid",
+      sp: {
+        hp: 2,
+        attack: 0,
+        defense: 0,
+        special_attack: 32,
+        special_defense: 0,
+        speed: 32,
+      },
+      shiny: true,
+      mega_preview: true,
+    },
+    {
+      position: 2,
+      pokemon: "raichu",
+      nickname: "neneca",
+      ability: "static",
+      item: "raichunitex",
+      moves: [null, null, null, null],
+      nature: "jolly",
+      sp: {
+        hp: 32,
+        attack: 0,
+        defense: 1,
+        special_attack: 0,
+        special_defense: 1,
+        speed: 32,
+      },
+      shiny: true,
+      mega_preview: true,
     },
   ]);
   expect(saveRequests).toBe(2);
