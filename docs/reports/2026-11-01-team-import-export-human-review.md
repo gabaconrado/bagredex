@@ -57,4 +57,5 @@ None.
 
 ## Commits
 
-This supplemental report is included in the pending reviewed-result commit.
+Reviewed-result commit: `81618fc0bb809d8f7eb35e3a51b1af84f25eefd8`
+(`fix: improve team text compatibility`).
