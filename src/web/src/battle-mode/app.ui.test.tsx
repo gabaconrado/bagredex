@@ -12,9 +12,9 @@ import { damageCalculatorDataV2 as fixture } from "../test-fixtures/damage-calcu
 import { BattleMode } from "./app";
 import type { BattleBootstrap } from "./contracts";
 
-const searchable = (
-  fixture.forms as { id: string; searchable: boolean; is_mega: boolean }[]
-).filter(({ searchable, is_mega }) => searchable && !is_mega);
+const searchable = fixture.pokemon_search_entries.map(({ form_id: id }) => ({
+  id,
+}));
 
 const bootstrap: BattleBootstrap = {
   schema_version: "battle-mode-bootstrap-v2",
@@ -41,8 +41,8 @@ const bootstrap: BattleBootstrap = {
 };
 
 const battleForm = fixture.forms.find(
-  ({ searchable, is_mega, abilities }) =>
-    searchable && !is_mega && abilities.length > 0,
+  ({ id, abilities }) =>
+    searchable.some((entry) => entry.id === id) && abilities.length > 0,
 )!;
 const battleNature =
   fixture.natures.find(({ id }) => id === "serious") ?? fixture.natures[0]!;

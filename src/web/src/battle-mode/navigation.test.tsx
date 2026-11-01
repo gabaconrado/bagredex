@@ -5,11 +5,10 @@ import { BattleMode } from "./app";
 import type { BattleBootstrap } from "./contracts";
 
 const data = fixture;
-const searchable = (
-  fixture.forms as { id: string; searchable: boolean; is_mega: boolean }[]
-)
-  .filter(({ searchable, is_mega }) => searchable && !is_mega)
-  .map(({ id }) => [id, id]);
+const searchable = fixture.pokemon_search_entries.map(({ form_id }) => [
+  form_id,
+  form_id,
+]);
 const bootstrap: BattleBootstrap = {
   schema_version: "battle-mode-bootstrap-v2",
   active_version: fixture.data_version,

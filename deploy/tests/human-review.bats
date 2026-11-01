@@ -381,7 +381,7 @@ candidate_review() {
   grep -Fxq 'STATE=ready' "${SESSION_CACHE}/session"
   ! grep -Fq 'reviewer;safe' "${COMMAND_LOG}"
   ! grep -Fq 'password;not-a-command' "${COMMAND_LOG}"
-  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s6-i8-e712c7acc763' \
+  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s7-i9-78b322057dd0' \
     "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
 }
@@ -478,7 +478,7 @@ candidate_review() {
   run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${invalid_pin}" \
     "${REPOSITORY_ROOT}/bagredex.sh" human-review status
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"ACTIVE_BUNDLE: showdown-multi-s6-i8-e712c7acc763"* ]]
+  [[ "${output}" == *"ACTIVE_BUNDLE: showdown-multi-s7-i9-78b322057dd0"* ]]
   cmp "${TEST_TEMP}/marker.before" "${SESSION_CACHE}/session"
   ! grep -Eq ' build |rm -f|migrate|load_pokemon_data|activate_pokemon_data' "${COMMAND_LOG}"
 }
@@ -644,7 +644,7 @@ candidate_review() {
   marker_base="$(sed -n 's/^BASE_COMMIT=//p' "${SESSION_CACHE}/session")"
   [ "${marker_base}" = "${reported}" ]
   [ "${marker_base}" != "${head}" ]
-  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s6-i8-e712c7acc763' \
+  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s7-i9-78b322057dd0' \
     "${SESSION_CACHE}/session"
 }
 

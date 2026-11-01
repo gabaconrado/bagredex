@@ -329,6 +329,77 @@ console.log(JSON.stringify(facts));
             )
         )
 
+    def test_membership_provenance_release_has_exact_meowstic_delta(self) -> None:
+        releases = Path(__file__).parents[1] / "releases"
+        previous = releases / "showdown-multi-s6-i8-e712c7acc763"
+        release = releases / "showdown-multi-s7-i9-78b322057dd0"
+        self.assertEqual(validate_bundle(previous)["status"], "valid")
+        summary = validate_bundle(release)
+        self.assertEqual(summary["status"], "valid")
+        self.assertEqual(
+            summary["counts"]["legal_forms_by_regulation"],
+            {"m-a": 273, "m-b": 315, "m-c": 350},
+        )
+        memberships = json.loads(
+            (release / "regulation_memberships.json").read_text(encoding="utf-8")
+        )
+        female = [value for value in memberships if value["form_id"] == "meowsticf"]
+        self.assertEqual(
+            female,
+            [
+                {
+                    "form_id": "meowsticf",
+                    "regulation_id": regulation_id,
+                    "resolution": "related-fixed-sex",
+                    "source_form_id": "meowstic",
+                }
+                for regulation_id in ("m-a", "m-b", "m-c")
+            ],
+        )
+        self.assertTrue(
+            all(
+                value["resolution"] == "direct"
+                and value["source_form_id"] == value["form_id"]
+                for value in memberships
+                if value["form_id"] != "meowsticf"
+            )
+        )
+        difference = compare_bundles(previous, release)["files"]
+        changed_files = {
+            filename
+            for filename, value in difference.items()
+            if value["added"] or value["removed"] or value["changed"]
+        }
+        self.assertEqual(changed_files, {"regulation_memberships.json"})
+        membership_delta = difference["regulation_memberships.json"]
+        self.assertEqual(
+            membership_delta["added_keys"],
+            ["m-a:meowsticf", "m-b:meowsticf", "m-c:meowsticf"],
+        )
+        self.assertEqual(membership_delta["changed"], 935)
+
+    def test_membership_provenance_release_rejects_invalid_relations(self) -> None:
+        release = (
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s7-i9-78b322057dd0"
+        )
+        mutations = (
+            lambda values: values[0].update(resolution="unknown"),
+            lambda values: values[0].update(source_form_id="meowstic"),
+            lambda values: next(
+                value for value in values if value["form_id"] == "meowsticf"
+            ).update(source_form_id="meowsticf"),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate), tempfile.TemporaryDirectory() as name:
+                bundle = Path(name) / release.name
+                shutil.copytree(release, bundle)
+                path = bundle / "regulation_memberships.json"
+                values = json.loads(path.read_text(encoding="utf-8"))
+                mutate(values)
+                path.write_bytes(_canonical_bytes(values))
+                with self.assertRaises(BundleError):
+                    validate_bundle(bundle, verify_manifest=False)
+
 
 class SpriteSelectionTests(unittest.TestCase):
     def test_both_home_variants_are_converted_and_hashed(self) -> None:
@@ -591,6 +662,34 @@ class SchemaArtifactTests(unittest.TestCase):
                 self.assertIsInstance(
                     json.loads(path.read_text(encoding="utf-8")), dict
                 )
+
+    def test_v7_schema_pins_membership_provenance_release(self) -> None:
+        data_root = Path(__file__).parents[1]
+        schema = json.loads(
+            (data_root / "schema" / "bundle-v7.schema.json").read_text()
+        )
+        manifest = json.loads(
+            (
+                data_root
+                / "releases"
+                / "showdown-multi-s7-i9-78b322057dd0"
+                / "manifest.json"
+            ).read_text()
+        )
+        properties = schema["properties"]
+        for field in (
+            "bundle_id",
+            "bundle_hash",
+            "bundle_schema_version",
+            "importer_version",
+            "source_shape_version",
+        ):
+            self.assertEqual(manifest[field], properties[field]["const"])
+        self.assertEqual(manifest["counts"]["memberships"], 938)
+        self.assertEqual(
+            manifest["counts"]["legal_forms_by_regulation"],
+            {"m-a": 273, "m-b": 315, "m-c": 350},
+        )
 
     def test_v2_schema_pins_complete_published_manifest_and_rejects_mutations(
         self,
@@ -897,6 +996,85 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(json.loads(result.stdout), ["base", "basef"])
 
+    def test_related_fixed_sex_membership_records_provenance(self) -> None:
+        module = (
+            Path(__file__).parents[1] / "importer" / "membership-resolution.mjs"
+        ).as_uri()
+        script = (
+            f"import {{resolveRegulationMemberships}} from {json.dumps(module)};"
+            "const formats={base:{tier:'OU'}};"
+            "const pokedex={"
+            "base:{name:'Base',gender:'M',otherFormes:['Base-F','Base-Mega']},"
+            "basef:{name:'Base-F',baseSpecies:'Base',forme:'F',gender:'F'},"
+            "basemega:{name:'Base-Mega',baseSpecies:'Base',forme:'Mega',gender:'M'}"
+            "};"
+            "process.stdout.write(JSON.stringify(resolveRegulationMemberships("
+            "formats,pokedex,'champions FormatsData')));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            json.loads(result.stdout),
+            [
+                {
+                    "form_id": "base",
+                    "resolution": "direct",
+                    "source_form_id": "base",
+                },
+                {
+                    "form_id": "basef",
+                    "resolution": "related-fixed-sex",
+                    "source_form_id": "base",
+                },
+            ],
+        )
+
+    def test_related_fixed_sex_membership_fails_closed(self) -> None:
+        module = (
+            Path(__file__).parents[1] / "importer" / "membership-resolution.mjs"
+        ).as_uri()
+        script = (
+            f"import {{resolveRegulationMemberships}} from {json.dumps(module)};"
+            "const base={name:'Base',gender:'M',otherFormes:['Base-F']};"
+            "const candidate={name:'Base-F',baseSpecies:'Base',forme:'F',gender:'F'};"
+            "const cases=["
+            "[{base:{tier:'OU'},basef:{tier:'Illegal'}},{base,basef:candidate}],"
+            "[{base:{tier:'OU'}},{base,basef:{...candidate,baseSpecies:'Other'}}],"
+            "[{base:{tier:'OU'}},{base,basef:{...candidate,gender:'variable'}}],"
+            "[{base:{tier:'OU'}},{base,basef:{...candidate,forme:'F-Mega'}}]"
+            "];"
+            "const results=cases.map(([formats,pokedex])=>resolveRegulationMemberships("
+            "formats,pokedex,'champions FormatsData'));"
+            "const failures=[];"
+            "for(const [formats,pokedex] of [[{base:{tier:'OU'}},{base}],"
+            "[{base:{tier:'OU'},basef:null},{base,basef:candidate}],"
+            "[{base:{tier:'OU'}},{base:{...base,otherFormes:['Base-F','Base-F']},basef:candidate}]]){"
+            "try{resolveRegulationMemberships(formats,pokedex,'champions FormatsData');"
+            "failures.push(null);}catch(error){failures.push(error.message);}}"
+            "process.stdout.write(JSON.stringify({results,failures}));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        value = json.loads(result.stdout)
+        direct = [{"form_id": "base", "resolution": "direct", "source_form_id": "base"}]
+        self.assertEqual(value["results"], [direct, direct, direct, direct])
+        self.assertEqual(
+            value["failures"],
+            [
+                "data/pokedex.ts: base related form basef is missing",
+                "champions FormatsData basef: expected an object",
+                "champions FormatsData: duplicate related fixed-sex form basef",
+            ],
+        )
+
     def test_current_future_membership_candidates_are_exactly_magearna_megas(
         self,
     ) -> None:
@@ -956,8 +1134,8 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         second = _extract(showdown)
         self.assertEqual(_canonical_bytes(first), _canonical_bytes(second))
         self.assertEqual({value["id"] for value in first["formats"]}, {"m-b", "m-c"})
-        self.assertEqual(len(first["regulations"]["m-c"]["memberships"]), 349)
-        self.assertEqual(len(first["regulations"]["m-b"]["memberships"]), 314)
+        self.assertEqual(len(first["regulations"]["m-c"]["memberships"]), 350)
+        self.assertEqual(len(first["regulations"]["m-b"]["memberships"]), 315)
         for regulation_id in ("m-c", "m-b"):
             membership_ids = {
                 value["form_id"]
@@ -965,6 +1143,20 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             }
             self.assertNotIn("magearnamega", membership_ids)
             self.assertNotIn("magearnaoriginalmega", membership_ids)
+            self.assertIn("meowsticf", membership_ids)
+            female = next(
+                value
+                for value in first["regulations"][regulation_id]["memberships"]
+                if value["form_id"] == "meowsticf"
+            )
+            self.assertEqual(
+                female,
+                {
+                    "form_id": "meowsticf",
+                    "resolution": "related-fixed-sex",
+                    "source_form_id": "meowstic",
+                },
+            )
         forms = {value["id"]: value for value in first["forms"]}
         self.assertEqual(forms["charizardmegax"]["sprite_id"], "charizard-megax")
         self.assertTrue(forms["absolmegaz"]["is_mega"])

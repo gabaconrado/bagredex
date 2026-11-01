@@ -70,6 +70,55 @@ afterEach(() => {
 });
 
 describe("DamageCalculator", () => {
+  it("switches a grouped canonical form without resetting battle fields", async () => {
+    const grouped = structuredClone(fixture) as CalculatorData;
+    const base = grouped.forms.find(({ id }) => id === "charizard")!;
+    grouped.forms.push({
+      ...base,
+      id: "charizardrainy",
+      name: "Charizard-Rainy",
+      sprite_form_id: "charizardrainy",
+      abilities: base.abilities.slice(0, 1),
+      move_ids: base.move_ids.slice(0, 1),
+      base_stats: { ...base.base_stats, hp: base.base_stats.hp + 20 },
+    });
+    const index = grouped.pokemon_search_entries.findIndex(
+      ({ form_id }) => form_id === "charizard",
+    );
+    grouped.pokemon_search_entries[index] = {
+      form_id: "charizard",
+      name: "Charizard",
+      form_group: {
+        label: "Form",
+        options: [
+          { id: "charizard", label: "Castform" },
+          { id: "charizardrainy", label: "Rainy" },
+        ],
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(grouped),
+        } as Response),
+      ),
+    );
+    render(<DamageCalculator bootstrap={bootstrap} />);
+    choose((await screen.findAllByLabelText("Pokémon"))[0]!, "Charizard");
+    const form = screen.getByLabelText("Form") as HTMLSelectElement;
+    fireEvent.change(form, { target: { value: "charizardrainy" } });
+    expect(form.value).toBe("charizardrainy");
+    expect(screen.getAllByText("Charizard-Rainy").length).toBeGreaterThan(0);
+    const pokemon = screen.getAllByLabelText("Pokémon")[0] as HTMLInputElement;
+    expect(pokemon.value).toBe("Charizard");
+    fireEvent.focus(pokemon);
+    fireEvent.blur(pokemon);
+    expect(pokemon.value).toBe("Charizard");
+    expect(form.value).toBe("charizardrainy");
+  });
+
   it("keeps one move modifier open and restores trigger focus on dismissal", async () => {
     vi.stubGlobal("fetch", vi.fn(contextualResponse));
     render(<DamageCalculator bootstrap={bootstrap} />);

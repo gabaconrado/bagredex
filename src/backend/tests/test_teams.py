@@ -15,7 +15,9 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from bagredex.accounts.models import User
-from bagredex.pokedex import Snapshot
+from bagredex.battle_mode.bootstrap import battle_mode_bootstrap
+from bagredex.pokedex import Snapshot, response_etag
+from bagredex.pokemon_data.form_groups import GROUPED_FORM_OPTIONS
 from bagredex.pokemon_data.models import (
     Ability,
     AbilityProfile,
@@ -1080,7 +1082,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
     owner_response = client.get(url)
     assert owner_response.status_code == 200
     owner_payload = owner_response.json()
-    assert owner_payload["schema_version"] == "team-builder-data-v5"
+    assert owner_payload["schema_version"] == "team-builder-data-v6"
     assert owner_payload["forms"][0]["is_nfe"] is False
     assert owner_payload["items"] == [
         {
@@ -1091,8 +1093,15 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
             "stat_modifiers": [],
         }
     ]
+    old_etag = response_etag(retained.version_id, retained.canonical_id, "team-builder-data-v5")
+    changed_schema_response = client.get(url, headers={"If-None-Match": old_etag})
+    assert changed_schema_response.status_code == 200
+    assert changed_schema_response.headers["ETag"] != old_etag
+    repeated = client.get(url, headers={"If-None-Match": changed_schema_response.headers["ETag"]})
+    assert repeated.status_code == 304
+    assert repeated.headers["Cache-Control"] == "private, max-age=3600"
     client.force_login(other)
-    response = client.get(url)
+    response = client.get(url, headers={"If-None-Match": changed_schema_response.headers["ETag"]})
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "data-unavailable"
 
@@ -1110,7 +1119,7 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, max-age=3600"
     payload = response.json()
-    assert payload["schema_version"] == "team-builder-data-v5"
+    assert payload["schema_version"] == "team-builder-data-v6"
     assert payload["data_version"] == team_data["version"].pk
     assert payload["regulation"]["id"] == "m-c"
     assert payload["abilities"] == [
@@ -1142,6 +1151,19 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
     assert payload["forms"][0]["ability_ids"] == ["static"]
     assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
     assert payload["forms"][0]["is_nfe"] is True
+    assert payload["pokemon_search_entries"] == [
+        {"form_id": "pikachu", "name": "Pikachu", "form_group": None},
+        {
+            "form_id": "pikachurockstar",
+            "name": "Pikachu-Rock-Star",
+            "form_group": None,
+        },
+        {"form_id": "species1", "name": "Species 1", "form_group": None},
+        {"form_id": "species2", "name": "Species 2", "form_group": None},
+        {"form_id": "species3", "name": "Species 3", "form_group": None},
+        {"form_id": "species4", "name": "Species 4", "form_group": None},
+        {"form_id": "species5", "name": "Species 5", "form_group": None},
+    ]
     assert payload["mega_relations"][0]["target"]["ability_ids"] == ["static"]
     assert payload["mega_relations"][0]["target"]["is_nfe"] is False
     assert payload["mega_search_entries"] == [
@@ -1195,7 +1217,7 @@ def test_builder_dataset_v5_has_pinned_held_item_mechanics(
 @pytest.mark.django_db(transaction=True)
 def test_actual_release_mega_search_entries_have_no_dangling_draft_references() -> None:
     release = (
-        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s5-i7-49850c617dd2"
+        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s7-i9-78b322057dd0"
     )
     if not release.is_dir():
         pytest.skip("the reviewed form-search release is required")
@@ -1209,7 +1231,22 @@ def test_actual_release_mega_search_entries_have_no_dangling_draft_references() 
         move_ids = {record["id"] for record in dataset["moves"]}
         item_ids = {record["id"] for record in dataset["items"]}
 
-        assert "meowsticf" not in form_ids
+        assert {"meowstic", "meowsticf"} <= form_ids
+        entries_by_form = {entry["form_id"]: entry for entry in dataset["pokemon_search_entries"]}
+        assert entries_by_form["meowstic"]["name"] == "Meowstic-Male"
+        assert entries_by_form["meowsticf"]["name"] == "Meowstic-Female"
+        for base_id, options in GROUPED_FORM_OPTIONS.items():
+            available = [
+                {"id": form_id, "label": label} for form_id, label in options if form_id in form_ids
+            ]
+            if not available:
+                assert base_id not in entries_by_form
+                continue
+            representative = available[0]["id"]
+            assert entries_by_form[representative]["form_group"] == (
+                {"label": "Form", "options": available} if len(available) > 1 else None
+            )
+            assert not any(option["id"] in entries_by_form for option in available[1:])
         assert all(entry["base_form_id"] in form_ids for entry in dataset["mega_search_entries"])
         assert all(entry["item_id"] in item_ids for entry in dataset["mega_search_entries"])
         assert all(
@@ -1227,6 +1264,111 @@ def test_actual_release_mega_search_entries_have_no_dangling_draft_references() 
                 base_form__is_mega=False,
             ).select_related("mega_form")
         }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_female_meowstic_round_trips_and_keeps_species_clause() -> None:
+    release = (
+        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s7-i9-78b322057dd0"
+    )
+    loaded = load_pokemon_data(release).version
+    activate_pokemon_data(loaded.pk)
+    regulation = Regulation.objects.get(version=loaded, canonical_id="m-c")
+    female = PokemonProfile.objects.get(regulation=regulation, form__canonical_id="meowsticf")
+    ability = female.abilities.select_related("ability_profile__ability").order_by("slot").first()
+    relation = MegaItemRelation.objects.select_related("item_profile__item", "mega_form").get(
+        regulation=regulation,
+        base_form=female.form,
+    )
+    assert relation.mega_form.canonical_id == "meowsticfmega"
+    assert ability is not None
+
+    owner = User.objects.create_user(username="female-meowstic-owner")
+    client = Client()
+    client.force_login(owner)
+    draft: dict[str, Any] = {
+        "schema_version": "team-draft-v1",
+        "version": loaded.pk,
+        "regulation": "m-c",
+        "name": "Female Meowstic",
+        "members": [
+            {
+                "position": 0,
+                "pokemon": "meowsticf",
+                "nickname": "Oracle",
+                "ability": ability.ability_profile.ability.canonical_id,
+                "item": relation.item_profile.item.canonical_id,
+                "moves": [None, None, None, None],
+                "nature": "serious",
+                "sp": {
+                    stat: 0
+                    for stat in (
+                        "hp",
+                        "attack",
+                        "defense",
+                        "special_attack",
+                        "special_defense",
+                        "speed",
+                    )
+                },
+                "shiny": False,
+                "mega_preview": True,
+            }
+        ],
+    }
+    created = client.post("/teams/", data=json.dumps(draft), content_type="application/json")
+    assert created.status_code == 201
+    aggregate = created.json()["data"]
+    assert aggregate["members"][0]["pokemon"] == "meowsticf"
+    assert aggregate["members"][0]["mega_target"] == "meowsticfmega"
+
+    team_url = f"/teams/{aggregate['id']}/"
+    draft["name"] = "Female Meowstic Updated"
+    updated = client.put(team_url, data=json.dumps(draft), content_type="application/json")
+    assert updated.status_code == 200
+    assert client.get(team_url).json()["data"]["members"][0]["pokemon"] == "meowsticf"
+
+    duplicate = dict(draft)
+    male = PokemonProfile.objects.get(regulation=regulation, form__canonical_id="meowstic")
+    male_ability = (
+        male.abilities.select_related("ability_profile__ability").order_by("slot").first()
+    )
+    assert male_ability is not None
+    duplicate["members"] = [
+        draft["members"][0],
+        {
+            **draft["members"][0],
+            "position": 1,
+            "pokemon": "meowstic",
+            "ability": male_ability.ability_profile.ability.canonical_id,
+            "item": None,
+            "mega_preview": False,
+        },
+    ]
+    rejected = client.put(team_url, data=json.dumps(duplicate), content_type="application/json")
+    assert rejected.status_code == 400
+    assert rejected.json()["error"]["fields"]["members.1.pokemon"]
+
+    bootstrap = battle_mode_bootstrap(owner, Snapshot(loaded, regulation))
+    dataset = builder_dataset(Snapshot(loaded, regulation))
+    reachable = {
+        option["id"]
+        for entry in dataset["pokemon_search_entries"]
+        for option in (
+            entry["form_group"]["options"]
+            if entry["form_group"] is not None
+            else [{"id": entry["form_id"]}]
+        )
+    }
+    assert reachable == set(bootstrap["base_species_by_form"])
+
+    prior = load_pokemon_data(
+        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s6-i8-e712c7acc763"
+    ).version
+    activate_pokemon_data(prior.pk)
+    retained = client.get(team_url)
+    assert retained.status_code == 200
+    assert retained.json()["data"]["members"][0]["pokemon"] == "meowsticf"
 
 
 @pytest.mark.django_db

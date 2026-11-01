@@ -332,7 +332,9 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
     RegulationMembership.objects.bulk_create(
         [
             RegulationMembership(
-                profile=profiles[(_string(record, "regulation_id"), _string(record, "form_id"))]
+                profile=profiles[(_string(record, "regulation_id"), _string(record, "form_id"))],
+                resolution=cast(str, record.get("resolution", "direct")),
+                source_form_id=cast(str, record.get("source_form_id", record["form_id"])),
             )
             for record in bundle.records["regulation_memberships.json"]
         ]

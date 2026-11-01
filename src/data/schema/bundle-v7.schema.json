@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/bundle-v7.schema.json",
+  "title": "Bagredex membership-provenance Pokémon bundle manifest",
+  "description": "Pinned schema-7 manifest with normalized regulation membership provenance.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown_sources",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": { "const": "showdown-multi-s7-i9-78b322057dd0" },
+    "bundle_hash": {
+      "const": "78b322057dd0eedc67fcd8b05b274fa50697698f94ed25d1e31f2580a6fa7eae"
+    },
+    "bundle_schema_version": { "const": "7" },
+    "importer_version": { "const": "9" },
+    "source_shape_version": { "const": "showdown-champions-multi-revision-7" },
+    "showdown_sources": { "type": "array", "minItems": 2, "maxItems": 2 },
+    "counts": {
+      "type": "object",
+      "required": ["memberships", "legal_forms_by_regulation"],
+      "properties": {
+        "memberships": { "const": 938 },
+        "legal_forms_by_regulation": {
+          "const": { "m-a": 273, "m-b": 315, "m-c": 350 }
+        }
+      }
+    },
+    "files": { "type": "array", "minItems": 34 }
+  },
+  "additionalProperties": true
+}

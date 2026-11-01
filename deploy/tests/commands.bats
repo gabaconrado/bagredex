@@ -102,10 +102,10 @@ setup_review_mocks() {
     "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" ]
   [ "$(grep -n '^npm .* run build$' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" -lt \
     "$(grep -n 'compose .* build server' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" ]
-  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s6-i8-e712c7acc763' \
+  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s7-i9-78b322057dd0' \
     "${COMMAND_LOG}"
-  grep -Fq 'activate_pokemon_data showdown-multi-s6-i8-e712c7acc763' "${COMMAND_LOG}"
-  ! grep -Fq 'activate_pokemon_data showdown-multi-s6-i8-e712c7acc763 --if-none' \
+  grep -Fq 'activate_pokemon_data showdown-multi-s7-i9-78b322057dd0' "${COMMAND_LOG}"
+  ! grep -Fq 'activate_pokemon_data showdown-multi-s7-i9-78b322057dd0 --if-none' \
     "${COMMAND_LOG}"
   grep -Fq 'run --rm -T server python manage.py shell -c' "${COMMAND_LOG}"
   [ "$(grep -n ' up -d database' "${COMMAND_LOG}" | head -1 | cut -d: -f1)" -lt \
@@ -340,7 +340,7 @@ setup_review_mocks() {
 
 @test "deployment pins one approved Pokemon data bundle" {
   grep -Fxq \
-    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s6-i8-e712c7acc763' \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s7-i9-78b322057dd0' \
     "${REPOSITORY_ROOT}/deploy/pokemon-data.env"
   ! grep -Eq 'find .*src/data/releases|ls .*src/data/releases' \
     "${REPOSITORY_ROOT}/deploy/scripts/remote-release-worker.sh"

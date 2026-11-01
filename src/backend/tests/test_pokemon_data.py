@@ -208,6 +208,32 @@ def test_held_item_mechanics_release_is_exact_and_prior_release_remains_retained
     assert prior.manifest["importer_version"] == "7"
 
 
+def test_membership_provenance_release_is_exact_and_prior_release_remains_retained() -> None:
+    releases = Path(settings.POKEMON_DATA_RELEASES_ROOT)
+    current = read_bundle(releases / "showdown-multi-s7-i9-78b322057dd0")
+    prior = read_bundle(releases / "showdown-multi-s6-i8-e712c7acc763")
+
+    assert current.manifest["bundle_schema_version"] == "7"
+    assert current.manifest["importer_version"] == "9"
+    memberships = current.records["regulation_memberships.json"]
+    female = [record for record in memberships if record["form_id"] == "meowsticf"]
+    assert female == [
+        {
+            "regulation_id": regulation_id,
+            "form_id": "meowsticf",
+            "resolution": "related-fixed-sex",
+            "source_form_id": "meowstic",
+        }
+        for regulation_id in ("m-a", "m-b", "m-c")
+    ]
+    assert all(
+        record["source_form_id"] == record["form_id"]
+        for record in memberships
+        if record["resolution"] == "direct"
+    )
+    assert prior.manifest["bundle_schema_version"] == "6"
+
+
 @pytest.mark.parametrize(
     ("filename", "mutate", "message"),
     [

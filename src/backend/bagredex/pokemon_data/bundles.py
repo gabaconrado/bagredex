@@ -31,7 +31,13 @@ CALCULATOR_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-5"
 HELD_ITEM_SCHEMA_VERSION = "6"
 HELD_ITEM_IMPORTER_VERSION = "8"
 HELD_ITEM_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-6"
-CALCULATOR_SCHEMA_VERSIONS = frozenset({CALCULATOR_SCHEMA_VERSION, HELD_ITEM_SCHEMA_VERSION})
+MEMBERSHIP_SCHEMA_VERSION = "7"
+MEMBERSHIP_IMPORTER_VERSION = "9"
+MEMBERSHIP_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-7"
+HELD_ITEM_SCHEMA_VERSIONS = frozenset({HELD_ITEM_SCHEMA_VERSION, MEMBERSHIP_SCHEMA_VERSION})
+CALCULATOR_SCHEMA_VERSIONS = frozenset(
+    {CALCULATOR_SCHEMA_VERSION, HELD_ITEM_SCHEMA_VERSION, MEMBERSHIP_SCHEMA_VERSION}
+)
 ITEM_DESCRIPTION_SCHEMA_VERSIONS = frozenset(
     {ITEM_INFO_SCHEMA_VERSION, *CALCULATOR_SCHEMA_VERSIONS}
 )
@@ -270,6 +276,38 @@ FORM_SEARCH_GROUP_COUNTS = {
     },
 }
 PINNED_RELEASE_CONTRACTS = {
+    "showdown-multi-s7-i9-78b322057dd0": (
+        "78b322057dd0eedc67fcd8b05b274fa50697698f94ed25d1e31f2580a6fa7eae",
+        {
+            **FORM_SEARCH_PINNED_COUNTS,
+            "memberships": 938,
+        },
+        {
+            **FORM_SEARCH_GROUP_COUNTS,
+            "legal_forms_by_regulation": {"m-a": 273, "m-b": 315, "m-c": 350},
+        },
+        "6b38776ae3eb0cb94e582b213236abff522c378e65fda85a72724cc0a42f77eb",
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_item_texts": 564,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_item_texts": 583,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
+    ),
     "showdown-multi-s6-i8-e712c7acc763": (
         "e712c7acc763effbfdca5c9f742631ee7bd563d6c0307b88f6f4a83ecc415846",
         FORM_SEARCH_PINNED_COUNTS,
@@ -1057,7 +1095,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
                 keys.update({"short_description", "description", "description_source"})
             if schema_version in CALCULATOR_SCHEMA_VERSIONS:
                 keys.update({"contextual_inputs", "calculation"})
-            if schema_version == HELD_ITEM_SCHEMA_VERSION:
+            if schema_version in HELD_ITEM_SCHEMA_VERSIONS:
                 keys.add("stat_modifiers")
             _exact_keys(record, keys, label)
             _identifier(record, "regulation_id", label)
@@ -1089,7 +1127,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
                     f"{label}:calculation",
                     {_string(item, "id", "types.json") for item in records["types.json"]},
                 )
-            if schema_version == HELD_ITEM_SCHEMA_VERSION:
+            if schema_version in HELD_ITEM_SCHEMA_VERSIONS:
                 modifiers = _records(record.get("stat_modifiers"), f"{label}:stat_modifiers")
                 for modifier_index, modifier in enumerate(modifiers):
                     modifier_label = f"{label}:stat_modifiers[{modifier_index}]"
@@ -1117,9 +1155,16 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         _identifier(record, "id", label)
     for index, record in enumerate(records["regulation_memberships.json"]):
         label = f"regulation_memberships.json[{index}]"
-        _exact_keys(record, {"regulation_id", "form_id"}, label)
+        membership_keys = {"regulation_id", "form_id"}
+        if schema_version == MEMBERSHIP_SCHEMA_VERSION:
+            membership_keys |= {"resolution", "source_form_id"}
+        _exact_keys(record, membership_keys, label)
         _identifier(record, "regulation_id", label)
         _identifier(record, "form_id", label)
+        if schema_version == MEMBERSHIP_SCHEMA_VERSION:
+            if record.get("resolution") not in {"direct", "related-fixed-sex"}:
+                raise BundleReadError(f"{label}: invalid resolution")
+            _identifier(record, "source_form_id", label)
     for index, record in enumerate(records["profiles.json"]):
         label = f"profiles.json[{index}]"
         profile_keys = {"regulation_id", "form_id", "stats", "bst", "types", "abilities"}
@@ -1154,7 +1199,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
     }
     if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         ability_profile_keys.add("contextual_inputs")
-    if schema_version == HELD_ITEM_SCHEMA_VERSION:
+    if schema_version in HELD_ITEM_SCHEMA_VERSIONS:
         ability_profile_keys.add("suppresses_held_item")
     for index, record in enumerate(records["ability_profiles.json"]):
         label = f"ability_profiles.json[{index}]"
@@ -1168,7 +1213,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
             _validate_contextual_inputs(
                 record.get("contextual_inputs"), f"{label}:contextual_inputs"
             )
-        if schema_version == HELD_ITEM_SCHEMA_VERSION:
+        if schema_version in HELD_ITEM_SCHEMA_VERSIONS:
             _boolean(record, "suppresses_held_item", label)
     move_profile_keys = {
         "regulation_id",
@@ -1579,6 +1624,40 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         raise BundleReadError(
             "regulation_memberships.json: membership without an effective profile"
         )
+    if schema_version == MEMBERSHIP_SCHEMA_VERSION:
+        membership_records = {
+            (
+                _string(item, "regulation_id", "regulation_memberships.json"),
+                _string(item, "form_id", "regulation_memberships.json"),
+            ): item
+            for item in records["regulation_memberships.json"]
+        }
+        forms_by_id = {_string(item, "id", "forms.json"): item for item in records["forms.json"]}
+        for (regulation_id, form_id), membership in membership_records.items():
+            resolution = _string(membership, "resolution", "regulation_memberships.json")
+            source_form_id = _string(membership, "source_form_id", "regulation_memberships.json")
+            if resolution == "direct":
+                if source_form_id != form_id:
+                    raise BundleReadError(
+                        "regulation_memberships.json: direct membership must self-source"
+                    )
+                continue
+            source = membership_records.get((regulation_id, source_form_id))
+            target_form = forms_by_id[form_id]
+            source_form = forms_by_id.get(source_form_id)
+            if (
+                source is None
+                or source.get("resolution") != "direct"
+                or source_form is None
+                or source_form_id == form_id
+                or target_form.get("is_mega") is not False
+                or source_form.get("is_mega") is not False
+                or target_form.get("base_form_id") != source_form.get("base_form_id")
+                or {target_form.get("gender"), source_form.get("gender")} != {"M", "F"}
+            ):
+                raise BundleReadError(
+                    "regulation_memberships.json: invalid related fixed-sex provenance"
+                )
     if schema_version in {
         TEAM_SCHEMA_VERSION,
         ITEM_INFO_SCHEMA_VERSION,
@@ -1998,7 +2077,9 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: unsupported bundle schema version")
     importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_importers = (
-        {HELD_ITEM_IMPORTER_VERSION}
+        {MEMBERSHIP_IMPORTER_VERSION}
+        if schema_version == MEMBERSHIP_SCHEMA_VERSION
+        else {HELD_ITEM_IMPORTER_VERSION}
         if schema_version == HELD_ITEM_SCHEMA_VERSION
         else {CALCULATOR_IMPORTER_VERSION, FORM_SEARCH_IMPORTER_VERSION}
         if schema_version == CALCULATOR_SCHEMA_VERSION
@@ -2017,7 +2098,9 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if importer_version not in expected_importers:
         raise BundleReadError("manifest.json: unsupported importer version")
     expected_source_shape = (
-        HELD_ITEM_SOURCE_SHAPE_VERSION
+        MEMBERSHIP_SOURCE_SHAPE_VERSION
+        if schema_version == MEMBERSHIP_SCHEMA_VERSION
+        else HELD_ITEM_SOURCE_SHAPE_VERSION
         if schema_version == HELD_ITEM_SCHEMA_VERSION
         else CALCULATOR_SOURCE_SHAPE_VERSION
         if schema_version == CALCULATOR_SCHEMA_VERSION

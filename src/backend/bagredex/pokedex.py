@@ -11,6 +11,18 @@ from typing import Any
 from django.db.models import Exists, OuterRef, QuerySet
 from django.urls import reverse
 
+from .pokemon_data.form_groups import (
+    FORM_DISPLAY_NAMES,
+    GROUPED_FORM_OPTIONS,
+    GROUPED_SEARCH_NAMES,
+    GROUPED_VARIANT_IDS,
+)
+from .pokemon_data.form_groups import (
+    available_form_group as _available_form_group,
+)
+from .pokemon_data.form_groups import (
+    group_representatives as _group_representatives,
+)
 from .pokemon_data.models import (
     ActiveDataVersion,
     DataVersion,
@@ -33,71 +45,6 @@ INDEX_SCHEMA = "pokedex-index-v2"
 DETAIL_SCHEMA = "pokedex-form-detail-v1"
 DETAILS_SCHEMA = "pokedex-details-v2"
 BOOTSTRAP_SCHEMA = "pokedex-bootstrap-v2"
-
-GROUPED_FORM_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
-    "castform": (
-        ("castform", "Castform"),
-        ("castformrainy", "Rainy"),
-        ("castformsnowy", "Snowy"),
-        ("castformsunny", "Sunny"),
-    ),
-    "aegislash": (("aegislash", "Shield"), ("aegislashblade", "Blade")),
-    "gourgeist": (
-        ("gourgeist", "Average"),
-        ("gourgeistlarge", "Large"),
-        ("gourgeistsmall", "Small"),
-        ("gourgeistsuper", "Super"),
-    ),
-    "squawkabilly": (
-        ("squawkabilly", "Green"),
-        ("squawkabillyblue", "Blue"),
-        ("squawkabillywhite", "White"),
-        ("squawkabillyyellow", "Yellow"),
-    ),
-}
-GROUPED_VARIANT_IDS = frozenset(
-    form_id
-    for base_id, options in GROUPED_FORM_OPTIONS.items()
-    for form_id, _ in options
-    if form_id != base_id
-)
-GROUPED_SEARCH_NAMES = {
-    "castform": "Castform",
-    "aegislash": "Aegislash",
-    "gourgeist": "Gourgeist",
-    "squawkabilly": "Squawkabilly",
-}
-FORM_DISPLAY_NAMES = {"meowstic": "Meowstic-Male", "meowsticf": "Meowstic-Female"}
-
-
-def _available_form_group(form_id: str, available_ids: set[str]) -> dict[str, Any] | None:
-    base_id = next(
-        (base for base, options in GROUPED_FORM_OPTIONS.items() if form_id in dict(options)), None
-    )
-    if base_id is None:
-        return None
-    options = [
-        {"id": option_id, "label": label}
-        for option_id, label in GROUPED_FORM_OPTIONS[base_id]
-        if option_id in available_ids
-    ]
-    if not options:
-        return None
-    return {"label": "Form", "options": options}
-
-
-def _group_representatives(available_ids: set[str]) -> dict[str, str]:
-    """Choose one effective canonical profile for each available grouped family."""
-    return {
-        base_id: representative
-        for base_id, options in GROUPED_FORM_OPTIONS.items()
-        if (
-            representative := next(
-                (form_id for form_id, _ in options if form_id in available_ids), None
-            )
-        )
-        is not None
-    }
 
 
 class PokedexUnavailable(RuntimeError):

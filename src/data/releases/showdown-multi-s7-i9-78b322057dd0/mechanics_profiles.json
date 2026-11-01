@@ -1,0 +1,1 @@
+[{"hp_formula":"base + sp + 75","id":"champions-level-50-v1","level":50,"nature_percentages":{"hindering":90,"increasing":110,"neutral":100},"other_formula":"truncate((base + sp + 20) * nature_percent / 100)","sp_maximum":32,"sp_minimum":0,"sp_total_max":66}]

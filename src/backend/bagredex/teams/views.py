@@ -9,8 +9,9 @@ from uuid import UUID
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import parse_etags
 
-from bagredex.pokedex import active_version, snapshot_for
+from bagredex.pokedex import active_version, response_etag, snapshot_for
 from bagredex.pokemon_data.models import DataVersion, Regulation
 from bagredex.regulations import (
     InvalidRegulationRequest,
@@ -24,6 +25,7 @@ from .models import Team
 from .services import (
     API_SCHEMA,
     BOOTSTRAP_SCHEMA,
+    DATA_SCHEMA,
     TeamValidationError,
     create_team,
     mechanics_supported,
@@ -193,11 +195,19 @@ def teams_data(request: HttpRequest, version: str, regulation: str) -> HttpRespo
     ).exists()
     if not active_pair and not owned_pair:
         return _error("data-unavailable", "The requested data version is unavailable.", 404)
+    etag = response_etag(version, regulation, DATA_SCHEMA)
+    supplied_etags = parse_etags(request.headers.get("If-None-Match", ""))
+    if "*" in supplied_etags or etag in supplied_etags:
+        response = HttpResponse(status=304)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, max-age=3600"
+        return response
     try:
         payload = builder_dataset(snapshot)
     except ValueError:
         return _error("data-unavailable", "The requested dataset cannot build teams.", 503)
     response = JsonResponse(payload)
+    response.headers["ETag"] = etag
     response.headers["Cache-Control"] = "private, max-age=3600"
     return response
 

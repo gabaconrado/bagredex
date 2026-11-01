@@ -10,6 +10,7 @@ import {
   baseStatTotal,
   clampSpEdit,
   memberFromPaletteChoice,
+  memberWithForm,
   moveMember,
   newMember,
   paletteResults,
@@ -154,6 +155,40 @@ describe("team builder model", () => {
       mega_preview: true,
     });
     expect(member.form_id).not.toBe(choice.id);
+  });
+
+  it("switches canonical forms while retaining only compatible choices", () => {
+    const rainy: BuilderForm = {
+      ...base,
+      id: "charizard-rainy",
+      name: "Charizard-Rainy",
+      ability_ids: ["rain-dish"],
+      move_ids: ["protect"],
+    };
+    const member = {
+      ...newMember(base.id, "serious"),
+      nickname: "Ace",
+      shiny: true,
+      ability_id: "blaze",
+      item_id: "charizarditex",
+      move_ids: ["heatwave", "protect", null, null],
+      mega_preview: true,
+    };
+    expect(
+      memberWithForm(member, rainy, {
+        ...data,
+        forms: [base, rainy],
+        mega_relations: [],
+      }),
+    ).toMatchObject({
+      form_id: rainy.id,
+      nickname: "Ace",
+      shiny: true,
+      ability_id: null,
+      item_id: "charizarditex",
+      move_ids: [null, "protect", null, null],
+      mega_preview: false,
+    });
   });
 
   it("calculates level-50 stats with integer nature truncation", () => {

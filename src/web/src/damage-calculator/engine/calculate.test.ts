@@ -27,7 +27,6 @@ const nature: Nature = {
 const form = (id: string, types: string[], values: number[]): Form => ({
   id,
   name: id,
-  searchable: true,
   is_mega: false,
   is_nfe: false,
   gender: "variable",

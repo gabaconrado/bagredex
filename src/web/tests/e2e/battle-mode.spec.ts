@@ -59,7 +59,10 @@ const prepareCalculableTeam = async (page: Page, testInfo: TestInfo) => {
   const picker = page.getByRole("dialog", { name: "Choose a Pokémon" });
   const pokemon = picker.getByRole("combobox");
   await pokemon.fill("Charizard");
-  await pokemon.press("Enter");
+  await picker
+    .getByRole("row")
+    .filter({ has: page.getByText("Charizard", { exact: true }) })
+    .click();
   const member = page.locator(".member-card").first();
   await expect(member).toBeVisible();
   const ability = member.getByRole("combobox", {
@@ -440,6 +443,41 @@ test("starts a memory-only battle and supports rapid opponent entry", async ({
   await expect(ownMember).toBeVisible();
   await ownMember.click();
   await page.getByRole("button", { name: "Your active slot 1, empty" }).click();
+});
+
+test("groups opponent forms and switches an active opponent", async ({
+  page,
+}) => {
+  await selectPreparedTeam(page);
+  await page.getByRole("button", { name: "Add opponent Pokémon" }).click();
+  const search = page.getByLabel("Add opponent Pokémon");
+  await search.fill("Castform");
+  await expect(
+    page.getByRole("option", { name: "Castform", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("option", { name: "Castform-Rainy", exact: true }),
+  ).toHaveCount(0);
+  await search.press("Enter");
+  await page
+    .locator(".battle-panel--opponent")
+    .getByRole("button", { name: /Castform/ })
+    .first()
+    .click();
+  await page
+    .getByRole("button", { name: "Opponent active slot 1, empty" })
+    .click();
+  const form = page
+    .locator(".battle-panel--opponent")
+    .getByRole("combobox", { name: "Form", exact: true });
+  await expect(form).toHaveValue("castform");
+  await form.selectOption("castformrainy");
+  await expect(form).toHaveValue("castformrainy");
+  await expect(
+    page
+      .locator(".battle-panel--opponent")
+      .getByRole("heading", { name: /Castform-Rainy/ }),
+  ).toBeVisible();
 });
 
 test("warns before leaving an active battle and remains functional on phone", async ({

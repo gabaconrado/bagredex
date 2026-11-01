@@ -397,6 +397,10 @@
 .member-fields > * {
   min-width: 0;
 }
+.team-field--form {
+  grid-column: 1 / -1;
+  max-width: 22rem;
+}
 .team-field {
   position: relative;
   display: grid;

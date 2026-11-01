@@ -706,6 +706,9 @@
 .battle-set-editor > * + * {
   margin-top: 0.55rem;
 }
+.battle-form-select {
+  max-width: 22rem;
+}
 .battle-choice-grid--single {
   grid-template-columns: minmax(0, 1fr);
 }

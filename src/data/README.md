@@ -36,6 +36,16 @@ A form is a regulation member only when its effective Showdown formats entry has
 including unknown future markers, is excluded by default. Profiles required by base-to-Mega
 relations remain separate from selectable regulation membership.
 
+Importer version 9 and schema 7 add provenance to every regulation membership. Direct records
+source themselves. A `related-fixed-sex` record is derived only when an effective legal fixed-sex
+form and an opposite fixed-sex, non-Mega related form share the same resolved base species, the
+target has no explicit illegal or nonstandard entry, and every referenced profile exists. The
+pinned data derives female Meowstic from male Meowstic in M-A, M-B, and M-C; malformed, duplicate,
+or ambiguous relationships fail closed.
+
+Importer version 8 and schema 6 retain schema 5's calculator records and add ordered held-item
+stat-modifier fractions plus unconditional held-item-suppression facts.
+
 Importer version 7 and schema 5 retain importer 6's damage-calculator facts and add narrowly
 expanded related-form selection. When a selected legal family has fixed male or female gender, the
 importer includes an opposite fixed-sex, non-Mega form listed by that family only when its source
@@ -65,14 +75,15 @@ canonical UTF-8 JSON with sorted keys, compact separators, stable record order, 
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:
 
 ```text
-showdown-multi-s6-i8-<bundle-hash-prefix>
+showdown-multi-s7-i9-<bundle-hash-prefix>
 ```
 
 ## Bundle contract
 
-`manifest.json` is the authoritative interchange contract. Schema 6 retains the ordered
+`manifest.json` is the authoritative interchange contract. Schema 7 retains the ordered
 `showdown_sources`, normalized team-builder and Item-information records, and schema-5 damage
-calculator records. It adds the held-item stat-modifier and suppression facts described below.
+calculator records, plus schema-6 held-item facts. It adds explicit regulation-membership
+provenance and deterministic fixed-sex related-form membership described below.
 Each source contains its exact revision, commit date, and regulation IDs; `provenance.json`
 additionally stores source counts for that tree. The portable files are:
 
@@ -86,7 +97,10 @@ additionally stores source counts for that tree. The portable files are:
   came from `desc` or the same record's `shortDesc`.
 - `natures.json`: the stat-changing nature directions plus Serious as the only approved neutral
   nature.
-- `regulation_memberships.json`: forms that appear in each regulation's legal Pokédex list.
+- `regulation_memberships.json`: canonical legal forms with `direct` or `related-fixed-sex`
+  resolution and the exact directly legal source form. A fixed-sex counterpart is derived only
+  when the pinned Pokédex relationship, opposite fixed genders, shared base species, non-Mega
+  status, source legality, and absence of an explicit illegal or nonstandard target all agree.
 - `profiles.json`: regulation-effective facts for every included form, including non-list
   counterparts needed for base/Mega toggles, with ordered types, base stats, BST, and slotted
   abilities.

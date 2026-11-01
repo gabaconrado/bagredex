@@ -7,6 +7,7 @@ from typing import Any
 from django.urls import reverse
 
 from bagredex.pokedex import Snapshot
+from bagredex.pokemon_data.form_groups import pokemon_search_entries
 from bagredex.pokemon_data.models import (
     AbilityProfile,
     CalculatorCapability,
@@ -24,7 +25,7 @@ from bagredex.pokemon_data.models import (
     TypeEffectiveness,
 )
 
-DATA_SCHEMA = "damage-calculator-data-v2"
+DATA_SCHEMA = "damage-calculator-data-v3"
 CAPABILITY_ID = "damage-calculator-v1"
 
 _ABILITY_SLOT_ORDER = {"0": 0, "1": 1, "H": 2, "S": 3}
@@ -105,7 +106,7 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
         .select_related("form")
         .order_by("form__national_dex_number", "form__canonical_id")
     )
-    searchable_profile_ids = {profile.pk for profile in profiles}
+    searchable_profiles = [profile for profile in profiles if not profile.form.is_mega]
     existing_form_ids = {profile.form.pk for profile in profiles}
     # Relations can describe exact canonical forms that are not calculator-selectable in a
     # regulation. Only expose relations whose base is in the serialized form collection; never
@@ -167,7 +168,6 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
             {
                 "id": profile.form.canonical_id,
                 "name": profile.form.name,
-                "searchable": profile.pk in searchable_profile_ids and not profile.form.is_mega,
                 "is_mega": profile.form.is_mega,
                 "is_nfe": profile.form.is_nfe,
                 **_gender_fields(profile.form),
@@ -290,6 +290,9 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
             for type_identity in type_rows
         ],
         "forms": forms,
+        "pokemon_search_entries": pokemon_search_entries(
+            (profile.form.canonical_id, profile.form.name) for profile in searchable_profiles
+        ),
         "abilities": [
             {
                 "id": profile.ability.canonical_id,

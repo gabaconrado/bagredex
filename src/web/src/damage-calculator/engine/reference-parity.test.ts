@@ -15,7 +15,6 @@ const combatant = (input: any): Combatant => {
   const form: Form = {
     id: facts.id,
     name: facts.name,
-    searchable: true,
     is_mega: facts.id.includes("mega"),
     is_nfe: false,
     gender: "fixed",

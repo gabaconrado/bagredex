@@ -3,7 +3,7 @@ import { parseBootstrap, parseCalculatorData } from "./contracts";
 
 const stats = { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 };
 const dataset = {
-  schema_version: "damage-calculator-data-v2",
+  schema_version: "damage-calculator-data-v3",
   data_version: "version-1",
   regulation: { id: "m-c", name: "Regulation M-C" },
   mechanics: {
@@ -54,7 +54,6 @@ const dataset = {
     {
       id: "charizard",
       name: "Charizard",
-      searchable: true,
       is_mega: false,
       is_nfe: false,
       gender: "variable",
@@ -67,6 +66,9 @@ const dataset = {
       move_ids: ["protect"],
       sprite_form_id: "charizard",
     },
+  ],
+  pokemon_search_entries: [
+    { form_id: "charizard", name: "Charizard", form_group: null },
   ],
   abilities: [{ id: "blaze", name: "Blaze", contextual_inputs: [] }],
   items: [],
@@ -115,7 +117,7 @@ const dataset = {
 };
 
 describe("damage calculator contracts", () => {
-  it("requires the v2 move description contract", () => {
+  it("requires the v3 search and move description contract", () => {
     expect(parseCalculatorData(dataset).moves[0]?.description).toBe(
       "Protects the user from most attacks.",
     );

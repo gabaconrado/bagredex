@@ -19,14 +19,17 @@ from django.test.utils import CaptureQueriesContext
 from bagredex import views
 from bagredex.accounts.models import User
 from bagredex.pokedex import (
-    FORM_DISPLAY_NAMES,
-    GROUPED_FORM_OPTIONS,
     PokedexUnavailable,
     Snapshot,
-    _available_form_group,
-    _group_representatives,
     form_detail,
     regulation_details,
+)
+from bagredex.pokemon_data.form_groups import (
+    FORM_DISPLAY_NAMES,
+    GROUPED_FORM_OPTIONS,
+    available_form_group,
+    group_representatives,
+    pokemon_search_entries,
 )
 from bagredex.pokemon_data.models import (
     Ability,
@@ -79,7 +82,7 @@ def test_grouped_form_metadata_is_explicit_ordered_and_fail_closed() -> None:
     }
 
     available = set(expected["gourgeist"])
-    assert _available_form_group("gourgeistsmall", available) == {
+    assert available_form_group("gourgeistsmall", available) == {
         "label": "Form",
         "options": [
             {"id": "gourgeist", "label": "Average"},
@@ -88,7 +91,7 @@ def test_grouped_form_metadata_is_explicit_ordered_and_fail_closed() -> None:
             {"id": "gourgeistsuper", "label": "Super"},
         ],
     }
-    assert _available_form_group("gourgeistsmall", available - {"gourgeist"}) == {
+    assert available_form_group("gourgeistsmall", available - {"gourgeist"}) == {
         "label": "Form",
         "options": [
             {"id": "gourgeistlarge", "label": "Large"},
@@ -96,7 +99,36 @@ def test_grouped_form_metadata_is_explicit_ordered_and_fail_closed() -> None:
             {"id": "gourgeistsuper", "label": "Super"},
         ],
     }
-    assert _group_representatives(available - {"gourgeist"}) == {"gourgeist": "gourgeistlarge"}
+    assert group_representatives(available - {"gourgeist"}) == {"gourgeist": "gourgeistlarge"}
+
+
+def test_shared_search_entries_group_only_reviewed_families() -> None:
+    entries = pokemon_search_entries(
+        iter(
+            [
+                ("castformrainy", "Castform-Rainy"),
+                ("castformsunny", "Castform-Sunny"),
+                ("meowstic", "Meowstic"),
+                ("meowsticf", "Meowstic-F"),
+            ]
+        )
+    )
+
+    assert entries == [
+        {
+            "form_id": "castformrainy",
+            "name": "Castform",
+            "form_group": {
+                "label": "Form",
+                "options": [
+                    {"id": "castformrainy", "label": "Rainy"},
+                    {"id": "castformsunny", "label": "Sunny"},
+                ],
+            },
+        },
+        {"form_id": "meowstic", "name": "Meowstic-Male", "form_group": None},
+        {"form_id": "meowsticf", "name": "Meowstic-Female", "form_group": None},
+    ]
 
 
 def _version(identifier: str = VERSION_ID) -> DataVersion:

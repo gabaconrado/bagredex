@@ -19,10 +19,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "6"
-IMPORTER_VERSION = "8"
+SCHEMA_VERSION = "7"
+IMPORTER_VERSION = "9"
 LEGACY_IMPORTER_VERSION = "1"
-SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-6"
+SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-7"
 M_A_ITEM_TEXT_OVERLAY = "m-a-item-text-compatibility.json"
 M_A_ITEM_TEXT_OVERLAY_IDS = frozenset(
     {
@@ -332,6 +332,10 @@ CALCULATOR_PINNED_COUNTS_V7 = {
     "mega_item_relations": 217,
     "sprites": 702,
     "sprite_mappings": 351,
+}
+MEMBERSHIP_PROVENANCE_PINNED_COUNTS = {
+    **CALCULATOR_PINNED_COUNTS_V7,
+    "memberships": 938,
 }
 
 
@@ -1300,7 +1304,16 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         if isinstance(candidate_manifest, dict):
             manifest_schema = candidate_manifest.get("bundle_schema_version")
     calculator_schema = (bundle / "calculator_capabilities.json").is_file()
-    item_stat_schema = manifest_schema == SCHEMA_VERSION or (
+    membership_provenance_schema = manifest_schema == SCHEMA_VERSION or (
+        manifest_schema is None
+        and (bundle / "regulation_memberships.json").is_file()
+        and any(
+            "resolution" in value or "source_form_id" in value
+            for value in _load_json(bundle, "regulation_memberships.json")
+            if isinstance(value, dict)
+        )
+    )
+    item_stat_schema = manifest_schema in {"6", SCHEMA_VERSION} or (
         manifest_schema is None
         and (bundle / "item_profiles.json").is_file()
         and any(
@@ -1335,7 +1348,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     items = data.get("items.json", [])
     item_profiles = data.get("item_profiles.json", [])
     item_description_schema = (
-        manifest_schema in {"4", "5", SCHEMA_VERSION}
+        manifest_schema in {"4", "5", "6", SCHEMA_VERSION}
         if manifest_schema is not None
         else any(
             "short_description" in value
@@ -1395,7 +1408,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         },
         "natures.json": {"id", "name", "increased_stat", "decreased_stat"},
         "move_flags.json": {"id"},
-        "regulation_memberships.json": {"regulation_id", "form_id"},
+        "regulation_memberships.json": {
+            "regulation_id",
+            "form_id",
+            *(
+                {"resolution", "source_form_id"}
+                if membership_provenance_schema
+                else set()
+            ),
+        },
         "profiles.json": {
             "regulation_id",
             "form_id",
@@ -1531,7 +1552,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
                 else ()
             ),
         ),
-        "regulation_memberships.json": ("regulation_id", "form_id"),
+        "regulation_memberships.json": (
+            "regulation_id",
+            "form_id",
+            *(("resolution", "source_form_id") if membership_provenance_schema else ()),
+        ),
         "ability_profiles.json": (
             "regulation_id",
             "id",
@@ -2068,6 +2093,50 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     membership_ids = {
         (value["regulation_id"], value["form_id"]) for value in memberships
     }
+    if membership_provenance_schema:
+        memberships_by_id = {
+            (value["regulation_id"], value["form_id"]): value for value in memberships
+        }
+        for membership in memberships:
+            resolution = membership["resolution"]
+            source_form_id = membership["source_form_id"]
+            if resolution not in {"direct", "related-fixed-sex"}:
+                raise BundleError(
+                    f"regulation_memberships.json: invalid resolution {membership}"
+                )
+            if resolution == "direct" and source_form_id != membership["form_id"]:
+                raise BundleError(
+                    "regulation_memberships.json: direct membership must source itself"
+                )
+            if (
+                resolution == "related-fixed-sex"
+                and source_form_id == membership["form_id"]
+            ):
+                raise BundleError(
+                    "regulation_memberships.json: related membership must change form"
+                )
+            source_membership = memberships_by_id.get(
+                (membership["regulation_id"], source_form_id)
+            )
+            if source_membership is None or source_membership["resolution"] != "direct":
+                raise BundleError(
+                    "regulation_memberships.json: membership source is not directly legal"
+                )
+            source = forms_by_id.get(source_form_id)
+            target = forms_by_id.get(membership["form_id"])
+            if resolution == "related-fixed-sex" and (
+                source is None
+                or target is None
+                or source["is_mega"]
+                or target["is_mega"]
+                or source["base_form_id"] != target["base_form_id"]
+                or source["gender"] not in {"M", "F"}
+                or target["gender"] not in {"M", "F"}
+                or source["gender"] == target["gender"]
+            ):
+                raise BundleError(
+                    "regulation_memberships.json: invalid related fixed-sex membership"
+                )
     multi_revision = regulation_ids == {"m-a", "m-b", "m-c"}
     if not multi_revision and regulation_ids != {"m-b", "m-c"}:
         raise BundleError(
@@ -2854,7 +2923,9 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         )
         summary["coverage"]["item_description_percent"] = 100
     expected_counts = (
-        CALCULATOR_PINNED_COUNTS_V7
+        MEMBERSHIP_PROVENANCE_PINNED_COUNTS
+        if membership_provenance_schema
+        else CALCULATOR_PINNED_COUNTS_V7
         if calculator_schema and expanded_related_forms
         else CALCULATOR_PINNED_COUNTS
         if calculator_schema
@@ -2875,7 +2946,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         {"m-b": 316, "m-c": 351} if legacy_release else {"m-b": 314, "m-c": 349}
     )
     if multi_revision:
-        expected_memberships = {"m-a": 272, "m-b": 314, "m-c": 349}
+        expected_memberships = (
+            {"m-a": 273, "m-b": 315, "m-c": 350}
+            if membership_provenance_schema
+            else {"m-a": 272, "m-b": 314, "m-c": 349}
+        )
     if summary["counts"]["legal_forms_by_regulation"] != expected_memberships:
         raise BundleError("pinned bundle regulation membership counts changed")
     expected_learnsets = (
@@ -3008,6 +3083,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         _fields(manifest, expected_manifest_fields, "manifest.json")
         expected_schema = (
             SCHEMA_VERSION
+            if membership_provenance_schema
+            else "6"
             if item_stat_schema
             else "5"
             if calculator_schema
@@ -3030,6 +3107,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "5",
             "6",
             "7",
+            "8",
             IMPORTER_VERSION,
         }:
             raise BundleError(
@@ -3037,6 +3115,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             )
         expected_shape = (
             SOURCE_SHAPE_VERSION
+            if membership_provenance_schema
+            else "showdown-champions-multi-revision-6"
             if item_stat_schema
             else "showdown-champions-multi-revision-5"
             if calculator_schema
@@ -3058,6 +3138,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             )
         expected_importers = (
             {IMPORTER_VERSION}
+            if membership_provenance_schema
+            else {"8"}
             if item_stat_schema
             else {"6", "7"}
             if calculator_schema
@@ -3075,7 +3157,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
                 "manifest.json: unsupported importer or source-shape version"
             )
         if (
-            importer_version in {"2", "4", "5", "6", "7", IMPORTER_VERSION}
+            importer_version in {"2", "4", "5", "6", "7", "8", IMPORTER_VERSION}
             and legacy_release
         ):
             raise BundleError(

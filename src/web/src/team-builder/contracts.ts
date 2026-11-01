@@ -1,4 +1,8 @@
 export type Named = { id: string; name: string };
+import {
+  parsePokemonSearchEntries,
+  type PokemonSearchEntry,
+} from "../form-search";
 export type StatId = "hp" | "atk" | "def" | "spa" | "spd" | "spe";
 export type Stats = Record<StatId, number>;
 
@@ -74,10 +78,11 @@ export type MegaSearchEntry = BuilderForm & {
   item_id: string;
 };
 export type BuilderData = {
-  schema_version: "team-builder-data-v5";
+  schema_version: "team-builder-data-v6";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
+  pokemon_search_entries: PokemonSearchEntry[];
   types: Named[];
   abilities: AbilityDetail[];
   moves: MoveDetail[];
@@ -239,9 +244,10 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v5" ||
+    item.schema_version !== "team-builder-data-v6" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
+    !Array.isArray(item.pokemon_search_entries) ||
     !Array.isArray(item.abilities) ||
     !Array.isArray(item.moves) ||
     !Array.isArray(item.items) ||
@@ -292,6 +298,10 @@ export function parseBuilderData(value: unknown): BuilderData {
     },
   }));
   forms.forEach(assertForm);
+  const pokemonSearchEntries = parsePokemonSearchEntries(
+    item.pokemon_search_entries,
+    forms,
+  );
   item.abilities.forEach((value) => {
     assertNamed(value);
     const ability = record(value)!;
@@ -515,9 +525,10 @@ export function parseBuilderData(value: unknown): BuilderData {
         : nature.name,
   }));
   return {
-    schema_version: "team-builder-data-v5",
+    schema_version: "team-builder-data-v6",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
+    pokemon_search_entries: pokemonSearchEntries,
     forms,
     types,
     abilities: item.abilities as AbilityDetail[],

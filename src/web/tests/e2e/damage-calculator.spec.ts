@@ -84,6 +84,46 @@ test("calculates in both directions and resets field effects", async ({
   ).toContainText("None active");
 });
 
+test("uses one grouped search result and switches canonical forms", async ({
+  page,
+}) => {
+  const pokemon = page
+    .getByRole("combobox", { name: "Pokémon", exact: true })
+    .first();
+  await pokemon.fill("Castform");
+  const listboxId = await pokemon.getAttribute("aria-controls");
+  if (!listboxId) throw new Error("The Pokémon search has no listbox.");
+  const listbox = page.locator(`#${listboxId}`);
+  await expect(listbox.getByRole("option", { name: "Castform" })).toHaveCount(
+    1,
+  );
+  await expect(
+    listbox.getByRole("option", { name: "Castform-Rainy" }),
+  ).toHaveCount(0);
+  await pokemon.press("Enter");
+  const form = page.getByRole("combobox", { name: "Form", exact: true });
+  await expect(form).toHaveValue("castform");
+  await form.selectOption("castformrainy");
+  await expect(form).toHaveValue("castformrainy");
+  await expect(
+    page.getByRole("heading", { name: /Castform-Rainy/ }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("combobox", { name: "Pokémon", exact: true })
+    .nth(1)
+    .fill("Meowstic");
+  const rightList = page.locator(
+    `#${await page.getByRole("combobox", { name: "Pokémon", exact: true }).nth(1).getAttribute("aria-controls")}`,
+  );
+  await expect(
+    rightList.getByRole("option", { name: "Meowstic-Male", exact: true }),
+  ).toBeVisible();
+  await expect(
+    rightList.getByRole("option", { name: "Meowstic-Female", exact: true }),
+  ).toBeVisible();
+});
+
 test("keeps every calculator control reachable on phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByText(/Level 50 · VGC doubles/)).toHaveCount(0);

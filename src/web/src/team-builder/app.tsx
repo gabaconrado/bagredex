@@ -34,6 +34,7 @@ import {
   paletteResults,
   sortPaletteForms,
   realStats,
+  memberWithForm,
   spTotal,
   statIds,
   statLabels,
@@ -41,6 +42,7 @@ import {
   type PaletteChoice,
   validateLocal,
 } from "./model";
+import { searchEntryForForm } from "../form-search";
 import {
   SearchLiveCount,
   SearchOptionGroup,
@@ -918,6 +920,10 @@ export function MemberEditor({
   onCollapse?: () => void;
 }) {
   const form = data.forms.find((item) => item.id === member.form_id)!;
+  const searchEntry = searchEntryForForm(
+    data.pokemon_search_entries,
+    member.form_id,
+  );
   const nature = data.natures.find((item) => item.id === member.nature_id) ??
     data.natures.find((item) => item.id === "serious") ?? {
       id: "serious",
@@ -1190,6 +1196,30 @@ export function MemberEditor({
           </dl>
         </div>
         <div class="member-fields">
+          {searchEntry?.form_group && (
+            <label class="team-field team-field--form">
+              {searchEntry.form_group.label}
+              <select
+                id={`${prefix}-form`}
+                value={member.form_id}
+                onChange={(event) => {
+                  const target = data.forms.find(
+                    ({ id }) => id === event.currentTarget.value,
+                  );
+                  if (!target) return;
+                  onChange(memberWithForm(member, target, data));
+                  onAnnounce(`Form changed to ${target.name}.`);
+                  requestAnimationFrame(() =>
+                    document.getElementById(`${prefix}-form`)?.focus(),
+                  );
+                }}
+              >
+                {searchEntry.form_group.options.map((option) => (
+                  <option value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div>
             <div class="field-with-information">
               {member.mega_preview && mega ? (
@@ -2252,6 +2282,22 @@ export function TeamBuilder({
                     })
                   }
                   onChange={(next) => {
+                    if (next.form_id !== member.form_id) {
+                      setExpandedMembers((current) => {
+                        const updated = new Set(current);
+                        if (updated.delete(member.form_id))
+                          updated.add(next.form_id);
+                        return updated;
+                      });
+                      setAutocompleteTransients(
+                        (current) =>
+                          new Map(
+                            [...current].filter(
+                              ([key]) => !key.startsWith(`${member.form_id}:`),
+                            ),
+                          ),
+                      );
+                    }
                     const members = [...draft.members];
                     members[index] = next;
                     setDraft({ ...draft, members });

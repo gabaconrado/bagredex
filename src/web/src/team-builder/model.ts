@@ -11,10 +11,14 @@ import type {
   Stats,
 } from "./contracts";
 import type { Sort } from "../model";
+import type { PokemonSearchEntry } from "../form-search";
 
 export type PaletteFilter = Named & { kind: "type" | "ability" | "move" };
 export type PaletteChoice =
-  | (BuilderForm & { kind: "ordinary" })
+  | (BuilderForm & {
+      kind: "ordinary";
+      searchEntry: PokemonSearchEntry;
+    })
   | (MegaSearchEntry & { kind: "mega" });
 export const statIds: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
 export const statLabels: Record<StatId, string> = {
@@ -84,12 +88,49 @@ export function paletteResults<T extends BuilderForm>(
 
 export function paletteChoices(data: BuilderData): PaletteChoice[] {
   return [
-    ...data.forms.map((form) => ({ ...form, kind: "ordinary" as const })),
+    ...data.pokemon_search_entries.map((entry) => {
+      const form = data.forms.find(({ id }) => id === entry.form_id)!;
+      return {
+        ...form,
+        name: entry.name,
+        kind: "ordinary" as const,
+        searchEntry: entry,
+      };
+    }),
     ...data.mega_search_entries.map((entry) => ({
       ...entry,
       kind: "mega" as const,
     })),
   ];
+}
+
+export function memberWithForm(
+  member: Member,
+  target: BuilderForm,
+  data: BuilderData,
+): Member {
+  const abilityId = target.ability_ids.includes(member.ability_id ?? "")
+    ? member.ability_id
+    : null;
+  const seen = new Set<string>();
+  const moveIds = member.move_ids.map((id) => {
+    if (!id || !target.move_ids.includes(id) || seen.has(id)) return null;
+    seen.add(id);
+    return id;
+  });
+  const megaPreview = data.mega_relations.some(
+    ({ form_id, item_id }) =>
+      form_id === target.id && item_id === member.item_id,
+  )
+    ? member.mega_preview
+    : false;
+  return {
+    ...member,
+    form_id: target.id,
+    ability_id: abilityId,
+    move_ids: moveIds,
+    mega_preview: megaPreview,
+  };
 }
 
 export function newMember(

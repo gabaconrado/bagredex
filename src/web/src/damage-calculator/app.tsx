@@ -10,6 +10,7 @@ import type {
   Stats,
 } from "./contracts";
 import { parseCalculatorData } from "./contracts";
+import { searchEntryForForm } from "../form-search";
 import {
   applyBattleStage,
   calculate,
@@ -174,6 +175,41 @@ function withRatioScaledHp(
     ...next,
     currentHp: ratioScaledCurrentHp(previous.currentHp, oldMaxHp, rawNewMaxHp),
   };
+}
+export function sideWithForm(
+  data: CalculatorData,
+  side: Side,
+  target: Form,
+): Side {
+  const previous =
+    displayedForm(data, side) ??
+    data.forms.find(({ id }) => id === side.formId);
+  const abilityId = target.abilities.some(({ id }) => id === side.abilityId)
+    ? side.abilityId
+    : (target.abilities[0]?.id ?? null);
+  const seen = new Set<string>();
+  const moveIds = side.moveIds.map((id) => {
+    if (!id || !target.move_ids.includes(id) || seen.has(id)) return null;
+    seen.add(id);
+    return id;
+  });
+  const next: Side = {
+    ...side,
+    formId: target.id,
+    gender: target.gender_options.includes(side.gender)
+      ? side.gender
+      : target.default_gender,
+    abilityId,
+    moveIds,
+    mega: false,
+    abilityContext: abilityId === side.abilityId ? side.abilityContext : {},
+    moveContexts: moveIds.map((id, index) =>
+      id && id === side.moveIds[index] ? (side.moveContexts[index] ?? {}) : {},
+    ),
+  };
+  return previous
+    ? withRatioScaledHp(data, side, next, previous, target)
+    : next;
 }
 function displayedForm(data: CalculatorData, side: Side): Form | undefined {
   const base = data.forms.find(({ id }) => id === side.formId);
@@ -643,6 +679,10 @@ function PokemonPanel({
   setOpenMoveModifier: (id: string | null) => void;
 }) {
   const base = data.forms.find(({ id }) => id === side.formId);
+  const searchEntry = searchEntryForForm(
+    data.pokemon_search_entries,
+    side.formId,
+  );
   const form = displayedForm(data, side);
   const nature =
     data.natures.find(({ id }) => id === side.natureId) ?? data.natures[0];
@@ -763,8 +803,11 @@ function PokemonPanel({
       <Choice
         id={`${sideId}-pokemon`}
         label="Pokémon"
-        value={side.formId}
-        choices={data.forms.filter(({ searchable }) => searchable)}
+        value={searchEntry?.form_id ?? side.formId}
+        choices={data.pokemon_search_entries.map((entry) => ({
+          id: entry.form_id,
+          name: entry.name,
+        }))}
         onChange={(id) => {
           const next = data.forms.find((row) => row.id === id);
           onPokemonChange(newSide(data, next));
@@ -773,6 +816,25 @@ function PokemonPanel({
       {base && (
         <>
           <div class="damage-choice-grid">
+            {searchEntry?.form_group && (
+              <label class="damage-field damage-field--form">
+                {searchEntry.form_group.label}
+                <select
+                  id={`${sideId}-form`}
+                  value={side.formId ?? ""}
+                  onChange={(event) => {
+                    const target = data.forms.find(
+                      ({ id }) => id === event.currentTarget.value,
+                    );
+                    if (target) onChange(sideWithForm(data, side, target));
+                  }}
+                >
+                  {searchEntry.form_group.options.map((option) => (
+                    <option value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {base.gender === "variable" && (
               <label
                 class="damage-field damage-field--gender"

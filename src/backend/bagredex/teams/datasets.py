@@ -7,6 +7,7 @@ from typing import Any
 from django.urls import reverse
 
 from bagredex.pokedex import Snapshot
+from bagredex.pokemon_data.form_groups import pokemon_search_entries
 from bagredex.pokemon_data.models import (
     ItemProfile,
     LearnsetEntry,
@@ -254,6 +255,9 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         "data_version": snapshot.version.pk,
         "regulation": {"id": snapshot.regulation.canonical_id, "name": snapshot.regulation.name},
         "forms": forms,
+        "pokemon_search_entries": pokemon_search_entries(
+            (profile.form.canonical_id, profile.form.name) for profile in profiles
+        ),
         "types": named(type_names),
         "abilities": sorted(
             ability_records.values(), key=lambda value: (value["name"].casefold(), value["id"])

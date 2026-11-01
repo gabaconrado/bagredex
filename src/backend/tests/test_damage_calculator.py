@@ -19,6 +19,7 @@ from bagredex.damage_calculator.datasets import (
     _gender_fields,
     _move_description,
 )
+from bagredex.pokemon_data.form_groups import GROUPED_FORM_OPTIONS
 from bagredex.pokemon_data.models import (
     Ability,
     AbilityProfile,
@@ -399,6 +400,7 @@ def test_dataset_is_closed_normalized_and_deterministic(
         "natures",
         "types",
         "forms",
+        "pokemon_search_entries",
         "abilities",
         "items",
         "moves",
@@ -406,7 +408,7 @@ def test_dataset_is_closed_normalized_and_deterministic(
         "type_effectiveness",
     }
     assert payload["mechanics"]["hp_formula"] == "base + sp + 75"
-    assert payload["schema_version"] == "damage-calculator-data-v2"
+    assert payload["schema_version"] == "damage-calculator-data-v3"
     assert payload["state_input_policy"] == STATE_INPUT_POLICY
     assert payload["capability"] == {
         "id": "damage-calculator-v1",
@@ -422,14 +424,15 @@ def test_dataset_is_closed_normalized_and_deterministic(
         f"/pokedex/sprites/{VERSION_ID}/__FORM__/normal.webp"
     )
     forms = {form["id"]: form for form in payload["forms"]}
-    assert forms["charizard"]["searchable"] is True
     assert forms["charizard"]["gender_options"] == ["M", "F"]
     assert forms["charizard"]["default_gender"] == "M"
     assert forms["charizard"]["abilities"] == [
         {"id": "blaze", "slot": "0"},
         {"id": "solarpower", "slot": "H"},
     ]
-    assert forms["charizardmegax"]["searchable"] is False
+    assert payload["pokemon_search_entries"] == [
+        {"form_id": "charizard", "name": "Charizard", "form_group": None}
+    ]
     assert payload["mega_item_relations"] == [
         {
             "item_id": "charizarditex",
@@ -446,7 +449,7 @@ def test_dataset_is_closed_normalized_and_deterministic(
 def test_current_release_relations_are_closed_across_all_regulations(
     authenticated_client: Client,
 ) -> None:
-    release = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s5-i7-49850c617dd2"
+    release = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s7-i9-78b322057dd0"
     if not release.is_dir():
         pytest.skip("the reviewed form-search release is required")
     version = load_pokemon_data(release).version
@@ -462,6 +465,8 @@ def test_current_release_relations_are_closed_across_all_regulations(
         item_ids = {item["id"] for item in payload["items"]}
         ability_ids = {ability["id"] for ability in payload["abilities"]}
         relations = payload["mega_item_relations"]
+        entries = payload["pokemon_search_entries"]
+        entries_by_form = {entry["form_id"]: entry for entry in entries}
 
         assert relations
         assert all(
@@ -471,7 +476,32 @@ def test_current_release_relations_are_closed_across_all_regulations(
             and relation["locked_ability_id"] in ability_ids
             for relation in relations
         )
-        assert not any(relation["base_form_id"] == "meowsticf" for relation in relations)
+        assert any(relation["base_form_id"] == "meowsticf" for relation in relations)
+        assert entries_by_form["meowstic"] == {
+            "form_id": "meowstic",
+            "name": "Meowstic-Male",
+            "form_group": None,
+        }
+        assert entries_by_form["meowsticf"] == {
+            "form_id": "meowsticf",
+            "name": "Meowstic-Female",
+            "form_group": None,
+        }
+        legal_non_mega = {form["id"] for form in payload["forms"] if not form["is_mega"]}
+        for base_id, options in GROUPED_FORM_OPTIONS.items():
+            available = [
+                {"id": form_id, "label": label}
+                for form_id, label in options
+                if form_id in legal_non_mega
+            ]
+            if not available:
+                assert base_id not in entries_by_form
+                continue
+            representative = available[0]["id"]
+            assert entries_by_form[representative]["form_group"] == (
+                {"label": "Form", "options": available} if len(available) > 1 else None
+            )
+            assert not any(option["id"] in entries_by_form for option in available[1:])
 
 
 def test_dataset_fails_closed_when_full_move_description_is_empty() -> None:

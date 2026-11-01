@@ -15,7 +15,6 @@ import { emptyBattleState, zeroStages, type BattleMember } from "./state";
 const form = (id: string, speed: number): Form => ({
   id,
   name: id,
-  searchable: true,
   is_mega: false,
   is_nfe: false,
   gender: "N",
@@ -33,7 +32,12 @@ const data = {
     form("fast", 100),
     form("slow", 50),
     form("twin", 100),
-    { ...form("fastmega", 120), is_mega: true, searchable: false },
+    { ...form("fastmega", 120), is_mega: true },
+  ],
+  pokemon_search_entries: [
+    { form_id: "fast", name: "fast", form_group: null },
+    { form_id: "slow", name: "slow", form_group: null },
+    { form_id: "twin", name: "twin", form_group: null },
   ],
   natures: [
     {
@@ -100,6 +104,36 @@ describe("Battle Mode calculation adapters", () => {
       slow: "slow-species",
     });
     expect(options.map(({ id }) => id)).toEqual(["slow"]);
+  });
+
+  it("offers one server-named result for a grouped form family", () => {
+    const grouped = {
+      ...data,
+      pokemon_search_entries: [
+        {
+          form_id: "fast",
+          name: "Fast family",
+          form_group: {
+            label: "Form",
+            options: [
+              { id: "fast", label: "Fast" },
+              { id: "twin", label: "Twin" },
+            ],
+          },
+        },
+        { form_id: "slow", name: "slow", form_group: null },
+      ],
+    } as unknown as CalculatorData;
+    expect(
+      availableOpponentForms(grouped, new Set(), {
+        fast: "fast-species",
+        twin: "fast-species",
+        slow: "slow-species",
+      }).map(({ id, name }) => ({ id, name })),
+    ).toEqual([
+      { id: "fast", name: "Fast family" },
+      { id: "slow", name: "slow" },
+    ]);
   });
 
   it("excludes held items from other opponents but retains the current member's item", () => {

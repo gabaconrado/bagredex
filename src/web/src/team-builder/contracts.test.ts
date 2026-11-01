@@ -65,7 +65,7 @@ describe("team builder contracts", () => {
 
   it("parses the exact dataset and builds same-origin sprites", () => {
     const dataset = {
-      schema_version: "team-builder-data-v5",
+      schema_version: "team-builder-data-v6",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -81,6 +81,9 @@ describe("team builder contracts", () => {
           base_stats: stats,
           sprite_form: "charizard",
         },
+      ],
+      pokemon_search_entries: [
+        { form_id: "charizard", name: "Charizard", form_group: null },
       ],
       types: [{ id: "fire", name: "Fire" }],
       abilities: [
@@ -189,7 +192,7 @@ describe("team builder contracts", () => {
     const parsed = parseBuilderData(dataset);
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
     expect(parsed.forms[0]?.is_nfe).toBe(false);
-    expect(parsed.schema_version).toBe("team-builder-data-v5");
+    expect(parsed.schema_version).toBe("team-builder-data-v6");
     expect(parsed.mega_search_entries[0]?.base_form_id).toBe("charizard");
     expect(parsed.items[0]?.description).toContain("Mega Charizard X");
     expect(parsed.items[0]?.stat_modifiers[0]).toEqual({
@@ -267,10 +270,11 @@ describe("team builder contracts", () => {
       stat_modifiers: [],
     };
     const base = {
-      schema_version: "team-builder-data-v5",
+      schema_version: "team-builder-data-v6",
       data_version: "version-3",
       regulation: named,
       forms: [],
+      pokemon_search_entries: [],
       types: [],
       abilities: [],
       moves: [],
@@ -311,10 +315,11 @@ describe("team builder contracts", () => {
 
   it("rejects malformed or dangling Mega search entries", () => {
     const base = {
-      schema_version: "team-builder-data-v5",
+      schema_version: "team-builder-data-v6",
       data_version: "version-3",
       regulation: named,
       forms: [],
+      pokemon_search_entries: [],
       types: [],
       abilities: [],
       moves: [],

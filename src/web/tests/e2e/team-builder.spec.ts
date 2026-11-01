@@ -99,6 +99,93 @@ test("renders a centralized initial loading state", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
 });
 
+test("groups selectable forms and keeps both Meowstic identities", async ({
+  page,
+}) => {
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Choose a Pokémon" });
+  const search = dialog.getByRole("combobox");
+  await search.fill("Castform");
+  await expect(dialog.getByRole("row", { name: /Castform/ })).toHaveCount(1);
+  await expect(dialog.getByText("Castform-Rainy", { exact: true })).toHaveCount(
+    0,
+  );
+  await dialog.getByRole("row", { name: /Castform/ }).click();
+  const member = page.locator(".member-card").first();
+  const form = member.getByRole("combobox", { name: "Form", exact: true });
+  await expect(form).toHaveValue("castform");
+  await form.selectOption("castformrainy");
+  await expect(form).toHaveValue("castformrainy");
+  await expect(
+    member.getByRole("heading", { name: /Castform-Rainy/ }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  const secondDialog = page.getByRole("dialog", { name: "Choose a Pokémon" });
+  await secondDialog.getByRole("combobox").fill("Meowstic");
+  await expect(
+    secondDialog.getByText("Meowstic-Male", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    secondDialog.getByText("Meowstic-Female", { exact: true }),
+  ).toBeVisible();
+});
+
+test("saves and reloads the exact female Meowstic profile", async ({
+  page,
+}) => {
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  const teamName = `Female-Meowstic-${Date.now().toString(36)}`;
+  await page.getByLabel("Team name").fill(teamName);
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Choose a Pokémon" });
+  await dialog.getByRole("combobox").fill("Meowstic");
+  await dialog.getByRole("row", { name: /^Meowstic-Female / }).click();
+  const member = page.locator(".member-card").first();
+  await expect(
+    member.getByRole("heading", { name: "Meowstic-F", exact: true }),
+  ).toBeVisible();
+  const ability = member.getByRole("combobox", {
+    name: "Ability",
+    exact: true,
+  });
+  await ability.focus();
+  await ability.press("Enter");
+  await expect(ability).not.toHaveValue("");
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/teams/",
+  );
+  await page.getByRole("button", { name: "Save" }).click();
+  const payload = await (await created).json();
+  retainedFixtureTeamId = String(payload.data?.id ?? payload.id ?? "");
+  expect(retainedFixtureTeamId).not.toBe("");
+  expect(
+    payload.data?.members?.[0]?.pokemon ?? payload.members?.[0]?.pokemon,
+  ).toBe("meowsticf");
+
+  await page.reload();
+  const library = page.getByRole("complementary", { name: "My Teams" });
+  await library
+    .getByRole("button")
+    .filter({ has: page.getByText(teamName, { exact: true }) })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Meowstic-F", exact: true }),
+  ).toBeVisible();
+  const sprite = page.locator(".member-card img").first();
+  await expect(sprite).toHaveAttribute("alt", "");
+  await expect(sprite).toHaveAttribute("src", /\/meowsticf\/normal\.webp$/);
+});
+
 test("clamps SP shortcuts and selects Mega search entries atomically", async ({
   page,
 }) => {

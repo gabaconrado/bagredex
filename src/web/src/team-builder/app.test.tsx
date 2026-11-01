@@ -110,7 +110,7 @@ const shortcutBootstrap: Bootstrap = {
 };
 
 const shortcutData: BuilderData = {
-  schema_version: "team-builder-data-v5",
+  schema_version: "team-builder-data-v6",
   data_version: "version-3",
   regulation: shortcutBootstrap.regulation,
   forms: [
@@ -125,6 +125,9 @@ const shortcutData: BuilderData = {
       base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
       sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },
     },
+  ],
+  pokemon_search_entries: [
+    { form_id: "charizard", name: "Charizard", form_group: null },
   ],
   types: [{ id: "fire", name: "Fire" }],
   abilities: [
@@ -263,7 +266,7 @@ describe("Team Builder team loading", () => {
     });
     const newerDataVersion = "version-newer";
     const newerData = {
-      schema_version: "team-builder-data-v5",
+      schema_version: "team-builder-data-v6",
       data_version: "version-newer",
       regulation: shortcutBootstrap.regulation,
       forms: [
@@ -286,6 +289,9 @@ describe("Team Builder team loading", () => {
           },
           sprite_form: "charizard",
         },
+      ],
+      pokemon_search_entries: [
+        { form_id: "charizard", name: "Charizard", form_group: null },
       ],
       types: shortcutData.types,
       abilities: shortcutData.abilities,
@@ -755,7 +761,7 @@ describe("team builder autocomplete", () => {
       mega_preview: false,
     };
     const data = {
-      schema_version: "team-builder-data-v5",
+      schema_version: "team-builder-data-v6",
       data_version: "version-3",
       regulation: { id: "m-c", name: "Regulation M-C" },
       forms: [
@@ -770,6 +776,9 @@ describe("team builder autocomplete", () => {
           base_stats: { hp: 78, atk: 84, def: 78, spa: 109, spd: 85, spe: 100 },
           sprites: { normal: "/normal.webp", shiny: "/shiny.webp" },
         },
+      ],
+      pokemon_search_entries: [
+        { form_id: "charizard", name: "Charizard", form_group: null },
       ],
       types: [{ id: "fire", name: "Fire" }],
       abilities: [

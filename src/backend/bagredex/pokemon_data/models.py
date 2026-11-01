@@ -414,9 +414,25 @@ class PokemonProfile(VersionOwnedModel):
 class RegulationMembership(models.Model):
     """Explicit list legality; effective profiles alone never imply membership."""
 
+    class Resolution(models.TextChoices):
+        DIRECT = "direct", "Direct"
+        RELATED_FIXED_SEX = "related-fixed-sex", "Related fixed sex"
+
     profile = models.OneToOneField(
         PokemonProfile, primary_key=True, on_delete=models.PROTECT, related_name="membership"
     )
+    resolution = models.CharField(
+        max_length=32, choices=Resolution.choices, default=Resolution.DIRECT
+    )
+    source_form_id = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(resolution__in=("direct", "related-fixed-sex")),
+                name="pokemon_data_membership_resolution_valid",
+            ),
+        ]
 
     def __str__(self) -> str:
         return str(self.profile)

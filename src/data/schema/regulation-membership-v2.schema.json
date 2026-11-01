@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/regulation-membership-v2.schema.json",
+  "title": "Bagredex regulation membership records with provenance",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["regulation_id", "form_id", "resolution", "source_form_id"],
+    "properties": {
+      "regulation_id": { "enum": ["m-a", "m-b", "m-c"] },
+      "form_id": { "type": "string", "pattern": "^[a-z0-9]+$" },
+      "resolution": { "enum": ["direct", "related-fixed-sex"] },
+      "source_form_id": { "type": "string", "pattern": "^[a-z0-9]+$" }
+    }
+  }
+}

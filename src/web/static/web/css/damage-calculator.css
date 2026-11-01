@@ -82,8 +82,13 @@
   gap: 0.75rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-areas:
+    "form form form"
     "gender ability item"
     "nature current-hp status";
+}
+.damage-field--form {
+  grid-area: form;
+  max-width: 22rem;
 }
 .damage-field--gender {
   grid-area: gender;
@@ -506,6 +511,7 @@
   .damage-choice-grid {
     grid-template-columns: 1fr;
     grid-template-areas:
+      "form"
       "gender"
       "ability"
       "item"

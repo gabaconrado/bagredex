@@ -1,4 +1,8 @@
 export type StatId = "hp" | "atk" | "def" | "spa" | "spd" | "spe";
+import {
+  parsePokemonSearchEntries,
+  type PokemonSearchEntry,
+} from "../form-search";
 const statIds = new Set<StatId>(["hp", "atk", "def", "spa", "spd", "spe"]);
 export type Stats = Record<StatId, number>;
 export type Named = { id: string; name: string };
@@ -20,7 +24,6 @@ export type ContextInput =
       choices: { value: string; label: string }[];
     };
 export type Form = Named & {
-  searchable: boolean;
   is_mega: boolean;
   is_nfe: boolean;
   gender: string;
@@ -62,7 +65,7 @@ export type MegaRelation = {
   locked_ability_id: string;
 };
 export type CalculatorData = {
-  schema_version: "damage-calculator-data-v2";
+  schema_version: "damage-calculator-data-v3";
   data_version: string;
   regulation: Named;
   sprite_url_template: string;
@@ -75,6 +78,7 @@ export type CalculatorData = {
   natures: Nature[];
   types: Named[];
   forms: Form[];
+  pokemon_search_entries: PokemonSearchEntry[];
   abilities: Ability[];
   items: Item[];
   moves: Move[];
@@ -229,7 +233,7 @@ export function parseCalculatorData(value: unknown): CalculatorData {
   const row = object(value);
   if (
     !row ||
-    row.schema_version !== "damage-calculator-data-v2" ||
+    row.schema_version !== "damage-calculator-data-v3" ||
     !text(row.data_version) ||
     !named(row.regulation) ||
     !localUrl(row.sprite_url_template)
@@ -248,6 +252,7 @@ export function parseCalculatorData(value: unknown): CalculatorData {
       "natures",
       "types",
       "forms",
+      "pokemon_search_entries",
       "abilities",
       "items",
       "moves",
@@ -396,7 +401,6 @@ export function parseCalculatorData(value: unknown): CalculatorData {
       [
         "id",
         "name",
-        "searchable",
         "is_mega",
         "is_nfe",
         "gender",
@@ -413,7 +417,6 @@ export function parseCalculatorData(value: unknown): CalculatorData {
     );
     if (
       !named(form) ||
-      typeof form.searchable !== "boolean" ||
       typeof form.is_mega !== "boolean" ||
       typeof form.is_nfe !== "boolean" ||
       !text(form.gender) ||
@@ -433,7 +436,6 @@ export function parseCalculatorData(value: unknown): CalculatorData {
         throw new Error("Invalid form ability.");
     }
     if (
-      (form.searchable && form.is_mega) ||
       form.types.length < 1 ||
       form.types.length > 2 ||
       form.types.some((id) => !ids.type.has(id)) ||
@@ -475,6 +477,10 @@ export function parseCalculatorData(value: unknown): CalculatorData {
     )
       throw new Error("Invalid ability slots.");
   }
+  result.pokemon_search_entries = parsePokemonSearchEntries(
+    row.pokemon_search_entries,
+    result.forms,
+  );
   result.abilities.forEach((entry) => {
     exactKeys(
       entry as unknown as Record<string, unknown>,

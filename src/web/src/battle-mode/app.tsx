@@ -14,6 +14,7 @@ import type {
   StatId,
   Stats,
 } from "../damage-calculator/contracts";
+import { searchEntryForForm } from "../form-search";
 import { parseCalculatorData } from "../damage-calculator/contracts";
 import { MegaIcon } from "../icons";
 import { MoveInformationDialog } from "../move-information";
@@ -487,12 +488,15 @@ export function availableOpponentForms(
   excludedBaseSpeciesIds: ReadonlySet<string>,
   baseSpeciesByForm: Readonly<Record<string, string>>,
 ) {
-  return data.forms.filter(
-    ({ id, searchable, is_mega }) =>
-      searchable &&
-      !is_mega &&
-      !excludedBaseSpeciesIds.has(baseSpeciesByForm[id] ?? id),
-  );
+  return data.pokemon_search_entries
+    .filter(
+      ({ form_id }) =>
+        !excludedBaseSpeciesIds.has(baseSpeciesByForm[form_id] ?? form_id),
+    )
+    .map((entry) => {
+      const form = data.forms.find(({ id }) => id === entry.form_id)!;
+      return { ...form, name: entry.name };
+    });
 }
 
 export function unavailableOpponentItemIds(
@@ -903,14 +907,20 @@ function MemberEditor({
   member,
   data,
   unavailableItemIds = new Set<string>(),
+  baseSpeciesByForm = {},
   onChange,
 }: {
   member: BattleMember;
   data: CalculatorData;
   unavailableItemIds?: ReadonlySet<string>;
+  baseSpeciesByForm?: Readonly<Record<string, string>>;
   onChange: (patch: Partial<BattleMember>) => void;
 }) {
   const form = data.forms.find(({ id }) => id === member.formId)!;
+  const searchEntry = searchEntryForForm(
+    data.pokemon_search_entries,
+    member.formId,
+  );
   const shown = displayForm(data, member) ?? form;
   const nature = data.natures.find(({ id }) => id === member.natureId);
   const hpNature =
@@ -1069,6 +1079,49 @@ function MemberEditor({
       {member.side === "own" && statControls}
       {member.side === "opponent" ? (
         <div class="battle-set-editor">
+          {searchEntry?.form_group && (
+            <label class="battle-form-select">
+              {searchEntry.form_group.label}
+              <select
+                id={`battle-${member.id}-form`}
+                value={member.formId}
+                onChange={(event) => {
+                  const target = data.forms.find(
+                    ({ id }) => id === event.currentTarget.value,
+                  );
+                  if (!target) return;
+                  const abilityId = target.abilities.some(
+                    ({ id }) => id === member.abilityId,
+                  )
+                    ? member.abilityId
+                    : (target.abilities[0]?.id ?? null);
+                  const seen = new Set<string>();
+                  const moveIds = member.moveIds.map((id) => {
+                    if (!id || !target.move_ids.includes(id) || seen.has(id))
+                      return null;
+                    seen.add(id);
+                    return id;
+                  });
+                  onChange({
+                    formId: target.id,
+                    baseSpeciesId: baseSpeciesByForm[target.id] ?? target.id,
+                    label:
+                      member.label === form.name ? target.name : member.label,
+                    gender: target.gender_options.includes(member.gender)
+                      ? member.gender
+                      : target.default_gender,
+                    abilityId,
+                    moveIds,
+                    mega: false,
+                  });
+                }}
+              >
+                {searchEntry.form_group.options.map((option) => (
+                  <option value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div class="battle-choice-grid">
             <SetCombobox
               id={`battle-${member.id}-ability`}
@@ -1615,14 +1668,20 @@ export function BattleMode({ bootstrap }: { bootstrap: BattleBootstrap }) {
           parsed.regulation.id !== bootstrap.regulation.id
         )
           throw new Error("Battle data changed. Reload this page.");
-        const searchable = parsed.forms.filter(
-          ({ searchable, is_mega }) => searchable && !is_mega,
+        const searchableIds = new Set(
+          parsed.pokemon_search_entries.flatMap((entry) =>
+            entry.form_group
+              ? entry.form_group.options.map(({ id }) => id)
+              : [entry.form_id],
+          ),
         );
         const mappedIds = Object.keys(bootstrap.base_species_by_form);
         if (
-          mappedIds.length !== searchable.length ||
-          searchable.some(({ id }) => !bootstrap.base_species_by_form[id]) ||
-          mappedIds.some((id) => !searchable.some((form) => form.id === id))
+          mappedIds.length !== searchableIds.size ||
+          [...searchableIds].some(
+            (id) => !bootstrap.base_species_by_form[id],
+          ) ||
+          mappedIds.some((id) => !searchableIds.has(id))
         )
           throw new Error(
             "Battle species data is inconsistent. Reload this page.",
@@ -2027,6 +2086,7 @@ export function BattleMode({ bootstrap }: { bootstrap: BattleBootstrap }) {
                 opponents,
                 selectedEditors.opponent.id,
               )}
+              baseSpeciesByForm={bootstrap.base_species_by_form}
               onChange={(patch) =>
                 dispatch({
                   type: "update",
