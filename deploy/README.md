@@ -118,9 +118,13 @@ occupied; stop the other listener and retry. The ignored marker under `.cache/hu
 the credentials with mode `0600`; do not share them or use them outside this local environment.
 
 `reload` rebuilds and reapplies idempotent setup while preserving the session volume and any review
-data. `status` is read-only. If startup or reload is interrupted, retain the marker and run
-`reload`; if teardown is interrupted, run `finish` again. Marker/resource disagreement fails closed
-instead of guessing which state may be deleted.
+data. A stable ready session first resolves `deploy/pokemon-data.env` and validates that the named
+local release directory has a matching manifest. It records the `reloading` state and reviewed
+bundle together before rebuilding, loading, or activating data. Invalid pins and artifacts fail
+before marker or runtime mutation. An interrupted startup or reload retains the bundle already in
+the marker, so retry `reload` even if the reviewed pin changes again. `status` is read-only and
+never adopts a pin. If teardown is interrupted, run `finish` again. Marker/resource disagreement
+fails closed instead of guessing which state may be deleted.
 
 Only explicit `finish` removes the exact human-review containers, network, and named volume. After
 confirmed teardown it keeps the private marker in `completion-pending` state; repeated `finish` and

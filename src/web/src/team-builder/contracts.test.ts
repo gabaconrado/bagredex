@@ -65,7 +65,7 @@ describe("team builder contracts", () => {
 
   it("parses the exact dataset and builds same-origin sprites", () => {
     const dataset = {
-      schema_version: "team-builder-data-v4",
+      schema_version: "team-builder-data-v5",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -73,6 +73,7 @@ describe("team builder contracts", () => {
           id: "charizard",
           name: "Charizard",
           base_species: "charizard",
+          is_nfe: false,
           national_dex_number: 6,
           type_ids: ["fire"],
           ability_ids: ["blaze"],
@@ -88,12 +89,14 @@ describe("team builder contracts", () => {
           name: "Blaze",
           short_description: "Boosts Fire moves.",
           description: "Boosts Fire-type moves when HP is low.",
+          suppresses_held_item: false,
         },
         {
           id: "toughclaws",
           name: "Tough Claws",
           short_description: "Boosts contact moves.",
           description: "Boosts the power of contact moves.",
+          suppresses_held_item: false,
         },
       ],
       moves: [
@@ -119,6 +122,14 @@ describe("team builder contracts", () => {
           name: "Charizardite X",
           short_description: "Makes Charizard Mega Evolve.",
           description: "Makes Charizard Mega Evolve into Mega Charizard X.",
+          stat_modifiers: [
+            {
+              stat: "spe",
+              numerator: 6144,
+              denominator: 4096,
+              eligibility: "always",
+            },
+          ],
         },
       ],
       natures: [
@@ -151,6 +162,7 @@ describe("team builder contracts", () => {
           target: {
             id: "charizardmegax",
             name: "Charizard-Mega-X",
+            is_nfe: false,
             sprite_form: "charizardmegax",
             ability_ids: ["toughclaws"],
             base_stats: stats,
@@ -163,6 +175,7 @@ describe("team builder contracts", () => {
           name: "Charizard-Mega-X",
           base_form_id: "charizard",
           item_id: "charizarditex",
+          is_nfe: false,
           sprite_form: "charizardmegax",
           type_ids: ["fire"],
           ability_ids: ["toughclaws"],
@@ -175,10 +188,18 @@ describe("team builder contracts", () => {
     };
     const parsed = parseBuilderData(dataset);
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
-    expect(parsed.schema_version).toBe("team-builder-data-v4");
+    expect(parsed.forms[0]?.is_nfe).toBe(false);
+    expect(parsed.schema_version).toBe("team-builder-data-v5");
     expect(parsed.mega_search_entries[0]?.base_form_id).toBe("charizard");
     expect(parsed.items[0]?.description).toContain("Mega Charizard X");
+    expect(parsed.items[0]?.stat_modifiers[0]).toEqual({
+      stat: "spe",
+      numerator: 6144,
+      denominator: 4096,
+      eligibility: "always",
+    });
     expect(parsed.abilities[0]?.description).toContain("Fire-type");
+    expect(parsed.abilities[0]?.suppresses_held_item).toBe(false);
     expect(parsed.moves[0]?.always_hits).toBe(true);
     expect(parsed.mega_relations[0]?.target.ability.name).toBe("Tough Claws");
     expect(parsed.forms[0]?.sprites.shiny).toContain("/shiny.webp");
@@ -196,11 +217,45 @@ describe("team builder contracts", () => {
       name: "Charizardite Y",
       short_description: "Makes Charizard Mega Evolve.",
       description: "Makes Charizard Mega Evolve into Mega Charizard Y.",
+      stat_modifiers: [],
     });
     mismatchedStone.mega_search_entries[0]!.item_id = "charizarditey";
     expect(() => parseBuilderData(mismatchedStone)).toThrow(
       /Mega search reference/,
     );
+
+    for (const invalidModifier of [
+      { stat: "hp", numerator: 6144, denominator: 4096, eligibility: "always" },
+      { stat: "spe", numerator: 0, denominator: 4096, eligibility: "always" },
+      { stat: "spe", numerator: 6144, denominator: 0, eligibility: "always" },
+      {
+        stat: "spe",
+        numerator: 6144,
+        denominator: 4096,
+        eligibility: "weather",
+      },
+      {
+        stat: "spe",
+        numerator: 6144,
+        denominator: 4096,
+        eligibility: "always",
+        item_id: "choicescarf",
+      },
+    ]) {
+      const malformed = copy(dataset);
+      malformed.items[0]!.stat_modifiers = [invalidModifier];
+      expect(() => parseBuilderData(malformed)).toThrow(/item stat modifier/i);
+    }
+
+    const malformedAbility = copy(dataset);
+    malformedAbility.abilities[0]!.suppresses_held_item = "false" as never;
+    expect(() => parseBuilderData(malformedAbility)).toThrow(
+      /ability details/i,
+    );
+
+    const malformedForm = copy(dataset);
+    malformedForm.forms[0]!.is_nfe = "false" as never;
+    expect(() => parseBuilderData(malformedForm)).toThrow(/Pokémon form/i);
   });
 
   it("requires paired non-empty Item descriptions or paired legacy nulls", () => {
@@ -209,9 +264,10 @@ describe("team builder contracts", () => {
       name: "Oran Berry",
       short_description: "Restores HP.",
       description: "Restores 10 HP when HP is low.",
+      stat_modifiers: [],
     };
     const base = {
-      schema_version: "team-builder-data-v4",
+      schema_version: "team-builder-data-v5",
       data_version: "version-3",
       regulation: named,
       forms: [],
@@ -255,7 +311,7 @@ describe("team builder contracts", () => {
 
   it("rejects malformed or dangling Mega search entries", () => {
     const base = {
-      schema_version: "team-builder-data-v4",
+      schema_version: "team-builder-data-v5",
       data_version: "version-3",
       regulation: named,
       forms: [],
@@ -280,6 +336,7 @@ describe("team builder contracts", () => {
           name: "Mega",
           base_form_id: "missing",
           item_id: "stone",
+          is_nfe: false,
           sprite_form: "mega",
           type_ids: [],
           ability_ids: [],

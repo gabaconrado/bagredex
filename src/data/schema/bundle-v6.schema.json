@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bagredex.local/schema/bundle-v6.schema.json",
+  "title": "Bagredex held-item stat Pokémon bundle manifest",
+  "description": "Pinned schema-6 manifest with normalized Showdown held-item stat and suppression facts.",
+  "type": "object",
+  "required": [
+    "bundle_id",
+    "bundle_hash",
+    "bundle_schema_version",
+    "importer_version",
+    "source_shape_version",
+    "showdown_sources",
+    "counts",
+    "files"
+  ],
+  "properties": {
+    "bundle_id": {"const": "showdown-multi-s6-i8-e712c7acc763"},
+    "bundle_hash": {"const": "e712c7acc763effbfdca5c9f742631ee7bd563d6c0307b88f6f4a83ecc415846"},
+    "bundle_schema_version": {"const": "6"},
+    "importer_version": {"const": "8"},
+    "source_shape_version": {"const": "showdown-champions-multi-revision-6"},
+    "showdown_sources": {"type": "array", "minItems": 2, "maxItems": 2},
+    "counts": {
+      "type": "object",
+      "required": ["item_profiles", "ability_profiles"],
+      "properties": {
+        "item_profiles": {"const": 431},
+        "ability_profiles": {"const": 645}
+      }
+    },
+    "files": {"type": "array", "minItems": 34}
+  },
+  "additionalProperties": true
+}

@@ -28,8 +28,20 @@ CALCULATOR_SCHEMA_VERSION = "5"
 CALCULATOR_IMPORTER_VERSION = "6"
 FORM_SEARCH_IMPORTER_VERSION = "7"
 CALCULATOR_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-5"
+HELD_ITEM_SCHEMA_VERSION = "6"
+HELD_ITEM_IMPORTER_VERSION = "8"
+HELD_ITEM_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-6"
+CALCULATOR_SCHEMA_VERSIONS = frozenset({CALCULATOR_SCHEMA_VERSION, HELD_ITEM_SCHEMA_VERSION})
+ITEM_DESCRIPTION_SCHEMA_VERSIONS = frozenset(
+    {ITEM_INFO_SCHEMA_VERSION, *CALCULATOR_SCHEMA_VERSIONS}
+)
 MULTI_SCHEMA_VERSIONS = frozenset(
-    {MULTI_SCHEMA_VERSION, TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}
+    {
+        MULTI_SCHEMA_VERSION,
+        TEAM_SCHEMA_VERSION,
+        ITEM_INFO_SCHEMA_VERSION,
+        *CALCULATOR_SCHEMA_VERSIONS,
+    }
 )
 SUPPORTED_SCHEMA_VERSIONS = frozenset({SUPPORTED_SCHEMA_VERSION, *MULTI_SCHEMA_VERSIONS})
 EXPECTED_SHOWDOWN_REVISION = "3a766f2cfb5e51c1e428cfe87d0dba91a8f01640"
@@ -258,6 +270,32 @@ FORM_SEARCH_GROUP_COUNTS = {
     },
 }
 PINNED_RELEASE_CONTRACTS = {
+    "showdown-multi-s6-i8-e712c7acc763": (
+        "e712c7acc763effbfdca5c9f742631ee7bd563d6c0307b88f6f4a83ecc415846",
+        FORM_SEARCH_PINNED_COUNTS,
+        FORM_SEARCH_GROUP_COUNTS,
+        "6b38776ae3eb0cb94e582b213236abff522c378e65fda85a72724cc0a42f77eb",
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_item_texts": 564,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_item_texts": 583,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
+    ),
     "showdown-multi-s5-i7-49850c617dd2": (
         "49850c617dd2eddfcdc53f0bf22f4aa58c4433e26717974a5e9e0ccd113cda9f",
         FORM_SEARCH_PINNED_COUNTS,
@@ -965,7 +1003,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         "is_mega",
         "sprite_id",
     }
-    if schema_version == CALCULATOR_SCHEMA_VERSION:
+    if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         form_keys.update({"is_nfe", "gender", "gender_options", "default_gender"})
     for index, record in enumerate(records["forms.json"]):
         label = f"forms.json[{index}]"
@@ -978,7 +1016,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         if not isinstance(form_label, str) or len(form_label) > 100:
             raise BundleReadError(f"{label}: form_label must be a string up to 100 characters")
         _boolean(record, "is_mega", label)
-        if schema_version == CALCULATOR_SCHEMA_VERSION:
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS:
             _boolean(record, "is_nfe", label)
             if _text(record, "gender", label, maximum=16) not in {"M", "F", "N", "variable"}:
                 raise BundleReadError(f"{label}: invalid gender")
@@ -1015,17 +1053,19 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         for index, record in enumerate(records["item_profiles.json"]):
             label = f"item_profiles.json[{index}]"
             keys = {"regulation_id", "id", "name", "source_status"}
-            if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+            if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
                 keys.update({"short_description", "description", "description_source"})
-            if schema_version == CALCULATOR_SCHEMA_VERSION:
+            if schema_version in CALCULATOR_SCHEMA_VERSIONS:
                 keys.update({"contextual_inputs", "calculation"})
+            if schema_version == HELD_ITEM_SCHEMA_VERSION:
+                keys.add("stat_modifiers")
             _exact_keys(record, keys, label)
             _identifier(record, "regulation_id", label)
             _identifier(record, "id", label)
             _text(record, "name", label, maximum=200)
             if record.get("source_status") != "standard":
                 raise BundleReadError(f"{label}: item must be standard")
-            if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+            if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
                 short_description = _text(record, "short_description", label)
                 description = _text(record, "description", label)
                 if (
@@ -1040,7 +1080,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
                     raise BundleReadError(
                         f"{label}: shortDesc description must equal short_description"
                     )
-            if schema_version == CALCULATOR_SCHEMA_VERSION:
+            if schema_version in CALCULATOR_SCHEMA_VERSIONS:
                 _validate_contextual_inputs(
                     record.get("contextual_inputs"), f"{label}:contextual_inputs"
                 )
@@ -1049,6 +1089,23 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
                     f"{label}:calculation",
                     {_string(item, "id", "types.json") for item in records["types.json"]},
                 )
+            if schema_version == HELD_ITEM_SCHEMA_VERSION:
+                modifiers = _records(record.get("stat_modifiers"), f"{label}:stat_modifiers")
+                for modifier_index, modifier in enumerate(modifiers):
+                    modifier_label = f"{label}:stat_modifiers[{modifier_index}]"
+                    _exact_keys(
+                        modifier,
+                        {"stat", "numerator", "denominator", "eligibility"},
+                        modifier_label,
+                    )
+                    if modifier.get("stat") not in {"atk", "def", "spa", "spd", "spe"}:
+                        raise BundleReadError(f"{modifier_label}: invalid stat")
+                    _integer_range(modifier, "numerator", modifier_label, minimum=1, maximum=65535)
+                    _integer_range(
+                        modifier, "denominator", modifier_label, minimum=1, maximum=65535
+                    )
+                    if modifier.get("eligibility") not in {"always", "form_is_nfe"}:
+                        raise BundleReadError(f"{modifier_label}: invalid eligibility")
         for index, record in enumerate(records["mega_item_relations.json"]):
             label = f"mega_item_relations.json[{index}]"
             _exact_keys(record, {"regulation_id", "item_id", "base_form_id", "mega_form_id"}, label)
@@ -1066,7 +1123,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
     for index, record in enumerate(records["profiles.json"]):
         label = f"profiles.json[{index}]"
         profile_keys = {"regulation_id", "form_id", "stats", "bst", "types", "abilities"}
-        if schema_version == CALCULATOR_SCHEMA_VERSION:
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS:
             profile_keys.add("weight_tenths_kg")
         _exact_keys(record, profile_keys, label)
         _identifier(record, "regulation_id", label)
@@ -1076,7 +1133,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         for stat in ("hp", "atk", "def", "spa", "spd", "spe"):
             _integer_range(stats, stat, f"{label}:stats", minimum=1, maximum=32767)
         _integer_range(record, "bst", label, minimum=6, maximum=32767)
-        if schema_version == CALCULATOR_SCHEMA_VERSION:
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS:
             _integer_range(record, "weight_tenths_kg", label, minimum=1, maximum=2_147_483_647)
         _string_list(record["types"], f"{label}:types", minimum=1)
         abilities = _records(record.get("abilities"), f"{label}:abilities")
@@ -1095,8 +1152,10 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         "short_description",
         "description",
     }
-    if schema_version == CALCULATOR_SCHEMA_VERSION:
+    if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         ability_profile_keys.add("contextual_inputs")
+    if schema_version == HELD_ITEM_SCHEMA_VERSION:
+        ability_profile_keys.add("suppresses_held_item")
     for index, record in enumerate(records["ability_profiles.json"]):
         label = f"ability_profiles.json[{index}]"
         _exact_keys(record, ability_profile_keys, label)
@@ -1105,10 +1164,12 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         _text(record, "name", label, maximum=200)
         _text(record, "short_description", label)
         _text(record, "description", label)
-        if schema_version == CALCULATOR_SCHEMA_VERSION:
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS:
             _validate_contextual_inputs(
                 record.get("contextual_inputs"), f"{label}:contextual_inputs"
             )
+        if schema_version == HELD_ITEM_SCHEMA_VERSION:
+            _boolean(record, "suppresses_held_item", label)
     move_profile_keys = {
         "regulation_id",
         "id",
@@ -1123,7 +1184,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         "short_description",
         "description",
     }
-    if schema_version == CALCULATOR_SCHEMA_VERSION:
+    if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         move_profile_keys.update({"calculation", "contextual_inputs"})
     for index, record in enumerate(records["move_profiles.json"]):
         label = f"move_profiles.json[{index}]"
@@ -1143,7 +1204,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
         _text(record, "target", label, maximum=100)
         _text(record, "short_description", label)
         _text(record, "description", label)
-        if schema_version == CALCULATOR_SCHEMA_VERSION:
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS:
             calculation = _object(record.get("calculation"), f"{label}:calculation")
             _exact_keys(
                 calculation,
@@ -1243,7 +1304,7 @@ def _validate_record_shapes(records: dict[str, list[JsonObject]], *, schema_vers
             raise BundleReadError(f"{label}: invalid source_mod")
         if record.get("source_kind") not in {"direct", "inherited", "override"}:
             raise BundleReadError(f"{label}: invalid source_kind")
-    if schema_version == CALCULATOR_SCHEMA_VERSION:
+    if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         for index, record in enumerate(records["type_effectiveness.json"]):
             label = f"type_effectiveness.json[{index}]"
             _exact_keys(
@@ -1379,11 +1440,15 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         "other_formula": "truncate((base + sp + 20) * nature_percent / 100)",
         "nature_percentages": {"hindering": 90, "neutral": 100, "increasing": 110},
     }
-    if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in {
+        TEAM_SCHEMA_VERSION,
+        ITEM_INFO_SCHEMA_VERSION,
+        *CALCULATOR_SCHEMA_VERSIONS,
+    }:
         expected_mechanics["sp_total_max"] = 66
     if records["mechanics_profiles.json"] != [expected_mechanics]:
         raise BundleReadError("mechanics_profiles.json: unsupported mechanics contract")
-    if schema_version == CALCULATOR_SCHEMA_VERSION:
+    if schema_version in CALCULATOR_SCHEMA_VERSIONS:
         expected_pairs = {
             (attacking, defending) for attacking in type_ids for defending in type_ids
         }
@@ -1514,7 +1579,11 @@ def _validate_relations(records: dict[str, list[JsonObject]], *, schema_version:
         raise BundleReadError(
             "regulation_memberships.json: membership without an effective profile"
         )
-    if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in {
+        TEAM_SCHEMA_VERSION,
+        ITEM_INFO_SCHEMA_VERSION,
+        *CALCULATOR_SCHEMA_VERSIONS,
+    }:
         item_ids = {_string(item, "id", "items.json") for item in records["items.json"]}
         item_profiles = {
             (
@@ -1929,7 +1998,9 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: unsupported bundle schema version")
     importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_importers = (
-        {CALCULATOR_IMPORTER_VERSION, FORM_SEARCH_IMPORTER_VERSION}
+        {HELD_ITEM_IMPORTER_VERSION}
+        if schema_version == HELD_ITEM_SCHEMA_VERSION
+        else {CALCULATOR_IMPORTER_VERSION, FORM_SEARCH_IMPORTER_VERSION}
         if schema_version == CALCULATOR_SCHEMA_VERSION
         else {ITEM_INFO_IMPORTER_VERSION}
         if schema_version == ITEM_INFO_SCHEMA_VERSION
@@ -1946,7 +2017,9 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if importer_version not in expected_importers:
         raise BundleReadError("manifest.json: unsupported importer version")
     expected_source_shape = (
-        CALCULATOR_SOURCE_SHAPE_VERSION
+        HELD_ITEM_SOURCE_SHAPE_VERSION
+        if schema_version == HELD_ITEM_SCHEMA_VERSION
+        else CALCULATOR_SOURCE_SHAPE_VERSION
         if schema_version == CALCULATOR_SCHEMA_VERSION
         else ITEM_INFO_SOURCE_SHAPE_VERSION
         if schema_version == ITEM_INFO_SCHEMA_VERSION
@@ -2012,7 +2085,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         )
     data_files = (
         CALCULATOR_DATA_FILES
-        if schema_version == CALCULATOR_SCHEMA_VERSION
+        if schema_version in CALCULATOR_SCHEMA_VERSIONS
         else TEAM_DATA_FILES
         if schema_version in {TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION}
         else DATA_FILES
@@ -2106,7 +2179,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         "showdown_sources" if schema_version in MULTI_SCHEMA_VERSIONS else "showdown"
     )
     provenance_keys = {provenance_source_field, "sprites", "pokeapi_mapping", "overlays"}
-    if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
         provenance_keys.add("item_description_sources")
     _exact_keys(provenance, provenance_keys, "provenance.json")
     source_count_keys = {
@@ -2117,7 +2190,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         "champions_format_entries",
         "championsregmb_format_entries",
     }
-    if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
         source_count_keys.add("base_item_texts")
     if schema_version in MULTI_SCHEMA_VERSIONS:
         provenance_sources = _records(
@@ -2264,7 +2337,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     if not isinstance(overlays, list):
         raise BundleReadError("provenance.json: overlays must be an array")
     item_overlay_after: dict[str, JsonObject] = {}
-    if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
         if len(overlays) != 1:
             raise BundleReadError("provenance.json: expected one Item text compatibility overlay")
         overlay = _object(overlays[0], "provenance.json:overlays[0]")
@@ -2354,7 +2427,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     for name, values in records.items():
         _validate_unique(values, FILE_KEYS[name], name)
     _validate_relations(records, schema_version=schema_version)
-    if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
         m_a_item_profiles = {
             _string(profile, "id", "item_profiles.json"): profile
             for profile in records["item_profiles.json"]
@@ -2365,12 +2438,14 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
                 "regulation_id": "m-a",
                 **{key: value for key, value in after.items() if key != "mega_stone"},
             }
-            if schema_version == CALCULATOR_SCHEMA_VERSION:
+            if schema_version in CALCULATOR_SCHEMA_VERSIONS:
                 portable_after["contextual_inputs"] = []
             actual_profile = m_a_item_profiles.get(item_id)
-            if schema_version == CALCULATOR_SCHEMA_VERSION and actual_profile is not None:
+            if schema_version in CALCULATOR_SCHEMA_VERSIONS and actual_profile is not None:
                 actual_profile = {
-                    key: value for key, value in actual_profile.items() if key != "calculation"
+                    key: value
+                    for key, value in actual_profile.items()
+                    if key not in {"calculation", "stat_modifiers"}
                 }
             if actual_profile != portable_after:
                 raise BundleReadError(
@@ -2404,7 +2479,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
     expected_counts = _expected_counts(records)
     if validation.get("counts") != expected_counts or manifest.get("counts") != expected_counts:
         raise BundleReadError("bundle counts do not match normalized records")
-    if schema_version in {ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}:
+    if schema_version in ITEM_DESCRIPTION_SCHEMA_VERSIONS:
         item_description_sources = _object(
             provenance.get("item_description_sources"),
             "provenance.json:item_description_sources",

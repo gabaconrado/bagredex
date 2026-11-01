@@ -24,6 +24,7 @@ export type Bootstrap = {
 
 export type BuilderForm = Named & {
   base_species_id: string;
+  is_nfe: boolean;
   types: Named[];
   ability_ids: string[];
   move_ids: string[];
@@ -37,10 +38,18 @@ export type Nature = Named & {
 export type AbilityDetail = Named & {
   short_description: string;
   description: string;
+  suppresses_held_item: boolean;
+};
+export type ItemStatModifier = {
+  stat: Exclude<StatId, "hp">;
+  numerator: number;
+  denominator: number;
+  eligibility: "always" | "form_is_nfe";
 };
 export type ItemDetail = Named & {
   short_description: string | null;
   description: string | null;
+  stat_modifiers: ItemStatModifier[];
 };
 export type MoveDetail = Named & {
   type: Named;
@@ -65,7 +74,7 @@ export type MegaSearchEntry = BuilderForm & {
   item_id: string;
 };
 export type BuilderData = {
-  schema_version: "team-builder-data-v4";
+  schema_version: "team-builder-data-v5";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
@@ -126,6 +135,13 @@ const text = (value: unknown): value is string =>
 const localUrl = (value: unknown): value is string =>
   text(value) && value.startsWith("/") && !value.startsWith("//");
 const statIds: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
+const modifiableStatIds: ItemStatModifier["stat"][] = [
+  "atk",
+  "def",
+  "spa",
+  "spd",
+  "spe",
+];
 const assertNamed = (value: unknown) => {
   const item = record(value);
   if (!item || !text(item.id) || !text(item.name))
@@ -204,6 +220,7 @@ function assertForm(value: unknown) {
     !text(item.id) ||
     !text(item.name) ||
     !text(item.base_species_id) ||
+    typeof item.is_nfe !== "boolean" ||
     !Array.isArray(item.types) ||
     !Array.isArray(item.ability_ids) ||
     !Array.isArray(item.move_ids)
@@ -222,7 +239,7 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v4" ||
+    item.schema_version !== "team-builder-data-v5" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
     !Array.isArray(item.abilities) ||
@@ -262,6 +279,7 @@ export function parseBuilderData(value: unknown): BuilderData {
     id: String(form.id),
     name: String(form.name),
     base_species_id: String(form.base_species),
+    is_nfe: form.is_nfe as boolean,
     types: types.filter((type) =>
       (form.type_ids as string[]).includes(type.id),
     ),
@@ -279,7 +297,8 @@ export function parseBuilderData(value: unknown): BuilderData {
     const ability = record(value)!;
     if (
       typeof ability.short_description !== "string" ||
-      typeof ability.description !== "string"
+      typeof ability.description !== "string" ||
+      typeof ability.suppresses_held_item !== "boolean"
     )
       throw new Error("Invalid ability details.");
   });
@@ -311,6 +330,28 @@ export function parseBuilderData(value: unknown): BuilderData {
     const description = detail.description;
     const bothNull = shortDescription === null && description === null;
     const bothPresent = text(shortDescription) && text(description);
+    if (!Array.isArray(detail.stat_modifiers))
+      throw new Error("Invalid item stat modifiers.");
+    detail.stat_modifiers.forEach((value) => {
+      const modifier = record(value);
+      if (
+        !modifier ||
+        Object.keys(modifier).length !== 4 ||
+        !Object.hasOwn(modifier, "stat") ||
+        !Object.hasOwn(modifier, "numerator") ||
+        !Object.hasOwn(modifier, "denominator") ||
+        !Object.hasOwn(modifier, "eligibility") ||
+        !modifiableStatIds.includes(
+          modifier.stat as ItemStatModifier["stat"],
+        ) ||
+        !Number.isSafeInteger(modifier.numerator) ||
+        Number(modifier.numerator) <= 0 ||
+        !Number.isSafeInteger(modifier.denominator) ||
+        Number(modifier.denominator) <= 0 ||
+        !["always", "form_is_nfe"].includes(String(modifier.eligibility))
+      )
+        throw new Error("Invalid item stat modifier.");
+    });
     if (
       (!bothNull && !bothPresent) ||
       (bothPresent &&
@@ -334,7 +375,8 @@ export function parseBuilderData(value: unknown): BuilderData {
       !relation ||
       !text(relation.base_form) ||
       !text(relation.item) ||
-      !record(relation.target)
+      !record(relation.target) ||
+      typeof record(relation.target)?.is_nfe !== "boolean"
     )
       throw new Error("Invalid Mega mapping.");
   });
@@ -346,6 +388,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       !text(entry.name) ||
       !text(entry.base_form_id) ||
       !text(entry.item_id) ||
+      typeof entry.is_nfe !== "boolean" ||
       !text(entry.sprite_form) ||
       !Array.isArray(entry.type_ids) ||
       !Array.isArray(entry.ability_ids) ||
@@ -389,6 +432,7 @@ export function parseBuilderData(value: unknown): BuilderData {
           id: String(target.id),
           name: String(target.name),
           base_species_id: String(relation.base_form),
+          is_nfe: target.is_nfe as boolean,
           types:
             forms.find((form) => form.id === relation.base_form)?.types ?? [],
           ability_ids: abilityIds,
@@ -439,6 +483,7 @@ export function parseBuilderData(value: unknown): BuilderData {
       base_form_id: String(entry.base_form_id),
       item_id: String(entry.item_id),
       base_species_id: base.base_species_id,
+      is_nfe: entry.is_nfe as boolean,
       types: types.filter((type) => typeIds.includes(type.id)),
       ability_ids: abilityIds,
       move_ids: moveIds,
@@ -470,7 +515,7 @@ export function parseBuilderData(value: unknown): BuilderData {
         : nature.name,
   }));
   return {
-    schema_version: "team-builder-data-v4",
+    schema_version: "team-builder-data-v5",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
     forms,

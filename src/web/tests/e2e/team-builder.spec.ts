@@ -183,6 +183,104 @@ test("clamps SP shortcuts and selects Mega search entries atomically", async ({
   await expect(page.getByText("Team saved.")).toBeVisible();
 });
 
+test("updates Real Stats immediately from normalized held-item modifiers", async ({
+  page,
+}) => {
+  const bootstrap = JSON.parse(
+    (await page.locator("#team-builder-bootstrap").textContent()) ?? "null",
+  ) as { dataset_url: string };
+  const dataset = await (await page.request.get(bootstrap.dataset_url)).json();
+  const item = dataset.items.find(
+    (choice: { stat_modifiers: { stat: string }[] }) =>
+      choice.stat_modifiers.some((modifier) => modifier.stat === "spe"),
+  );
+  expect(item, "legal normalized Speed modifier fixture").toBeTruthy();
+  const speedModifier = item.stat_modifiers.find(
+    (modifier: { stat: string; eligibility: string }) =>
+      modifier.stat === "spe" && modifier.eligibility === "always",
+  );
+  expect(speedModifier, "always-active Speed modifier fixture").toBeTruthy();
+  const form = dataset.forms.find(
+    (choice: { ability_ids: string[] }) => choice.ability_ids.length > 0,
+  );
+  const ability = dataset.abilities.find(
+    (choice: { id: string; suppresses_held_item: boolean }) =>
+      form.ability_ids.includes(choice.id) && !choice.suppresses_held_item,
+  );
+  expect(ability, "non-suppressing ability fixture").toBeTruthy();
+
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  const picker = page.getByRole("dialog", { name: "Choose a Pokémon" });
+  await picker.getByRole("combobox").fill(form.name);
+  await picker.getByRole("row").filter({ hasText: form.name }).first().click();
+  const member = page.locator(".member-card").first();
+  const abilityInput = member.getByRole("combobox", {
+    name: "Ability",
+    exact: true,
+  });
+  await abilityInput.fill(ability.name);
+  await abilityInput.press("Enter");
+  const itemInput = member.getByRole("combobox", { name: "Item", exact: true });
+  await itemInput.fill(item.name);
+  await itemInput.press("Enter");
+
+  const displayedSpeed = member
+    .locator(".real-stats")
+    .getByText("Speed", { exact: true })
+    .locator("..")
+    .locator("dd");
+  const rawSpeed = form.base_stats.speed + 20;
+  const effectiveSpeed = Math.ceil(
+    (rawSpeed * speedModifier.numerator) / speedModifier.denominator - 0.5,
+  );
+  await expect(displayedSpeed).toHaveText(String(effectiveSpeed));
+  await itemInput.fill("");
+  await itemInput.press("Tab");
+  await expect(displayedSpeed).toHaveText(String(rawSpeed));
+});
+
+test("removes an expanded member from the header action group", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  await page
+    .getByRole("dialog", { name: "Choose a Pokémon" })
+    .getByRole("combobox")
+    .press("Enter");
+  const member = page.locator(".member-card").first();
+  const species = (await member.getByRole("heading").textContent())?.trim();
+  expect(species).toBeTruthy();
+  const remove = member.getByRole("button", {
+    name: `Remove ${species}`,
+    exact: true,
+  });
+  await expect(remove).toHaveCount(1);
+  await expect(
+    member.getByRole("button", { name: `Collapse ${species}`, exact: true }),
+  ).toBeVisible();
+  expect(
+    await member
+      .locator(".member-actions button")
+      .evaluateAll((buttons) => buttons.map((button) => button.textContent)),
+  ).toEqual(["Collapse", "Remove"]);
+  expect(
+    await member
+      .locator(".member-card__header")
+      .evaluate((header) => header.scrollWidth <= header.clientWidth),
+  ).toBe(true);
+  await remove.click();
+  await expect(member).toHaveCount(0);
+});
+
 test("creates a keyboard-first local draft and protects it from navigation", async ({
   page,
 }) => {

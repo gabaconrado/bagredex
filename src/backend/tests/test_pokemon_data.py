@@ -180,6 +180,66 @@ def test_form_search_release_is_exact_and_prior_release_remains_retained() -> No
     assert prior.manifest["importer_version"] == "6"
 
 
+def test_held_item_mechanics_release_is_exact_and_prior_release_remains_retained() -> None:
+    releases = Path(settings.POKEMON_DATA_RELEASES_ROOT)
+    current = read_bundle(releases / "showdown-multi-s6-i8-e712c7acc763")
+    prior = read_bundle(releases / "showdown-multi-s5-i7-49850c617dd2")
+
+    assert current.manifest["bundle_hash"] == (
+        "e712c7acc763effbfdca5c9f742631ee7bd563d6c0307b88f6f4a83ecc415846"
+    )
+    assert current.manifest["bundle_schema_version"] == "6"
+    assert current.manifest["importer_version"] == "8"
+    assert current.manifest["counts"] == current.validation["counts"]
+    scarf = next(
+        record
+        for record in current.records["item_profiles.json"]
+        if record["regulation_id"] == "m-c" and record["id"] == "choicescarf"
+    )
+    klutz = next(
+        record
+        for record in current.records["ability_profiles.json"]
+        if record["regulation_id"] == "m-c" and record["id"] == "klutz"
+    )
+    assert scarf["stat_modifiers"] == [
+        {"stat": "spe", "numerator": 6144, "denominator": 4096, "eligibility": "always"}
+    ]
+    assert klutz["suppresses_held_item"] is True
+    assert prior.manifest["importer_version"] == "7"
+
+
+@pytest.mark.parametrize(
+    ("filename", "mutate", "message"),
+    [
+        (
+            "item_profiles.json",
+            lambda records: records[0]["stat_modifiers"].append(
+                {
+                    "stat": "spe",
+                    "numerator": 0,
+                    "denominator": 4096,
+                    "eligibility": "always",
+                }
+            ),
+            "numerator must be an integer between 1 and 65535",
+        ),
+        (
+            "ability_profiles.json",
+            lambda records: records[0].__setitem__("suppresses_held_item", "false"),
+            "suppresses_held_item must be a boolean",
+        ),
+    ],
+)
+def test_held_item_mechanics_release_rejects_malformed_facts(
+    tmp_path: Path, filename: str, mutate: Any, message: str
+) -> None:
+    source = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s6-i8-e712c7acc763"
+    release = _rewrite_item_info_release(source, tmp_path, filename, mutate)
+
+    with pytest.raises(BundleReadError, match=message):
+        read_bundle(release, require_pinned=False)
+
+
 def test_item_profile_admin_exposes_description_provenance_read_only() -> None:
     model_admin = admin.site._registry[ItemProfile]
 
@@ -635,7 +695,7 @@ def _rewrite_multi_release(source: Path, tmp_path: Path, filename: str, mutate: 
 
 
 def _rewrite_item_info_release(source: Path, tmp_path: Path, filename: str, mutate: Any) -> Path:
-    """Copy and consistently re-identify the committed schema-4 release after mutation."""
+    """Copy and consistently re-identify a retained Item-capable release after mutation."""
     directory = tmp_path / source.name
     shutil.copytree(source, directory)
     path = directory / filename
@@ -657,7 +717,10 @@ def _rewrite_item_info_release(source: Path, tmp_path: Path, filename: str, muta
         )
     ]
     bundle_hash = hashlib.sha256(canonical_bytes(files)).hexdigest()
-    identifier = f"showdown-multi-s4-i5-{bundle_hash[:12]}"
+    identifier = (
+        f"showdown-multi-s{manifest['bundle_schema_version']}"
+        f"-i{manifest['importer_version']}-{bundle_hash[:12]}"
+    )
     manifest["files"] = files
     manifest["bundle_hash"] = bundle_hash
     manifest["bundle_id"] = identifier

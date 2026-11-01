@@ -266,6 +266,7 @@ class AbilityProfile(VersionOwnedModel):
     short_description = models.TextField()
     description = models.TextField()
     contextual_inputs = models.JSONField(default=list)
+    suppresses_held_item = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -292,6 +293,7 @@ class ItemProfile(VersionOwnedModel):
     )
     contextual_inputs = models.JSONField(default=list)
     calculation = models.JSONField(default=dict)
+    stat_modifiers = models.JSONField(default=list)
 
     class Meta:
         constraints = [

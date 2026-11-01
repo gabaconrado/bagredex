@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 import path from 'node:path';
+import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {hasStandardStatus, isStandardFormatsEntry, selectRelatedFormIDs} from './legality.mjs';
 import {resolveItemDescription} from './item-text.mjs';
 import {resolveLearnset} from './learnset-resolution.mjs';
+import {heldItemSuppressingAbilities, itemStatModifiers} from './held-item-mechanics.mjs';
 
 const root = path.resolve(process.argv[2] || '');
 const requested = process.argv[3] || 'current';
@@ -213,6 +215,8 @@ const itemCalculationFacts = value => ({
     return type ? {type_id: toID(type[1])} : null;
   })(),
 });
+const pokemonSource = fs.readFileSync(path.join(root, 'sim/pokemon.ts'), 'utf8');
+const suppressingAbilities = heldItemSuppressingAbilities(pokemonSource);
 
 const requestedFormIDs = (process.argv[4] || '').split(',').filter(Boolean);
 const selected = new Set(requestedFormIDs.length
@@ -276,6 +280,7 @@ for (const config of configurations) {
       id, name: value.name, source_status: 'standard',
       ...resolveItemDescription(itemsText[id], `${config.mod} item ${id}`),
       calculation: itemCalculationFacts(value),
+      stat_modifiers: itemStatModifiers(value),
       mega_stone: value.megaStone ? Object.entries(value.megaStone).map(([base, mega]) => ({
         base_form_id: toID(base), mega_form_id: toID(mega),
       })).sort((a, b) => compareText(a.base_form_id, b.base_form_id)) : [],
@@ -306,6 +311,7 @@ for (const config of configurations) {
     return {
       id, name: value.name, short_description: text.shortDesc || '',
       description: text.desc || text.shortDesc || '', contextual_inputs: abilityContext(id),
+      suppresses_held_item: suppressingAbilities.has(id),
     };
   });
   const moves = [...moveIDs].sort().map(id => {

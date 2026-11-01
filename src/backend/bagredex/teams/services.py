@@ -25,7 +25,7 @@ from .models import Team, TeamMember, TeamMemberMove
 
 API_SCHEMA = "team-api-v1"
 DRAFT_SCHEMA = "team-draft-v1"
-DATA_SCHEMA = "team-builder-data-v4"
+DATA_SCHEMA = "team-builder-data-v5"
 BOOTSTRAP_SCHEMA = "team-builder-bootstrap-v2"
 STAT_IDS = ("hp", "attack", "defense", "special_attack", "special_defense", "speed")
 

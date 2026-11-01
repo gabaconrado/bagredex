@@ -19,10 +19,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "5"
-IMPORTER_VERSION = "7"
+SCHEMA_VERSION = "6"
+IMPORTER_VERSION = "8"
 LEGACY_IMPORTER_VERSION = "1"
-SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-5"
+SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-6"
 M_A_ITEM_TEXT_OVERLAY = "m-a-item-text-compatibility.json"
 M_A_ITEM_TEXT_OVERLAY_IDS = frozenset(
     {
@@ -406,6 +406,7 @@ def _verify_showdown(showdown: Path) -> None:
         "data/mods/championsregmb/moves.ts",
         "data/mods/championsregmb/items.ts",
         "data/mods/championsregmb/learnsets.ts",
+        "sim/pokemon.ts",
     )
     missing = [item for item in required if not (showdown / item).is_file()]
     if missing:
@@ -451,6 +452,7 @@ HISTORICAL_PATHS = (
     "data/mods/champions/abilities.ts",
     "data/mods/champions/items.ts",
     "data/mods/champions/learnsets.ts",
+    "sim/pokemon.ts",
     "LICENSE",
 )
 
@@ -622,12 +624,20 @@ def _apply_m_a_item_text_overlay(
         target = [value for value in historical_items if value["id"] == item_id]
         source = [value for value in current_items if value["id"] == item_id]
         target_text = (
-            {key: value for key, value in target[0].items() if key != "calculation"}
+            {
+                key: value
+                for key, value in target[0].items()
+                if key not in {"calculation", "stat_modifiers"}
+            }
             if len(target) == 1
             else None
         )
         source_text = (
-            {key: value for key, value in source[0].items() if key != "calculation"}
+            {
+                key: value
+                for key, value in source[0].items()
+                if key not in {"calculation", "stat_modifiers"}
+            }
             if len(source) == 1
             else None
         )
@@ -658,6 +668,7 @@ def _apply_m_a_item_text_overlay(
         historical_items[historical_items.index(target[0])] = {
             **transition["after"],
             "calculation": target[0]["calculation"],
+            "stat_modifiers": target[0]["stat_modifiers"],
         }
         fixture_paths.append(fixture)
     return overlay, path, fixture_paths
@@ -720,6 +731,7 @@ def _records(extracted: dict[str, Any]) -> dict[str, Any]:
                     "description": value["description"],
                     "description_source": value["description_source"],
                     "calculation": value["calculation"],
+                    "stat_modifiers": value["stat_modifiers"],
                     "contextual_inputs": (
                         [
                             {
@@ -1288,6 +1300,15 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         if isinstance(candidate_manifest, dict):
             manifest_schema = candidate_manifest.get("bundle_schema_version")
     calculator_schema = (bundle / "calculator_capabilities.json").is_file()
+    item_stat_schema = manifest_schema == SCHEMA_VERSION or (
+        manifest_schema is None
+        and (bundle / "item_profiles.json").is_file()
+        and any(
+            "stat_modifiers" in value
+            for value in _load_json(bundle, "item_profiles.json")
+            if isinstance(value, dict)
+        )
+    )
     data_files = (
         DATA_FILES
         if calculator_schema
@@ -1314,7 +1335,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
     items = data.get("items.json", [])
     item_profiles = data.get("item_profiles.json", [])
     item_description_schema = (
-        manifest_schema in {"4", SCHEMA_VERSION}
+        manifest_schema in {"4", "5", SCHEMA_VERSION}
         if manifest_schema is not None
         else any(
             "short_description" in value
@@ -1370,6 +1391,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             ),
             *({"contextual_inputs"} if calculator_schema else set()),
             *({"calculation"} if calculator_schema else set()),
+            *({"stat_modifiers"} if item_stat_schema else set()),
         },
         "natures.json": {"id", "name", "increased_stat", "decreased_stat"},
         "move_flags.json": {"id"},
@@ -1390,6 +1412,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "short_description",
             "description",
             *({"contextual_inputs"} if calculator_schema else set()),
+            *({"suppresses_held_item"} if item_stat_schema else set()),
         },
         "move_profiles.json": {
             "regulation_id",
@@ -1794,6 +1817,12 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
                 profile["contextual_inputs"],
                 f"ability_profiles.json[{index}].contextual_inputs",
             )
+            if item_stat_schema and not isinstance(
+                profile["suppresses_held_item"], bool
+            ):
+                raise BundleError(
+                    f"ability_profiles.json[{index}].suppresses_held_item: expected boolean"
+                )
         for index, profile in enumerate(item_profiles):
             validate_contexts(
                 profile["contextual_inputs"],
@@ -1802,6 +1831,45 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             validate_item_calculation(
                 profile["calculation"], f"item_profiles.json[{index}].calculation"
             )
+            if item_stat_schema:
+                modifiers = profile["stat_modifiers"]
+                if not isinstance(modifiers, list):
+                    raise BundleError(
+                        f"item_profiles.json[{index}].stat_modifiers: expected array"
+                    )
+                seen_stats: set[str] = set()
+                for modifier_index, modifier in enumerate(modifiers):
+                    modifier_label = (
+                        f"item_profiles.json[{index}].stat_modifiers[{modifier_index}]"
+                    )
+                    _fields(
+                        modifier,
+                        {"stat", "numerator", "denominator", "eligibility"},
+                        modifier_label,
+                    )
+                    _typed(
+                        modifier,
+                        {
+                            "stat": str,
+                            "numerator": int,
+                            "denominator": int,
+                            "eligibility": str,
+                        },
+                        modifier_label,
+                    )
+                    if modifier["stat"] not in {"atk", "def", "spa", "spd", "spe"}:
+                        raise BundleError(f"{modifier_label}.stat: unsupported stat")
+                    if modifier["stat"] in seen_stats:
+                        raise BundleError(f"{modifier_label}.stat: duplicate stat")
+                    seen_stats.add(modifier["stat"])
+                    if modifier["numerator"] <= 0 or modifier["denominator"] <= 0:
+                        raise BundleError(
+                            f"{modifier_label}: modifier fraction must be positive"
+                        )
+                    if modifier["eligibility"] not in {"always", "form_is_nfe"}:
+                        raise BundleError(
+                            f"{modifier_label}.eligibility: unsupported condition"
+                        )
         for index, move in enumerate(move_profiles):
             validate_contexts(
                 move["contextual_inputs"],
@@ -2940,6 +3008,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         _fields(manifest, expected_manifest_fields, "manifest.json")
         expected_schema = (
             SCHEMA_VERSION
+            if item_stat_schema
+            else "5"
             if calculator_schema
             else "4"
             if item_description_schema
@@ -2959,6 +3029,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "4",
             "5",
             "6",
+            "7",
             IMPORTER_VERSION,
         }:
             raise BundleError(
@@ -2966,6 +3037,8 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             )
         expected_shape = (
             SOURCE_SHAPE_VERSION
+            if item_stat_schema
+            else "showdown-champions-multi-revision-5"
             if calculator_schema
             else "showdown-champions-multi-revision-4"
             if item_description_schema
@@ -2984,7 +3057,9 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
                 "manifest.json: importer version 1 cannot contain version 2 legality semantics"
             )
         expected_importers = (
-            {"6", IMPORTER_VERSION}
+            {IMPORTER_VERSION}
+            if item_stat_schema
+            else {"6", "7"}
             if calculator_schema
             else {"5"}
             if item_description_schema
@@ -2992,11 +3067,17 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             if items
             else None
         )
-        if expected_importers is not None and importer_version not in expected_importers:
+        if (
+            expected_importers is not None
+            and importer_version not in expected_importers
+        ):
             raise BundleError(
                 "manifest.json: unsupported importer or source-shape version"
             )
-        if importer_version in {"2", "4", "5", "6", IMPORTER_VERSION} and legacy_release:
+        if (
+            importer_version in {"2", "4", "5", "6", "7", IMPORTER_VERSION}
+            and legacy_release
+        ):
             raise BundleError(
                 "manifest.json: importer version 2 cannot contain legacy legality semantics"
             )

@@ -48,13 +48,14 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         types.setdefault(type_row["profile_id"], []).append(type_id)
         type_names[type_id] = type_row["type__name"]
     abilities: dict[Any, list[str]] = {}
-    ability_records: dict[str, dict[str, str]] = {}
+    ability_records: dict[str, dict[str, Any]] = {}
     for ability_row in PokemonProfileAbility.objects.filter(profile_id__in=profile_ids).values(
         "profile_id",
         "ability_profile__ability__canonical_id",
         "ability_profile__ability__name",
         "ability_profile__short_description",
         "ability_profile__description",
+        "ability_profile__suppresses_held_item",
     ):
         ability_id = ability_row["ability_profile__ability__canonical_id"]
         abilities.setdefault(ability_row["profile_id"], []).append(ability_id)
@@ -63,6 +64,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             "name": ability_row["ability_profile__ability__name"],
             "short_description": ability_row["ability_profile__short_description"],
             "description": ability_row["ability_profile__description"],
+            "suppresses_held_item": ability_row["ability_profile__suppresses_held_item"],
         }
     moves: dict[Any, list[str]] = {}
     move_records: dict[str, dict[str, Any]] = {}
@@ -138,6 +140,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         "ability_profile__ability__name",
         "ability_profile__short_description",
         "ability_profile__description",
+        "ability_profile__suppresses_held_item",
     ):
         ability_id = mega_ability_row["ability_profile__ability__canonical_id"]
         mega_abilities.setdefault(mega_ability_row["profile__form_id"], []).append(ability_id)
@@ -146,6 +149,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             "name": mega_ability_row["ability_profile__ability__name"],
             "short_description": mega_ability_row["ability_profile__short_description"],
             "description": mega_ability_row["ability_profile__description"],
+            "suppresses_held_item": mega_ability_row["ability_profile__suppresses_held_item"],
         }
     mega_types: dict[Any, list[str]] = {}
     for mega_type_row in (
@@ -235,6 +239,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
                 "speed": profile.speed,
             },
             "sprite_form": profile.form.canonical_id,
+            "is_nfe": profile.form.is_nfe,
         }
         for profile in profiles
     ]
@@ -262,6 +267,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
                 "name": profile.item.name,
                 "short_description": profile.short_description,
                 "description": profile.description,
+                "stat_modifiers": profile.stat_modifiers,
             }
             for profile in sorted(
                 item_profiles,
@@ -296,6 +302,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
                     "id": row.mega_form.canonical_id,
                     "name": row.mega_form.name,
                     "sprite_form": row.mega_form.canonical_id,
+                    "is_nfe": row.mega_form.is_nfe,
                     "ability_ids": sorted(mega_abilities.get(row.mega_form_id, [])),
                     "base_stats": {
                         "hp": mega_profiles[row.mega_form_id].hp,
@@ -317,6 +324,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
                 "base_form_id": row.base_form.canonical_id,
                 "item_id": row.item_profile.item.canonical_id,
                 "sprite_form": row.mega_form.canonical_id,
+                "is_nfe": row.mega_form.is_nfe,
                 "type_ids": mega_types.get(row.mega_form_id, []),
                 "ability_ids": sorted(mega_abilities.get(row.mega_form_id, [])),
                 "move_ids": sorted(mega_moves.get(row.mega_form_id, [])),

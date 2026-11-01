@@ -931,7 +931,18 @@ export function MemberEditor({
       relation.item_id === member.item_id,
   );
   const display = member.mega_preview && mega ? mega.target : form;
-  const stats = realStats(display.base_stats, member.sp, nature);
+  const abilityDetail =
+    member.mega_preview && mega
+      ? data.abilities.find((item) => item.id === mega.target.ability.id)
+      : data.abilities.find((item) => item.id === member.ability_id);
+  const selectedItem = data.items.find((item) => item.id === member.item_id);
+  const stats = realStats(
+    display,
+    member.sp,
+    nature,
+    selectedItem ?? null,
+    abilityDetail ?? null,
+  );
   const errors = validateLocal(member, data, allMembers, index);
   const serverError = (path: string) =>
     serverErrors[`members.${index}.${path}`]?.join(" ");
@@ -958,11 +969,6 @@ export function MemberEditor({
       item.id === member.item_id ||
       !allMembers.some((other, i) => i !== index && other.item_id === item.id),
   );
-  const abilityDetail =
-    member.mega_preview && mega
-      ? data.abilities.find((item) => item.id === mega.target.ability.id)
-      : data.abilities.find((item) => item.id === member.ability_id);
-  const selectedItem = data.items.find((item) => item.id === member.item_id);
   const itemDetail =
     selectedItem?.short_description && selectedItem.description
       ? {
@@ -1108,6 +1114,13 @@ export function MemberEditor({
             aria-label={`Collapse ${form.name}`}
           >
             Collapse
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove ${form.name}`}
+          >
+            Remove
           </button>
         </div>
       </header>

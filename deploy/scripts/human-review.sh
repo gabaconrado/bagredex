@@ -145,6 +145,23 @@ human_review_read_marker() {
   }
 }
 
+human_review_resolve_ready_bundle() {
+  local data_env bundle release
+  data_env="${BAGREDEX_HUMAN_REVIEW_DATA_ENV-${pokemon_data_env}}"
+  bundle="$(review_data_version_from "${data_env}")" || return
+  release="${script_dir}/src/data/releases/${bundle}"
+  [[ -d "${release}" && ! -L "${release}" ]] || {
+    printf 'Reviewed human-review bundle is unavailable locally: %s\n' "${bundle}" >&2
+    return 2
+  }
+  if ! (cd "${script_dir}" && python -m src.data.importer validate "${release}") \
+    >/dev/null; then
+    printf 'Reviewed human-review bundle failed local validation: %s\n' "${bundle}" >&2
+    return 2
+  fi
+  printf '%s\n' "${bundle}"
+}
+
 human_review_resources_present() {
   local containers status
   containers="$(podman ps -a --filter \
@@ -705,7 +722,8 @@ human_review_status() {
 }
 
 human_review_reload() {
-  require_tools podman npm node sed curl stat mktemp mv chmod ss
+  local marker_state reviewed_bundle=""
+  require_tools podman npm node python sed curl stat mktemp mv chmod ss
   human_review_read_marker
   [[ "${hr_state}" != recording ]] || {
     printf 'Human-review completion recording is pending; run complete after committing the receipt.\n' >&2
@@ -715,6 +733,7 @@ human_review_reload() {
     printf 'Human-review teardown is pending; run finish to resume it.\n' >&2
     return 7
   }
+  marker_state="${hr_state}"
   human_review_reconcile
   [[ "${hr_state}" == starting ]] || podman volume exists "${human_review_volume}" || {
     printf 'Active human-review session is missing its validated database volume.\n' >&2
@@ -728,6 +747,10 @@ human_review_reload() {
       hr_password="admin"
     fi
     hr_port="${human_review_fixed_port}"
+  fi
+  if [[ "${marker_state}" == ready ]]; then
+    reviewed_bundle="$(human_review_resolve_ready_bundle)" || return
+    hr_bundle="${reviewed_bundle}"
   fi
   hr_state="reloading"
   human_review_write_marker

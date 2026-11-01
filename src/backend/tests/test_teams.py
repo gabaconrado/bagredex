@@ -110,6 +110,7 @@ def team_data() -> dict[str, Any]:
         base_form_id=form_id,
         form_label="",
         is_mega=False,
+        is_nfe=True,
         sprite_id="pikachu",
     )
     profile = PokemonProfile.objects.create(
@@ -133,6 +134,7 @@ def team_data() -> dict[str, Any]:
         ability=ability,
         short_description="May paralyze.",
         description="May paralyze on contact.",
+        suppresses_held_item=True,
     )
     PokemonProfileAbility.objects.create(profile=profile, ability_profile=ability_profile, slot="0")
     move = Move.objects.create(version=version, canonical_id="thunderbolt", name="Thunderbolt")
@@ -180,16 +182,24 @@ def team_data() -> dict[str, Any]:
         description_source=ItemProfile.DescriptionSource.DESC,
     )
     ordinary_item = Item.objects.create(
-        version=version, canonical_id="oranberry", name="Oran Berry"
+        version=version, canonical_id="choicescarf", name="Choice Scarf"
     )
     ItemProfile.objects.create(
         version=version,
         regulation=regulation,
         item=ordinary_item,
         source_status="standard",
-        short_description="Restores HP.",
-        description="Restores HP.",
+        short_description="Boosts Speed.",
+        description="Boosts Speed but locks move selection.",
         description_source=ItemProfile.DescriptionSource.SHORT_DESC,
+        stat_modifiers=[
+            {
+                "stat": "spe",
+                "numerator": 6144,
+                "denominator": 4096,
+                "eligibility": "always",
+            }
+        ],
     )
     mega = PokemonForm.objects.create(
         version=version,
@@ -967,7 +977,7 @@ def test_wrong_mega_item_and_duplicate_species_item_are_rejected(team_data: dict
     client = Client()
     client.force_login(owner)
     wrong = _draft(team_data, "Wrong stone")
-    wrong["members"] = [_member(item="oranberry", mega_preview=True)]
+    wrong["members"] = [_member(item="choicescarf", mega_preview=True)]
     wrong_response = client.post("/teams/", data=json.dumps(wrong), content_type="application/json")
     assert "members.0.mega_preview" in wrong_response.json()["error"]["fields"]
 
@@ -1069,12 +1079,16 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
     client.force_login(owner)
     owner_response = client.get(url)
     assert owner_response.status_code == 200
-    assert owner_response.json()["items"] == [
+    owner_payload = owner_response.json()
+    assert owner_payload["schema_version"] == "team-builder-data-v5"
+    assert owner_payload["forms"][0]["is_nfe"] is False
+    assert owner_payload["items"] == [
         {
             "id": "foreignitem",
             "name": "Foreign Item",
             "short_description": None,
             "description": None,
+            "stat_modifiers": [],
         }
     ]
     client.force_login(other)
@@ -1084,7 +1098,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
 
 
 @pytest.mark.django_db
-def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
+def test_builder_dataset_v5_has_pinned_held_item_mechanics(
     team_data: dict[str, Any],
 ) -> None:
     owner = User.objects.create_user(username="dataset-details")
@@ -1096,7 +1110,7 @@ def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, max-age=3600"
     payload = response.json()
-    assert payload["schema_version"] == "team-builder-data-v4"
+    assert payload["schema_version"] == "team-builder-data-v5"
     assert payload["data_version"] == team_data["version"].pk
     assert payload["regulation"]["id"] == "m-c"
     assert payload["abilities"] == [
@@ -1105,6 +1119,7 @@ def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
             "name": "Static",
             "short_description": "May paralyze.",
             "description": "May paralyze on contact.",
+            "suppresses_held_item": True,
         }
     ]
     assert payload["moves"] == [
@@ -1126,7 +1141,9 @@ def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
     ]
     assert payload["forms"][0]["ability_ids"] == ["static"]
     assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
+    assert payload["forms"][0]["is_nfe"] is True
     assert payload["mega_relations"][0]["target"]["ability_ids"] == ["static"]
+    assert payload["mega_relations"][0]["target"]["is_nfe"] is False
     assert payload["mega_search_entries"] == [
         {
             "id": "pikachumega",
@@ -1134,6 +1151,7 @@ def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
             "base_form_id": "pikachu",
             "item_id": "pikachunite",
             "sprite_form": "pikachumega",
+            "is_nfe": False,
             "type_ids": [],
             "ability_ids": ["static"],
             "move_ids": [],
@@ -1149,16 +1167,25 @@ def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
     ]
     assert payload["items"] == [
         {
-            "id": "oranberry",
-            "name": "Oran Berry",
-            "short_description": "Restores HP.",
-            "description": "Restores HP.",
+            "id": "choicescarf",
+            "name": "Choice Scarf",
+            "short_description": "Boosts Speed.",
+            "description": "Boosts Speed but locks move selection.",
+            "stat_modifiers": [
+                {
+                    "stat": "spe",
+                    "numerator": 6144,
+                    "denominator": 4096,
+                    "eligibility": "always",
+                }
+            ],
         },
         {
             "id": "pikachunite",
             "name": "Pikachunite",
             "short_description": "Enables Mega Evolution.",
             "description": "Enables Pikachu to Mega Evolve.",
+            "stat_modifiers": [],
         },
     ]
     assert payload["sprite_url_template"].startswith("/")

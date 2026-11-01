@@ -534,7 +534,7 @@ function MoveModifierPopover({
           }
         }}
       >
-        Modifiers
+        +
       </button>
       {open && (
         <div ref={layer} class="damage-move-modifier-layer">
@@ -1034,40 +1034,51 @@ function PokemonPanel({
                       —
                     </button>
                   )}
-                  <Choice
-                    id={`${sideId}-move-${index}`}
-                    label={`Move ${index + 1}`}
-                    value={moveId}
-                    choices={
-                      base.move_ids
-                        .map((id) => data.moves.find((row) => row.id === id))
-                        .filter(Boolean) as Named[]
-                    }
-                    onChange={(id) => {
-                      if (openMoveModifier === modifierId)
-                        setOpenMoveModifier(null);
-                      const moveIds = [...side.moveIds];
-                      moveIds[index] = id;
-                      const moveContexts = [...side.moveContexts];
-                      moveContexts[index] = {};
-                      update({ moveIds, moveContexts });
-                    }}
-                  />
-                  {move && move.contextual_inputs.length > 0 && (
-                    <MoveModifierPopover
-                      id={modifierId}
-                      move={move}
-                      context={moveContext}
-                      open={openMoveModifier === modifierId}
-                      onOpen={() => setOpenMoveModifier(modifierId)}
-                      onClose={() => setOpenMoveModifier(null)}
-                      onChange={(key, value) => {
+                  <div
+                    class={`damage-move-field${
+                      move && move.contextual_inputs.length > 0
+                        ? " has-modifier"
+                        : ""
+                    }`}
+                  >
+                    <Choice
+                      id={`${sideId}-move-${index}`}
+                      label={`Move ${index + 1}`}
+                      value={moveId}
+                      choices={
+                        base.move_ids
+                          .map((id) => data.moves.find((row) => row.id === id))
+                          .filter(Boolean) as Named[]
+                      }
+                      onChange={(id) => {
+                        if (openMoveModifier === modifierId)
+                          setOpenMoveModifier(null);
+                        const moveIds = [...side.moveIds];
+                        moveIds[index] = id;
                         const moveContexts = [...side.moveContexts];
-                        moveContexts[index] = { ...moveContext, [key]: value };
-                        update({ moveContexts });
+                        moveContexts[index] = {};
+                        update({ moveIds, moveContexts });
                       }}
                     />
-                  )}
+                    {move && move.contextual_inputs.length > 0 && (
+                      <MoveModifierPopover
+                        id={modifierId}
+                        move={move}
+                        context={moveContext}
+                        open={openMoveModifier === modifierId}
+                        onOpen={() => setOpenMoveModifier(modifierId)}
+                        onClose={() => setOpenMoveModifier(null)}
+                        onChange={(key, value) => {
+                          const moveContexts = [...side.moveContexts];
+                          moveContexts[index] = {
+                            ...moveContext,
+                            [key]: value,
+                          };
+                          update({ moveContexts });
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}

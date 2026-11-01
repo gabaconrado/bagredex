@@ -201,6 +201,135 @@ class CanonicalEncodingTests(unittest.TestCase):
             _unique(records, ("regulation_id", "id"), "moves.json")
 
 
+class HeldItemMechanicsTests(unittest.TestCase):
+    def test_source_callbacks_normalize_supported_stat_modifiers(self) -> None:
+        repository = Path(__file__).parents[3]
+        script = """
+import {pathToFileURL} from 'node:url';
+import {itemStatModifiers} from './src/data/importer/held-item-mechanics.mjs';
+const root = process.argv[1];
+const {Items} = await import(pathToFileURL(`${root}/data/items.ts`).href);
+const ids = ['choicescarf', 'choiceband', 'choicespecs', 'assaultvest', 'eviolite', 'lifeorb', 'liechiberry'];
+const facts = Object.fromEntries(ids.map(id => [id, itemStatModifiers(Items[id])]));
+facts.unsupportedConditional = itemStatModifiers({
+  onModifyAtk(atk, pokemon) {
+    if (pokemon.status) return this.chainModify(1.5);
+  },
+});
+facts.nonExactDecimal = itemStatModifiers({
+  onModifyAtk(atk) {
+    return this.chainModify(1.1);
+  },
+});
+console.log(JSON.stringify(facts));
+"""
+        output = subprocess.run(
+            [
+                "node",
+                "--no-warnings",
+                "--input-type=module",
+                "--eval",
+                script,
+                str(repository / "references" / "pokemon-showdown"),
+            ],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        facts = json.loads(output)
+        expected = {
+            "choicescarf": ("spe", "always"),
+            "choiceband": ("atk", "always"),
+            "choicespecs": ("spa", "always"),
+            "assaultvest": ("spd", "always"),
+        }
+        for item_id, (stat, eligibility) in expected.items():
+            self.assertEqual(
+                facts[item_id],
+                [
+                    {
+                        "stat": stat,
+                        "numerator": 6144,
+                        "denominator": 4096,
+                        "eligibility": eligibility,
+                    }
+                ],
+            )
+        self.assertEqual(
+            facts["eviolite"],
+            [
+                {
+                    "stat": stat,
+                    "numerator": 6144,
+                    "denominator": 4096,
+                    "eligibility": "form_is_nfe",
+                }
+                for stat in ("def", "spd")
+            ],
+        )
+        self.assertEqual(facts["lifeorb"], [])
+        self.assertEqual(facts["liechiberry"], [])
+        self.assertEqual(facts["unsupportedConditional"], [])
+        self.assertEqual(
+            facts["nonExactDecimal"],
+            [
+                {
+                    "stat": "atk",
+                    "numerator": 4505,
+                    "denominator": 4096,
+                    "eligibility": "always",
+                }
+            ],
+        )
+
+    def test_release_contains_only_legal_normalized_mechanics(self) -> None:
+        release = (
+            Path(__file__).parents[1] / "releases" / "showdown-multi-s6-i8-e712c7acc763"
+        )
+        items = json.loads((release / "item_profiles.json").read_text())
+        abilities = json.loads((release / "ability_profiles.json").read_text())
+        modifiers = {
+            (value["regulation_id"], value["id"]): value["stat_modifiers"]
+            for value in items
+            if value["stat_modifiers"]
+        }
+        self.assertEqual(
+            modifiers[("m-c", "choicescarf")],
+            [
+                {
+                    "denominator": 4096,
+                    "eligibility": "always",
+                    "numerator": 6144,
+                    "stat": "spe",
+                }
+            ],
+        )
+        self.assertEqual(
+            modifiers[("m-c", "ironball")][0],
+            {
+                "denominator": 4096,
+                "eligibility": "always",
+                "numerator": 2048,
+                "stat": "spe",
+            },
+        )
+        self.assertEqual(
+            {
+                value["regulation_id"]
+                for value in abilities
+                if value["suppresses_held_item"] and value["id"] == "klutz"
+            },
+            {"m-a", "m-b", "m-c"},
+        )
+        self.assertFalse(
+            any(
+                value["suppresses_held_item"] and value["id"] != "klutz"
+                for value in abilities
+            )
+        )
+
+
 class SpriteSelectionTests(unittest.TestCase):
     def test_both_home_variants_are_converted_and_hashed(self) -> None:
         repository = Path(__file__).parents[3]

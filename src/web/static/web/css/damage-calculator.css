@@ -233,9 +233,7 @@
 }
 .damage-move {
   display: grid;
-  grid-template-columns:
-    minmax(11rem, 0.85fr) minmax(10rem, 1.15fr)
-    auto;
+  grid-template-columns: minmax(11rem, 0.85fr) minmax(10rem, 1.15fr);
   gap: 0.65rem;
   align-items: end;
 }
@@ -259,6 +257,13 @@
 }
 .damage-combobox {
   position: relative;
+}
+.damage-move-field {
+  position: relative;
+  min-width: 0;
+}
+.damage-move-field.has-modifier .damage-combobox input {
+  padding-inline-end: 3rem;
 }
 .damage-combobox__list {
   position: absolute;
@@ -288,18 +293,32 @@
   background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
 }
 .damage-move-modifier-trigger {
-  grid-column: 3;
-  justify-self: end;
+  position: absolute;
+  z-index: 1;
+  right: 0.2rem;
+  bottom: 0.2rem;
+  display: inline-grid;
+  width: 2.15rem;
+  height: 2.15rem;
+  place-items: center;
   min-height: 2.25rem;
   border: 1px solid var(--color-accent);
   border-radius: 0.55rem;
   background: var(--color-accent-soft);
   color: var(--color-accent-strong);
-  padding: 0.4rem 0.7rem;
+  padding: 0;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 1.1rem;
+  line-height: 1;
   font-weight: 750;
   cursor: pointer;
+}
+.damage-move-modifier-trigger:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+}
+.damage-move-modifier-trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 .damage-move-modifier-layer {
   position: fixed;
@@ -474,9 +493,6 @@
   }
   .damage-move {
     grid-template-columns: 1fr;
-  }
-  .damage-move-modifier-trigger {
-    grid-column: 1;
   }
 }
 @media (max-width: 720px) {

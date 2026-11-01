@@ -242,6 +242,31 @@ test("keeps move slot selections and contextual controls independent", async ({
     name: "Beat Up modifiers",
     exact: true,
   });
+  await expect(counterModifiers).toHaveText("+");
+  await expect(beatUpModifiers).toHaveText("+");
+  await expect(counterModifiers).toHaveAttribute("aria-expanded", "false");
+  await expect(counterModifiers).toHaveAttribute(
+    "aria-controls",
+    "left-move-0-modifiers",
+  );
+  const counterInputBox = await counter.boundingBox();
+  const counterTriggerBox = await counterModifiers.boundingBox();
+  expect(counterInputBox).not.toBeNull();
+  expect(counterTriggerBox).not.toBeNull();
+  expect(counterTriggerBox!.x).toBeGreaterThan(counterInputBox!.x);
+  expect(counterTriggerBox!.x + counterTriggerBox!.width).toBeLessThanOrEqual(
+    counterInputBox!.x + counterInputBox!.width,
+  );
+  expect(counterTriggerBox!.y).toBeGreaterThanOrEqual(counterInputBox!.y);
+  expect(counterTriggerBox!.y + counterTriggerBox!.height).toBeLessThanOrEqual(
+    counterInputBox!.y + counterInputBox!.height,
+  );
+  const moveRow = counter.locator("xpath=../../..");
+  const gridTracks = await moveRow.evaluate(
+    (element) =>
+      getComputedStyle(element).gridTemplateColumns.split(" ").length,
+  );
+  expect(gridTracks).toBe((page.viewportSize()?.width ?? 1000) <= 1000 ? 1 : 2);
   await counterModifiers.click();
   await page.getByLabel("Prior damage taken").fill("40");
   if ((page.viewportSize()?.width ?? 1000) <= 720) {

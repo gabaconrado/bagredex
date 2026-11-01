@@ -1,6 +1,8 @@
 import type {
   BuilderData,
   BuilderForm,
+  AbilityDetail,
+  ItemDetail,
   MegaSearchEntry,
   Member,
   Named,
@@ -143,10 +145,30 @@ export function clampSpEdit(
     Math.max(mechanics.sp_min, mechanics.sp_total_max - otherTotal),
   );
 }
-export function realStats(base: Stats, sp: Stats, nature: Nature): Stats {
+function applyStatModifier(
+  value: number,
+  numerator: number,
+  denominator: number,
+): number {
+  // Showdown's modifier scale rounds to nearest with exact halves rounded down.
+  const scaled =
+    BigInt(value) * BigInt(numerator) * 2n + BigInt(denominator) - 1n;
+  return Number(scaled / (BigInt(denominator) * 2n));
+}
+
+export function realStats(
+  form: BuilderForm,
+  sp: Stats,
+  nature: Nature,
+  item: ItemDetail | null = null,
+  ability: AbilityDetail | null = null,
+): Stats {
   const result = {} as Stats;
   for (const id of statIds) {
-    const raw = id === "hp" ? base[id] + sp[id] + 75 : base[id] + sp[id] + 20;
+    const raw =
+      id === "hp"
+        ? form.base_stats[id] + sp[id] + 75
+        : form.base_stats[id] + sp[id] + 20;
     const modifier =
       nature.increased_stat === id
         ? 110
@@ -154,6 +176,16 @@ export function realStats(base: Stats, sp: Stats, nature: Nature): Stats {
           ? 90
           : 100;
     result[id] = id === "hp" ? raw : Math.floor((raw * modifier) / 100);
+  }
+  if (!ability?.suppresses_held_item) {
+    for (const modifier of item?.stat_modifiers ?? []) {
+      if (modifier.eligibility === "form_is_nfe" && !form.is_nfe) continue;
+      result[modifier.stat] = applyStatModifier(
+        result[modifier.stat],
+        modifier.numerator,
+        modifier.denominator,
+      );
+    }
   }
   return result;
 }

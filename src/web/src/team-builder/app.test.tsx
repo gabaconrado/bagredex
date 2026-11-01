@@ -110,7 +110,7 @@ const shortcutBootstrap: Bootstrap = {
 };
 
 const shortcutData: BuilderData = {
-  schema_version: "team-builder-data-v4",
+  schema_version: "team-builder-data-v5",
   data_version: "version-3",
   regulation: shortcutBootstrap.regulation,
   forms: [
@@ -118,6 +118,7 @@ const shortcutData: BuilderData = {
       id: "charizard",
       name: "Charizard",
       base_species_id: "charizard",
+      is_nfe: false,
       types: [{ id: "fire", name: "Fire" }],
       ability_ids: ["blaze"],
       move_ids: [],
@@ -132,6 +133,7 @@ const shortcutData: BuilderData = {
       name: "Blaze",
       short_description: "Boosts Fire moves.",
       description: "Boosts Fire-type moves when HP is low.",
+      suppresses_held_item: false,
     },
   ],
   moves: [],
@@ -261,7 +263,7 @@ describe("Team Builder team loading", () => {
     });
     const newerDataVersion = "version-newer";
     const newerData = {
-      schema_version: "team-builder-data-v4",
+      schema_version: "team-builder-data-v5",
       data_version: "version-newer",
       regulation: shortcutBootstrap.regulation,
       forms: [
@@ -269,6 +271,7 @@ describe("Team Builder team loading", () => {
           id: "charizard",
           name: "Newest Charizard",
           base_species: "charizard",
+          is_nfe: false,
           national_dex_number: 6,
           type_ids: ["fire"],
           ability_ids: ["blaze"],
@@ -454,6 +457,103 @@ describe("Team Builder SP and Mega palette behavior", () => {
     ).toBe("0");
   });
 
+  it("recomputes displayed Real Stats when item suppression changes", () => {
+    const effectiveData: BuilderData = {
+      ...shortcutData,
+      forms: [
+        {
+          ...shortcutData.forms[0]!,
+          ability_ids: ["blaze", "klutz"],
+        },
+      ],
+      abilities: [
+        ...shortcutData.abilities,
+        {
+          id: "klutz",
+          name: "Klutz",
+          short_description: "Suppresses held items.",
+          description: "The Pokémon cannot use its held item.",
+          suppresses_held_item: true,
+        },
+      ],
+      items: [
+        {
+          id: "normalized-speed-item",
+          name: "Normalized Speed Item",
+          short_description: null,
+          description: null,
+          stat_modifiers: [
+            {
+              stat: "spe",
+              numerator: 6144,
+              denominator: 4096,
+              eligibility: "always",
+            },
+          ],
+        },
+      ],
+    };
+    function Harness() {
+      const [member, setMember] = useState<Member>({
+        position: 0,
+        form_id: "charizard",
+        nickname: "",
+        ability_id: "blaze",
+        item_id: "normalized-speed-item",
+        move_ids: [null, null, null, null],
+        nature_id: "serious",
+        sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        shiny: false,
+        mega_preview: false,
+      });
+      return (
+        <>
+          <MemberEditor
+            member={member}
+            index={0}
+            slot={0}
+            data={effectiveData}
+            allMembers={[member]}
+            onChange={setMember}
+            onRemove={() => undefined}
+            onMove={() => null}
+            serverErrors={{}}
+            onAnnounce={() => undefined}
+          />
+          <button
+            type="button"
+            onClick={() => setMember({ ...member, item_id: null })}
+          >
+            Remove item
+          </button>
+          <button
+            type="button"
+            onClick={() => setMember({ ...member, ability_id: "klutz" })}
+          >
+            Suppress item
+          </button>
+          <button
+            type="button"
+            onClick={() => setMember({ ...member, ability_id: "blaze" })}
+          >
+            Enable item
+          </button>
+        </>
+      );
+    }
+    const displayedSpeed = () =>
+      screen.getAllByText("Speed").find((element) => element.tagName === "DT")
+        ?.nextElementSibling?.textContent;
+    render(<Harness />);
+    expect(displayedSpeed()).toBe("180");
+    fireEvent.click(screen.getByRole("button", { name: "Suppress item" }));
+    expect(displayedSpeed()).toBe("120");
+    fireEvent.click(screen.getByRole("button", { name: "Enable item" }));
+    expect(displayedSpeed()).toBe("180");
+    fireEvent.click(screen.getByRole("button", { name: "Remove item" }));
+    expect(displayedSpeed()).toBe("120");
+  });
+
   it("returns a discriminated Mega choice with target presentation data", () => {
     const onChoose = vi.fn();
     const megaData: BuilderData = {
@@ -464,6 +564,7 @@ describe("Team Builder SP and Mega palette behavior", () => {
           name: "Charizardite X",
           short_description: "Mega Stone.",
           description: "Enables Mega Evolution.",
+          stat_modifiers: [],
         },
       ],
       mega_search_entries: [
@@ -654,7 +755,7 @@ describe("team builder autocomplete", () => {
       mega_preview: false,
     };
     const data = {
-      schema_version: "team-builder-data-v4",
+      schema_version: "team-builder-data-v5",
       data_version: "version-3",
       regulation: { id: "m-c", name: "Regulation M-C" },
       forms: [
@@ -662,6 +763,7 @@ describe("team builder autocomplete", () => {
           id: "charizard",
           name: "Charizard",
           base_species_id: "charizard",
+          is_nfe: false,
           types: [{ id: "fire", name: "Fire" }],
           ability_ids: ["blaze"],
           move_ids: ["protect"],
@@ -676,12 +778,14 @@ describe("team builder autocomplete", () => {
           name: "Blaze",
           short_description: "Boosts Fire moves.",
           description: "Boosts Fire-type moves when HP is low.",
+          suppresses_held_item: false,
         },
         {
           id: "toughclaws",
           name: "Tough Claws",
           short_description: "Boosts contact moves.",
           description: "Boosts the power of contact moves.",
+          suppresses_held_item: false,
         },
       ],
       moves: [
@@ -707,6 +811,7 @@ describe("team builder autocomplete", () => {
           name: "Charizardite X",
           short_description: "Makes Charizard Mega Evolve.",
           description: "Makes Charizard Mega Evolve into Mega Charizard X.",
+          stat_modifiers: [],
         },
       ],
       natures: [],
@@ -718,6 +823,7 @@ describe("team builder autocomplete", () => {
             id: "charizardmegax",
             name: "Charizard-Mega-X",
             base_species_id: "charizard",
+            is_nfe: false,
             types: [{ id: "fire", name: "Fire" }],
             ability_ids: ["toughclaws"],
             move_ids: [],
@@ -832,6 +938,7 @@ describe("team builder autocomplete", () => {
     expect(overTotal.firstError?.path).toBe("sp");
     expect(fieldPathToDomPath(overTotal.firstError!.path)).toBe("sp-hp");
     const onChange = vi.fn();
+    const onRemove = vi.fn();
     render(
       <MemberEditor
         member={member}
@@ -840,7 +947,7 @@ describe("team builder autocomplete", () => {
         data={data}
         allMembers={[member]}
         onChange={onChange}
-        onRemove={() => undefined}
+        onRemove={onRemove}
         onMove={() => null}
         serverErrors={{}}
         onAnnounce={() => undefined}
@@ -854,8 +961,10 @@ describe("team builder autocomplete", () => {
       screen.getByRole("button", { name: "Collapse Charizard" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Remove Charizard" }),
-    ).toBeNull();
+      screen.getAllByRole("button", { name: "Remove Charizard" }),
+    ).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Charizard" }));
+    expect(onRemove).toHaveBeenCalledOnce();
     const nickname = screen.getByRole("button", {
       name: "Edit nickname for Charizard",
     });
@@ -999,8 +1108,8 @@ describe("team builder autocomplete", () => {
     expect(screen.getByText("Item: Charizardite X")).toBeTruthy();
     expect(screen.getByText("Moves: Protect")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Remove Charizard" }),
-    ).toBeTruthy();
+      screen.getAllByRole("button", { name: "Remove Charizard" }),
+    ).toHaveLength(1);
     fireEvent.click(screen.getByText("Ability: Blaze"));
     expect(onExpand).toHaveBeenCalledOnce();
 

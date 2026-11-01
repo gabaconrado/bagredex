@@ -83,6 +83,18 @@ describe("DamageCalculator", () => {
       screen.getByRole("button", { name: "Earthquake modifiers" }),
       screen.getByRole("button", { name: "Context Strike modifiers" }),
     ];
+    expect(triggers[0]!.textContent).toBe("+");
+    expect(triggers[1]!.textContent).toBe("+");
+    expect(triggers[0]!.getAttribute("aria-controls")).toBe(
+      "left-move-0-modifiers",
+    );
+    expect(triggers[0]!.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen
+        .getByLabelText("Move 3")
+        .closest(".damage-move-field")
+        ?.classList.contains("has-modifier"),
+    ).toBe(false);
     fireEvent.click(triggers[0]!);
     const priorDamage = screen.getByLabelText("Prior damage taken");
     fireEvent.input(priorDamage, { target: { value: "40" } });

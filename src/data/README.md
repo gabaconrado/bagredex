@@ -6,7 +6,7 @@ these files are reviewed inputs for loading immutable database versions.
 
 ## Build inputs
 
-The v7 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
+The v8 bundle importer accepts only three clean local repositories. The supplied Pokémon Showdown
 checkout must be at `3a766f2cfb5e51c1e428cfe87d0dba91a8f01640` and its local object database must contain
 historical commit `b555f4d8ce7250e72939fe0c12cc5b303741d203`. PokeAPI sprites revision
 `ba403973fdf9d0ac59175813861e6a1f8ed5020c`, and PokeAPI mapping revision
@@ -65,16 +65,16 @@ canonical UTF-8 JSON with sorted keys, compact separators, stable record order, 
 The bundle hash is SHA-256 over the canonical ordered file inventory. Its identifier has this form:
 
 ```text
-showdown-multi-s5-i7-<bundle-hash-prefix>
+showdown-multi-s6-i8-<bundle-hash-prefix>
 ```
 
 ## Bundle contract
 
-`manifest.json` is the authoritative interchange contract. Schema 5 retains the ordered
-`showdown_sources` and normalized team-builder and Item-information records from prior schemas,
-then adds the damage-calculator records below. Each source
-contains its exact revision, commit date, and regulation IDs; `provenance.json` additionally stores
-source counts for that tree. The portable files are:
+`manifest.json` is the authoritative interchange contract. Schema 6 retains the ordered
+`showdown_sources`, normalized team-builder and Item-information records, and schema-5 damage
+calculator records. It adds the held-item stat-modifier and suppression facts described below.
+Each source contains its exact revision, commit date, and regulation IDs; `provenance.json`
+additionally stores source counts for that tree. The portable files are:
 
 - `forms.json`: stable form identity, display name, National Dex number, base-form identity, Mega
   marker, and Showdown sprite identifier.
@@ -108,6 +108,10 @@ source counts for that tree. The portable files are:
   status and stat-stage bounds, and the pinned formula-reference revision.
 - `profiles.json`, `ability_profiles.json`, `item_profiles.json`, and `move_profiles.json` include
   the schema-5 weight, primitive calculation, and contextual-input extensions.
+- `item_profiles.json` carries ordered exact held-item stat modifier fractions with closed
+  `always` or `form_is_nfe` eligibility, while `ability_profiles.json` carries the source-derived
+  unconditional held-item-suppression fact. Unsupported and triggered callback shapes normalize
+  to no baseline modifier rather than being treated as always active.
 - `validation.json`: deterministic counts, coverage, ignored categories, warnings, and errors.
 - `provenance.json` and `POKEMON-SHOWDOWN-LICENSE.txt`: separate code and sprite provenance.
 

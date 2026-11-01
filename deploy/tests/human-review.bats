@@ -21,6 +21,9 @@ create_human_review_mocks() {
   printf '%s\n' '#!/usr/bin/env bash' \
     'printf "npm %s\\n" "$*" >>"${COMMAND_LOG}"' >"${MOCK_BIN}/npm"
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/node"
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'printf "python %s\\n" "$*" >>"${COMMAND_LOG}"' \
+    '[[ "${MOCK_BUNDLE_VALIDATION_FAIL:-false}" != true ]]' >"${MOCK_BIN}/python"
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/sleep"
   printf '%s\n' '#!/usr/bin/env bash' \
     '[[ "${MOCK_PORT_OCCUPIED:-false}" == true ]] && printf "%s\\n" LISTEN' \
@@ -75,6 +78,7 @@ create_human_review_mocks() {
     'fi' \
     'exit 0' >"${MOCK_BIN}/podman"
   chmod +x "${MOCK_BIN}/curl" "${MOCK_BIN}/node" "${MOCK_BIN}/npm" \
+    "${MOCK_BIN}/python" \
     "${MOCK_BIN}/podman" "${MOCK_BIN}/sleep" "${MOCK_BIN}/ss"
 }
 
@@ -377,7 +381,7 @@ candidate_review() {
   grep -Fxq 'STATE=ready' "${SESSION_CACHE}/session"
   ! grep -Fq 'reviewer;safe' "${COMMAND_LOG}"
   ! grep -Fq 'password;not-a-command' "${COMMAND_LOG}"
-  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s5-i7-49850c617dd2' \
+  grep -Fq 'load_pokemon_data /app/src/data/releases/showdown-multi-s6-i8-e712c7acc763' \
     "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
 }
@@ -417,6 +421,107 @@ candidate_review() {
   ! grep -Fq ' up -d database' "${COMMAND_LOG}"
   ! grep -Eq 'down .*--volumes|volume (rm|prune)' "${COMMAND_LOG}"
   [ -f "${MOCK_STATE}/volume" ]
+}
+
+@test "ready reload advances to the reviewed local bundle and recovery retains it" {
+  local start_pin="${TEST_TEMP}/start-data.env"
+  local reviewed_pin="${TEST_TEMP}/reviewed-data.env"
+  printf '%s\n' \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s5-i7-49850c617dd2' >"${start_pin}"
+  run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${start_pin}" \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  printf '%s\n' \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s6-i8-e712c7acc763' >"${reviewed_pin}"
+
+  run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${reviewed_pin}" \
+    MOCK_PODMAN_FAIL_MATCH=load_pokemon_data \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 9 ]
+  grep -Fxq 'STATE=reloading' "${SESSION_CACHE}/session"
+  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s6-i8-e712c7acc763' \
+    "${SESSION_CACHE}/session"
+  grep -Fxq 'USERNAME=admin' "${SESSION_CACHE}/session"
+  grep -Fxq 'PASSWORD=admin' "${SESSION_CACHE}/session"
+  [ -f "${MOCK_STATE}/volume" ]
+
+  printf '%s\n' \
+    'BAGREDEX_POKEMON_DATA_VERSION=showdown-multi-s5-i7-49850c617dd2' >"${reviewed_pin}"
+  : >"${COMMAND_LOG}"
+  run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${reviewed_pin}" \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ACTIVE_BUNDLE: showdown-multi-s6-i8-e712c7acc763"* ]]
+  grep -Fq \
+    'load_pokemon_data /app/src/data/releases/showdown-multi-s6-i8-e712c7acc763' \
+    "${COMMAND_LOG}"
+  ! grep -Fq 'bagredex-local' "${COMMAND_LOG}"
+}
+
+@test "ready reload rejects invalid reviewed artifacts before mutation and status ignores pin" {
+  local invalid_pin="${TEST_TEMP}/invalid-data.env"
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+  cp "${SESSION_CACHE}/session" "${TEST_TEMP}/marker.before"
+  : >"${COMMAND_LOG}"
+  printf '%s\n' 'BAGREDEX_POKEMON_DATA_VERSION=showdown-missing-s9-i9-deadbeef0000' \
+    >"${invalid_pin}"
+
+  run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${invalid_pin}" \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"bundle is unavailable locally"* ]]
+  cmp "${TEST_TEMP}/marker.before" "${SESSION_CACHE}/session"
+  ! grep -Eq ' build |rm -f|migrate|load_pokemon_data|activate_pokemon_data' "${COMMAND_LOG}"
+
+  : >"${COMMAND_LOG}"
+  run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${invalid_pin}" \
+    "${REPOSITORY_ROOT}/bagredex.sh" human-review status
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ACTIVE_BUNDLE: showdown-multi-s6-i8-e712c7acc763"* ]]
+  cmp "${TEST_TEMP}/marker.before" "${SESSION_CACHE}/session"
+  ! grep -Eq ' build |rm -f|migrate|load_pokemon_data|activate_pokemon_data' "${COMMAND_LOG}"
+}
+
+@test "ready reload rejects malformed or corrupt reviewed bundles before mutation" {
+  local release_id='showdown-multi-s6-i8-e712c7acc763'
+  local source_release="${REPOSITORY_ROOT}/src/data/releases/${release_id}"
+  local malformed_release="${TEST_TEMP}/malformed/${release_id}"
+  local corrupt_release="${TEST_TEMP}/corrupt/${release_id}"
+  local reviewed_pin="${TEST_TEMP}/reviewed-data.env"
+  mkdir -p "${TEST_TEMP}/malformed" "${TEST_TEMP}/corrupt"
+  cp -a "${source_release}" "${malformed_release}"
+  rm "${malformed_release}/manifest.json"
+  printf '%s\n' '{not-json' >"${malformed_release}/manifest.json"
+  run python -m src.data.importer validate "${malformed_release}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"manifest.json"* ]]
+
+  cp -a "${source_release}" "${corrupt_release}"
+  rm "${corrupt_release}/abilities.json"
+  run python -m src.data.importer validate "${corrupt_release}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"abilities.json"* ]]
+
+  printf '%s\n' \
+    "BAGREDEX_POKEMON_DATA_VERSION=${release_id}" >"${reviewed_pin}"
+  run human_review "${REPOSITORY_ROOT}/bagredex.sh" human-review start basic-team-builder
+  [ "${status}" -eq 0 ]
+
+  local failure_kind
+  for failure_kind in malformed-json corrupt-inventory; do
+    cp "${SESSION_CACHE}/session" "${TEST_TEMP}/marker.${failure_kind}"
+    : >"${COMMAND_LOG}"
+    run human_review env BAGREDEX_HUMAN_REVIEW_DATA_ENV="${reviewed_pin}" \
+      MOCK_BUNDLE_VALIDATION_FAIL=true MOCK_BUNDLE_FAILURE_KIND="${failure_kind}" \
+      "${REPOSITORY_ROOT}/bagredex.sh" human-review reload
+    [ "${status}" -eq 2 ]
+    [[ "${output}" == *"failed local validation"* ]]
+    cmp "${TEST_TEMP}/marker.${failure_kind}" "${SESSION_CACHE}/session"
+    grep -Fq 'python -m src.data.importer validate' "${COMMAND_LOG}"
+    ! grep -Eq 'npm |podman (rm|start|compose)|migrate|load_pokemon_data|activate_pokemon_data' \
+      "${COMMAND_LOG}"
+  done
 }
 
 @test "interrupted start remains resumable and finish deletes only exact scoped resources" {
@@ -539,7 +644,7 @@ candidate_review() {
   marker_base="$(sed -n 's/^BASE_COMMIT=//p' "${SESSION_CACHE}/session")"
   [ "${marker_base}" = "${reported}" ]
   [ "${marker_base}" != "${head}" ]
-  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s5-i7-49850c617dd2' \
+  grep -Fxq 'ACTIVE_BUNDLE=showdown-multi-s6-i8-e712c7acc763' \
     "${SESSION_CACHE}/session"
 }
 

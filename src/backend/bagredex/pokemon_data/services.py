@@ -243,6 +243,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             short_description=_string(record, "short_description"),
             description=_string(record, "description"),
             contextual_inputs=record.get("contextual_inputs", []),
+            suppresses_held_item=record.get("suppresses_held_item", False),
         )
         for record in bundle.records["ability_profiles.json"]
     }
@@ -258,6 +259,7 @@ def _persist_bundle(bundle: PokemonDataBundle, diff: dict[str, Any]) -> DataVers
             description_source=record.get("description_source"),
             contextual_inputs=record.get("contextual_inputs", []),
             calculation=record.get("calculation", {}),
+            stat_modifiers=record.get("stat_modifiers", []),
         )
         for record in bundle.records.get("item_profiles.json", [])
     }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { BuilderData, BuilderForm, Nature } from "./contracts";
+import type {
+  AbilityDetail,
+  BuilderData,
+  BuilderForm,
+  ItemDetail,
+  Nature,
+} from "./contracts";
 import {
   baseStatTotal,
   clampSpEdit,
@@ -16,6 +22,7 @@ const base: BuilderForm = {
   id: "charizard",
   name: "Charizard",
   base_species_id: "charizard",
+  is_nfe: false,
   types: [
     { id: "fire", name: "Fire" },
     { id: "flying", name: "Flying" },
@@ -31,6 +38,22 @@ const serious: Nature = {
   increased_stat: null,
   decreased_stat: null,
 };
+const activeAbility: AbilityDetail = {
+  id: "blaze",
+  name: "Blaze",
+  short_description: "",
+  description: "",
+  suppresses_held_item: false,
+};
+const itemWith = (
+  stat_modifiers: ItemDetail["stat_modifiers"],
+): ItemDetail => ({
+  id: "normalized-item",
+  name: "Normalized item",
+  short_description: null,
+  description: null,
+  stat_modifiers,
+});
 const data = {
   forms: [base],
   abilities: [{ id: "blaze", name: "Blaze" }],
@@ -142,18 +165,111 @@ describe("team builder model", () => {
     };
     expect(
       realStats(
-        base.base_stats,
+        base,
         { hp: 0, atk: 0, def: 0, spa: 32, spd: 0, spe: 32 },
         timid,
       ),
     ).toEqual({ hp: 153, atk: 93, def: 98, spa: 161, spd: 105, spe: 167 });
     expect(
       realStats(
-        { hp: 78, atk: 130, def: 111, spa: 130, spd: 85, spe: 100 },
+        {
+          ...base,
+          base_stats: {
+            hp: 78,
+            atk: 130,
+            def: 111,
+            spa: 130,
+            spd: 85,
+            spe: 100,
+          },
+        },
         { hp: 0, atk: 32, def: 0, spa: 0, spd: 0, spe: 0 },
         serious,
       ),
     ).toEqual({ hp: 153, atk: 182, def: 131, spa: 150, spd: 105, spe: 120 });
+  });
+
+  it("chains eligible normalized item modifiers after nature rounding", () => {
+    const effective = realStats(
+      { ...base, is_nfe: true },
+      { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+      serious,
+      itemWith([
+        {
+          stat: "atk",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "always",
+        },
+        {
+          stat: "spa",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "always",
+        },
+        {
+          stat: "spd",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "always",
+        },
+        {
+          stat: "spe",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "always",
+        },
+        {
+          stat: "def",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "form_is_nfe",
+        },
+        {
+          stat: "spd",
+          numerator: 6144,
+          denominator: 4096,
+          eligibility: "form_is_nfe",
+        },
+      ]),
+      activeAbility,
+    );
+    expect(effective).toEqual({
+      hp: 153,
+      atk: 156,
+      def: 147,
+      spa: 193,
+      spd: 235,
+      spe: 180,
+    });
+  });
+
+  it("fails conditional modifiers closed and honors held-item suppression", () => {
+    const item = itemWith([
+      {
+        stat: "def",
+        numerator: 6144,
+        denominator: 4096,
+        eligibility: "form_is_nfe",
+      },
+      {
+        stat: "spe",
+        numerator: 2048,
+        denominator: 4096,
+        eligibility: "always",
+      },
+    ]);
+    const sp = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+    expect(realStats(base, sp, serious, item, activeAbility)).toMatchObject({
+      def: 98,
+      spe: 60,
+    });
+    expect(
+      realStats(base, sp, serious, item, {
+        ...activeAbility,
+        suppresses_held_item: true,
+      }),
+    ).toEqual(realStats(base, sp, serious));
   });
 
   it("keeps incomplete members valid and reports duplicates and SP overflow", () => {
