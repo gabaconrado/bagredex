@@ -34,9 +34,10 @@ const forms: FormSummary[] = Array.from({ length: 351 }, (_, index) => ({
   bst: 390 + (index % 100),
   ability_ids: [`ability${index % 40}`],
   move_ids: ["protect", `move${index % 200}`],
+  form_group: null,
 }));
 const index: PokedexIndex = {
-  schema_version: "pokedex-index-v1",
+  schema_version: "pokedex-index-v2",
   data_version: "v1",
   regulation: { id: "m-c", name: "M-C" },
   forms,
@@ -127,13 +128,14 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
         ...forms[0]!,
         ability_ids: [],
         move_ids: moves.map(({ id }) => id),
+        form_group: null,
       },
     ],
     moves: moves.map(({ id, name }) => ({ id, name })),
     abilities: [],
   };
   const bulk = {
-    schema_version: "pokedex-details-v1",
+    schema_version: "pokedex-details-v2",
     data_version: "v1",
     regulation_id: "m-c",
     forms: [
@@ -158,6 +160,7 @@ it("commits warm full-learnset Type, Category, and Power sorts within one frame"
         ],
         ability_slots: [],
         move_ids: moves.map(({ id }) => id),
+        form_group: null,
       },
     ],
     abilities: [],

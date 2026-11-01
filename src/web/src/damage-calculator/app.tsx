@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { MegaIcon } from "../icons";
 import type {
   Bootstrap,
@@ -357,6 +357,236 @@ function ContextControl({
   );
 }
 
+type OverlayPosition = { left: number; top: number; maxHeight: number };
+
+function MoveModifierPopover({
+  id,
+  move,
+  context,
+  open,
+  onOpen,
+  onClose,
+  onChange,
+}: {
+  id: string;
+  move: CalculatorData["moves"][number];
+  context: Record<string, boolean | number | string>;
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+  onChange: (key: string, value: boolean | number | string) => void;
+}) {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const pendingBackdropFocus = useRef<number | null>(null);
+  const backdropFocusToken = useRef(0);
+  const [narrow, setNarrow] = useState(false);
+  const [position, setPosition] = useState<OverlayPosition | null>(null);
+
+  const cancelPendingBackdropFocus = () => {
+    backdropFocusToken.current += 1;
+    if (pendingBackdropFocus.current !== null) {
+      window.clearTimeout(pendingBackdropFocus.current);
+      pendingBackdropFocus.current = null;
+    }
+  };
+
+  useEffect(
+    () => () => {
+      cancelPendingBackdropFocus();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 720px)");
+    const update = () => setNarrow(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const gutter = 12;
+    const gap = 8;
+    const place = () => {
+      if (narrow || !trigger.current || !panel.current) {
+        setPosition(null);
+        return;
+      }
+      const anchor = trigger.current.getBoundingClientRect();
+      const overlay = panel.current.getBoundingClientRect();
+      const rightSpace = window.innerWidth - anchor.right - gutter;
+      const leftSpace = anchor.left - gutter;
+      const placeRight =
+        rightSpace >= overlay.width + gap || rightSpace >= leftSpace;
+      const desiredLeft = placeRight
+        ? anchor.right + gap
+        : anchor.left - overlay.width - gap;
+      setPosition({
+        left: Math.max(
+          gutter,
+          Math.min(desiredLeft, window.innerWidth - overlay.width - gutter),
+        ),
+        top: Math.max(
+          gutter,
+          Math.min(anchor.top, window.innerHeight - overlay.height - gutter),
+        ),
+        maxHeight: window.innerHeight - gutter * 2,
+      });
+    };
+    const frame = window.requestAnimationFrame(place);
+    const closeFromKeyboard = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        trigger.current?.focus();
+        return;
+      }
+      if (!narrow || event.key !== "Tab" || !panel.current) return;
+      const focusable = Array.from(
+        panel.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const closeFromOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !trigger.current?.contains(target) &&
+        !panel.current?.contains(target) &&
+        !(narrow && layer.current?.contains(target))
+      ) {
+        onClose();
+        if (
+          !(target instanceof Element) ||
+          !target.closest(".damage-move-modifier-trigger")
+        )
+          trigger.current?.focus();
+      }
+    };
+    const reposition = () => place();
+    document.addEventListener("keydown", closeFromKeyboard);
+    document.addEventListener("pointerdown", closeFromOutside);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    if (narrow)
+      panel.current
+        ?.querySelector<HTMLElement>("input, select, button")
+        ?.focus();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", closeFromKeyboard);
+      document.removeEventListener("pointerdown", closeFromOutside);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [narrow, open]);
+
+  const close = () => {
+    cancelPendingBackdropFocus();
+    onClose();
+    trigger.current?.focus();
+  };
+  const closeFromBackdrop = () => {
+    cancelPendingBackdropFocus();
+    const token = backdropFocusToken.current;
+    onClose();
+    pendingBackdropFocus.current = window.setTimeout(() => {
+      pendingBackdropFocus.current = null;
+      if (backdropFocusToken.current === token) trigger.current?.focus();
+    });
+  };
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        class="damage-move-modifier-trigger"
+        aria-expanded={open}
+        aria-controls={id}
+        aria-label={`${move.name} modifiers`}
+        onPointerDown={(event) => {
+          // An already-open sibling listens on document for outside presses.
+          // Keep this activation intact so its click can switch panels instead
+          // of being detached between pointerdown and click.
+          event.stopPropagation();
+        }}
+        onClick={(event) => {
+          cancelPendingBackdropFocus();
+          if (open) close();
+          else {
+            onOpen();
+            event.currentTarget.focus();
+          }
+        }}
+      >
+        Modifiers
+      </button>
+      {open && (
+        <div ref={layer} class="damage-move-modifier-layer">
+          <button
+            type="button"
+            class="damage-move-modifier-backdrop"
+            aria-label="Dismiss modifier dialog"
+            tabIndex={-1}
+            onClick={closeFromBackdrop}
+          />
+          <div
+            ref={panel}
+            id={id}
+            class="damage-context damage-context--move-popover"
+            role={narrow ? "dialog" : "group"}
+            aria-modal={narrow || undefined}
+            aria-labelledby={`${id}-title`}
+            style={
+              position
+                ? {
+                    left: `${position.left}px`,
+                    top: `${position.top}px`,
+                    maxHeight: `${position.maxHeight}px`,
+                  }
+                : undefined
+            }
+          >
+            <div class="damage-move-modifier-header">
+              <strong id={`${id}-title`}>{move.name} modifiers</strong>
+              <button
+                type="button"
+                onClick={close}
+                aria-label="Close modifiers"
+              >
+                Close
+              </button>
+            </div>
+            {move.contextual_inputs.map((descriptor) => (
+              <ContextControl
+                prefix={id}
+                descriptor={descriptor}
+                value={context[descriptor.key] ?? descriptor.default}
+                onChange={(value) => onChange(descriptor.key, value)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function DamageDisclosure({
   id,
   compact,
@@ -399,6 +629,8 @@ function PokemonPanel({
   field,
   onChange,
   onPokemonChange,
+  openMoveModifier,
+  setOpenMoveModifier,
 }: {
   sideId: SideId;
   side: Side;
@@ -407,6 +639,8 @@ function PokemonPanel({
   field: FieldState;
   onChange: (side: Side) => void;
   onPokemonChange: (side: Side) => void;
+  openMoveModifier: string | null;
+  setOpenMoveModifier: (id: string | null) => void;
 }) {
   const base = data.forms.find(({ id }) => id === side.formId);
   const form = displayedForm(data, side);
@@ -763,6 +997,7 @@ function PokemonPanel({
           >
             <h3 id={`${sideId}-moves-title`}>Moves</h3>
             {side.moveIds.map((moveId, index) => {
+              const modifierId = `${sideId}-move-${index}-modifiers`;
               const move = data.moves.find(({ id }) => id === moveId);
               const moveContext = side.moveContexts[index] ?? {};
               const combatant =
@@ -787,7 +1022,7 @@ function PokemonPanel({
                     )
                   : null;
               return (
-                <div class="damage-move">
+                <div class="damage-move" key={modifierId}>
                   {result ? (
                     <DamageDisclosure
                       id={`${sideId}-result-${index}`}
@@ -809,6 +1044,8 @@ function PokemonPanel({
                         .filter(Boolean) as Named[]
                     }
                     onChange={(id) => {
+                      if (openMoveModifier === modifierId)
+                        setOpenMoveModifier(null);
                       const moveIds = [...side.moveIds];
                       moveIds[index] = id;
                       const moveContexts = [...side.moveContexts];
@@ -817,26 +1054,19 @@ function PokemonPanel({
                     }}
                   />
                   {move && move.contextual_inputs.length > 0 && (
-                    <fieldset class="damage-context damage-context--move">
-                      <legend>{move.name} state</legend>
-                      {move.contextual_inputs.map((descriptor) => (
-                        <ContextControl
-                          prefix={`${sideId}-move-${index}`}
-                          descriptor={descriptor}
-                          value={
-                            moveContext[descriptor.key] ?? descriptor.default
-                          }
-                          onChange={(value) => {
-                            const moveContexts = [...side.moveContexts];
-                            moveContexts[index] = {
-                              ...moveContext,
-                              [descriptor.key]: value,
-                            };
-                            update({ moveContexts });
-                          }}
-                        />
-                      ))}
-                    </fieldset>
+                    <MoveModifierPopover
+                      id={modifierId}
+                      move={move}
+                      context={moveContext}
+                      open={openMoveModifier === modifierId}
+                      onOpen={() => setOpenMoveModifier(modifierId)}
+                      onClose={() => setOpenMoveModifier(null)}
+                      onChange={(key, value) => {
+                        const moveContexts = [...side.moveContexts];
+                        moveContexts[index] = { ...moveContext, [key]: value };
+                        update({ moveContexts });
+                      }}
+                    />
                   )}
                 </div>
               );
@@ -1005,6 +1235,7 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
   const [left, setLeft] = useState<Side | null>(null);
   const [right, setRight] = useState<Side | null>(null);
   const [field, setField] = useState(emptyField);
+  const [openMoveModifier, setOpenMoveModifier] = useState<string | null>(null);
   useEffect(() => {
     const interactiveSelector =
       'input, textarea, select, button, a[href], summary, [role="button"], [role="combobox"], [role="listbox"], [role="option"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"], [role="textbox"]';
@@ -1124,6 +1355,7 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
       </section>
     );
   const changePokemon = (setter: (side: Side) => void) => (side: Side) => {
+    setOpenMoveModifier(null);
     setter(side);
     setField(emptyField());
   };
@@ -1138,6 +1370,8 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
           field={field}
           onChange={setLeft}
           onPokemonChange={changePokemon(setLeft)}
+          openMoveModifier={openMoveModifier}
+          setOpenMoveModifier={setOpenMoveModifier}
         />
         <PokemonPanel
           sideId="right"
@@ -1147,6 +1381,8 @@ export function DamageCalculator({ bootstrap }: { bootstrap: Bootstrap }) {
           field={field}
           onChange={setRight}
           onPokemonChange={changePokemon(setRight)}
+          openMoveModifier={openMoveModifier}
+          setOpenMoveModifier={setOpenMoveModifier}
         />
       </div>
       <FieldEffects value={field} onChange={setField} />

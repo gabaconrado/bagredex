@@ -8,12 +8,14 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from bagredex.accounts.models import User
+from bagredex.pokedex import Snapshot
 from bagredex.pokemon_data.models import (
     Ability,
     AbilityProfile,
@@ -35,7 +37,8 @@ from bagredex.pokemon_data.models import (
     RegulationMembership,
     Type,
 )
-from bagredex.pokemon_data.services import activate_pokemon_data
+from bagredex.pokemon_data.services import activate_pokemon_data, load_pokemon_data
+from bagredex.teams.datasets import builder_dataset
 from bagredex.teams.models import Team, TeamMember, TeamMemberMove
 from bagredex.teams.services import replace_team
 
@@ -1081,7 +1084,7 @@ def test_retained_dataset_is_available_only_to_its_team_owner(team_data: dict[st
 
 
 @pytest.mark.django_db
-def test_builder_dataset_v3_has_pinned_ability_move_and_item_details(
+def test_builder_dataset_v4_has_pinned_ability_move_and_item_details(
     team_data: dict[str, Any],
 ) -> None:
     owner = User.objects.create_user(username="dataset-details")
@@ -1093,7 +1096,7 @@ def test_builder_dataset_v3_has_pinned_ability_move_and_item_details(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, max-age=3600"
     payload = response.json()
-    assert payload["schema_version"] == "team-builder-data-v3"
+    assert payload["schema_version"] == "team-builder-data-v4"
     assert payload["data_version"] == team_data["version"].pk
     assert payload["regulation"]["id"] == "m-c"
     assert payload["abilities"] == [
@@ -1124,6 +1127,26 @@ def test_builder_dataset_v3_has_pinned_ability_move_and_item_details(
     assert payload["forms"][0]["ability_ids"] == ["static"]
     assert payload["forms"][0]["move_ids"] == ["thunderbolt"]
     assert payload["mega_relations"][0]["target"]["ability_ids"] == ["static"]
+    assert payload["mega_search_entries"] == [
+        {
+            "id": "pikachumega",
+            "name": "Pikachu-Mega",
+            "base_form_id": "pikachu",
+            "item_id": "pikachunite",
+            "sprite_form": "pikachumega",
+            "type_ids": [],
+            "ability_ids": ["static"],
+            "move_ids": [],
+            "base_stats": {
+                "hp": 45,
+                "attack": 75,
+                "defense": 50,
+                "special_attack": 80,
+                "special_defense": 60,
+                "speed": 110,
+            },
+        }
+    ]
     assert payload["items"] == [
         {
             "id": "oranberry",
@@ -1140,6 +1163,43 @@ def test_builder_dataset_v3_has_pinned_ability_move_and_item_details(
     ]
     assert payload["sprite_url_template"].startswith("/")
     assert team_data["version"].pk in payload["sprite_url_template"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_actual_release_mega_search_entries_have_no_dangling_draft_references() -> None:
+    release = (
+        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s5-i7-49850c617dd2"
+    )
+    if not release.is_dir():
+        pytest.skip("the reviewed form-search release is required")
+    loaded = load_pokemon_data(release).version
+
+    for regulation in Regulation.objects.filter(version=loaded).select_related("mechanics_profile"):
+        dataset = builder_dataset(Snapshot(loaded, regulation))
+        form_ids = {form["id"] for form in dataset["forms"]}
+        type_ids = {record["id"] for record in dataset["types"]}
+        ability_ids = {record["id"] for record in dataset["abilities"]}
+        move_ids = {record["id"] for record in dataset["moves"]}
+        item_ids = {record["id"] for record in dataset["items"]}
+
+        assert "meowsticf" not in form_ids
+        assert all(entry["base_form_id"] in form_ids for entry in dataset["mega_search_entries"])
+        assert all(entry["item_id"] in item_ids for entry in dataset["mega_search_entries"])
+        assert all(
+            set(entry["type_ids"]) <= type_ids
+            and set(entry["ability_ids"]) <= ability_ids
+            and set(entry["move_ids"]) <= move_ids
+            for entry in dataset["mega_search_entries"]
+        )
+        assert {entry["id"] for entry in dataset["mega_search_entries"]} == {
+            relation.mega_form.canonical_id
+            for relation in MegaItemRelation.objects.filter(
+                regulation=regulation,
+                base_form__pokemonprofile__regulation=regulation,
+                base_form__pokemonprofile__membership__isnull=False,
+                base_form__is_mega=False,
+            ).select_related("mega_form")
+        }
 
 
 @pytest.mark.django_db

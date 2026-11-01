@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "5"
-IMPORTER_VERSION = "6"
+IMPORTER_VERSION = "7"
 LEGACY_IMPORTER_VERSION = "1"
 SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-5"
 M_A_ITEM_TEXT_OVERLAY = "m-a-item-text-compatibility.json"
@@ -92,6 +92,9 @@ SHOWDOWN_NOTICE_SHA256 = (
 WEBP_TOOL_VERSION = "1.3.2"
 SPRITE_MAPPING_VERSION = "pokeapi-csv-v1"
 SPRITE_MAPPING_SHA256 = (
+    "6b38776ae3eb0cb94e582b213236abff522c378e65fda85a72724cc0a42f77eb"
+)
+PREVIOUS_SPRITE_MAPPING_SHA256 = (
     "2fd464a37c34f7c543ebd153f39ca6c47f3d6788617b932db6f75f640a537602"
 )
 LEGACY_SPRITE_MAPPING_SHA256 = (
@@ -107,6 +110,7 @@ SPRITE_EXCEPTIONS = {
     "lycanroc": "lycanroc-midday",
     "maushold": "maushold-family-of-four",
     "meowstic": "meowstic-male",
+    "meowsticf": "meowstic-female",
     "meowsticfmega": "meowstic-female-mega",
     "meowsticmmega": "meowstic-male-mega",
     "mimikyu": "mimikyu-disguised",
@@ -319,6 +323,15 @@ CALCULATOR_PINNED_COUNTS = {
     **TEAM_PINNED_COUNTS,
     "type_effectiveness": 324,
     "calculator_capabilities": 1,
+}
+CALCULATOR_PINNED_COUNTS_V7 = {
+    **CALCULATOR_PINNED_COUNTS,
+    "forms": 351,
+    "profiles": 1053,
+    "learnsets": 65103,
+    "mega_item_relations": 217,
+    "sprites": 702,
+    "sprite_mappings": 351,
 }
 
 
@@ -2340,10 +2353,13 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "sprite_mappings.json: every included form requires one mapping"
         )
     mapping_hash = hashlib.sha256(_canonical_bytes(sprite_mappings)).hexdigest()
+    expanded_related_forms = "meowsticf" in form_ids
     expected_mapping_hash = (
         LEGACY_SPRITE_MAPPING_SHA256
         if len(forms) == LEGACY_PINNED_COUNTS["forms"]
         else SPRITE_MAPPING_SHA256
+        if expanded_related_forms
+        else PREVIOUS_SPRITE_MAPPING_SHA256
     )
     if mapping_hash != expected_mapping_hash:
         raise BundleError("sprite_mappings.json: pinned exact mapping hash changed")
@@ -2535,7 +2551,17 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         "cwebp_version": WEBP_TOOL_VERSION,
         "cwebp_args": list(CWEBP_ARGUMENTS),
         "license": "license-not-supplied",
-        "mapping_exceptions": dict(sorted(SPRITE_EXCEPTIONS.items())),
+        "mapping_exceptions": dict(
+            sorted(
+                SPRITE_EXCEPTIONS.items()
+                if expanded_related_forms
+                else (
+                    (key, value)
+                    for key, value in SPRITE_EXCEPTIONS.items()
+                    if key != "meowsticf"
+                )
+            )
+        ),
     }:
         raise BundleError("provenance.json: unexpected sprite provenance")
     if provenance["pokeapi_mapping"] != {
@@ -2760,7 +2786,9 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         )
         summary["coverage"]["item_description_percent"] = 100
     expected_counts = (
-        CALCULATOR_PINNED_COUNTS
+        CALCULATOR_PINNED_COUNTS_V7
+        if calculator_schema and expanded_related_forms
+        else CALCULATOR_PINNED_COUNTS
         if calculator_schema
         else TEAM_PINNED_COUNTS
         if items
@@ -2786,7 +2814,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         {"m-b": 21946, "m-c": 21945} if legacy_release else {"m-b": 21715, "m-c": 21714}
     )
     if multi_revision:
-        expected_learnsets = {"m-a": 21506, "m-b": 21715, "m-c": 21714}
+        expected_learnsets = (
+            {"m-a": 21562, "m-b": 21771, "m-c": 21770}
+            if expanded_related_forms
+            else {"m-a": 21506, "m-b": 21715, "m-c": 21714}
+        )
     if summary["counts"]["learnsets_by_regulation"] != expected_learnsets:
         raise BundleError("pinned bundle regulation learnset counts changed")
     expected_resolution = (
@@ -2795,11 +2827,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         else {"base-to-mega": 10962, "changed-form": 932, "direct": 31535}
     )
     if multi_revision:
-        expected_resolution = {
-            "base-to-mega": 16459,
-            "changed-form": 1331,
-            "direct": 47145,
-        }
+        expected_resolution = (
+            {"base-to-mega": 16459, "changed-form": 1331, "direct": 47313}
+            if expanded_related_forms
+            else {"base-to-mega": 16459, "changed-form": 1331, "direct": 47145}
+        )
     if summary["counts"]["learnsets_by_form_resolution"] != expected_resolution:
         raise BundleError("pinned bundle learnset form-resolution counts changed")
     expected_source_mod = (
@@ -2808,7 +2840,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         else {"base": 214, "champions": 43164, "championsregmb": 51}
     )
     if multi_revision:
-        expected_source_mod = {"base": 4578, "champions": 60306, "championsregmb": 51}
+        expected_source_mod = (
+            {"base": 4578, "champions": 60474, "championsregmb": 51}
+            if expanded_related_forms
+            else {"base": 4578, "champions": 60306, "championsregmb": 51}
+        )
     if summary["counts"]["learnsets_by_source_mod"] != expected_source_mod:
         raise BundleError("pinned bundle learnset source-mod counts changed")
     expected_source_kind = (
@@ -2817,7 +2853,11 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
         else {"direct": 21607, "inherited": 21771, "override": 51}
     )
     if multi_revision:
-        expected_source_kind = {"direct": 38749, "inherited": 26135, "override": 51}
+        expected_source_kind = (
+            {"direct": 38861, "inherited": 26191, "override": 51}
+            if expanded_related_forms
+            else {"direct": 38749, "inherited": 26135, "override": 51}
+        )
     if summary["counts"]["learnsets_by_source_kind"] != expected_source_kind:
         raise BundleError("pinned bundle learnset source-kind counts changed")
     if not multi_revision and provenance["showdown"]["source_counts"] != {
@@ -2918,6 +2958,7 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             "3",
             "4",
             "5",
+            "6",
             IMPORTER_VERSION,
         }:
             raise BundleError(
@@ -2942,20 +2983,20 @@ def validate_bundle(bundle: Path, *, verify_manifest: bool = True) -> dict[str, 
             raise BundleError(
                 "manifest.json: importer version 1 cannot contain version 2 legality semantics"
             )
-        expected_importer = (
-            IMPORTER_VERSION
+        expected_importers = (
+            {"6", IMPORTER_VERSION}
             if calculator_schema
-            else "5"
+            else {"5"}
             if item_description_schema
-            else "4"
+            else {"4"}
             if items
             else None
         )
-        if expected_importer is not None and importer_version != expected_importer:
+        if expected_importers is not None and importer_version not in expected_importers:
             raise BundleError(
                 "manifest.json: unsupported importer or source-shape version"
             )
-        if importer_version in {"2", "4", "5", IMPORTER_VERSION} and legacy_release:
+        if importer_version in {"2", "4", "5", "6", IMPORTER_VERSION} and legacy_release:
             raise BundleError(
                 "manifest.json: importer version 2 cannot contain legacy legality semantics"
             )

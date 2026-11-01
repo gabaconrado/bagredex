@@ -15,6 +15,7 @@ const stats = {
   special_defense: 85,
   speed: 100,
 };
+const copy = <T>(value: T): T => structuredClone(value);
 
 describe("team builder contracts", () => {
   it("strictly parses and adapts the bootstrap", () => {
@@ -63,8 +64,8 @@ describe("team builder contracts", () => {
   });
 
   it("parses the exact dataset and builds same-origin sprites", () => {
-    const parsed = parseBuilderData({
-      schema_version: "team-builder-data-v3",
+    const dataset = {
+      schema_version: "team-builder-data-v4",
       data_version: "version-3",
       regulation: named,
       forms: [
@@ -156,11 +157,26 @@ describe("team builder contracts", () => {
           },
         },
       ],
+      mega_search_entries: [
+        {
+          id: "charizardmegax",
+          name: "Charizard-Mega-X",
+          base_form_id: "charizard",
+          item_id: "charizarditex",
+          sprite_form: "charizardmegax",
+          type_ids: ["fire"],
+          ability_ids: ["toughclaws"],
+          move_ids: ["protect"],
+          base_stats: stats,
+        },
+      ],
       sprite_url_template:
         "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
-    });
+    };
+    const parsed = parseBuilderData(dataset);
     expect(parsed.forms[0]?.base_stats.spa).toBe(109);
-    expect(parsed.schema_version).toBe("team-builder-data-v3");
+    expect(parsed.schema_version).toBe("team-builder-data-v4");
+    expect(parsed.mega_search_entries[0]?.base_form_id).toBe("charizard");
     expect(parsed.items[0]?.description).toContain("Mega Charizard X");
     expect(parsed.abilities[0]?.description).toContain("Fire-type");
     expect(parsed.moves[0]?.always_hits).toBe(true);
@@ -168,6 +184,22 @@ describe("team builder contracts", () => {
     expect(parsed.forms[0]?.sprites.shiny).toContain("/shiny.webp");
     expect(parsed.natures.find((nature) => nature.id === "jolly")?.name).toBe(
       "Jolly (+Spe/-SpA)",
+    );
+
+    const orphan = copy(dataset);
+    orphan.mega_search_entries[0]!.id = "charizardmegay";
+    expect(() => parseBuilderData(orphan)).toThrow(/Mega search reference/);
+
+    const mismatchedStone = copy(dataset);
+    mismatchedStone.items.push({
+      id: "charizarditey",
+      name: "Charizardite Y",
+      short_description: "Makes Charizard Mega Evolve.",
+      description: "Makes Charizard Mega Evolve into Mega Charizard Y.",
+    });
+    mismatchedStone.mega_search_entries[0]!.item_id = "charizarditey";
+    expect(() => parseBuilderData(mismatchedStone)).toThrow(
+      /Mega search reference/,
     );
   });
 
@@ -179,7 +211,7 @@ describe("team builder contracts", () => {
       description: "Restores 10 HP when HP is low.",
     };
     const base = {
-      schema_version: "team-builder-data-v3",
+      schema_version: "team-builder-data-v4",
       data_version: "version-3",
       regulation: named,
       forms: [],
@@ -198,6 +230,7 @@ describe("team builder contracts", () => {
         nature_percentages: { hindering: 90, neutral: 100, increasing: 110 },
       },
       mega_relations: [],
+      mega_search_entries: [],
       sprite_url_template:
         "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
     };
@@ -218,6 +251,49 @@ describe("team builder contracts", () => {
         "Invalid item details",
       );
     }
+  });
+
+  it("rejects malformed or dangling Mega search entries", () => {
+    const base = {
+      schema_version: "team-builder-data-v4",
+      data_version: "version-3",
+      regulation: named,
+      forms: [],
+      types: [],
+      abilities: [],
+      moves: [],
+      items: [],
+      natures: [],
+      mechanics: {
+        level: 50,
+        sp_minimum: 0,
+        sp_maximum: 32,
+        sp_total_max: 66,
+        hp_formula: "base + sp + 75",
+        other_formula: "truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages: { hindering: 90, neutral: 100, increasing: 110 },
+      },
+      mega_relations: [],
+      mega_search_entries: [
+        {
+          id: "mega",
+          name: "Mega",
+          base_form_id: "missing",
+          item_id: "stone",
+          sprite_form: "mega",
+          type_ids: [],
+          ability_ids: [],
+          move_ids: [],
+          base_stats: stats,
+        },
+      ],
+      sprite_url_template:
+        "/pokedex/sprites/version-3/__FORM__/__VARIANT__.webp",
+    };
+    expect(() => parseBuilderData(base)).toThrow(/Mega search reference/);
+    const malformed: any = copy(base);
+    malformed.mega_search_entries[0].base_form_id = null;
+    expect(() => parseBuilderData(malformed)).toThrow(/Mega search entry/);
   });
 
   it("adapts aggregates and serializes complete draft replacement", () => {

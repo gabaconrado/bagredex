@@ -17,7 +17,7 @@ const bootstrap = {
   sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",
 };
 const index = {
-  schema_version: "pokedex-index-v1",
+  schema_version: "pokedex-index-v2",
   data_version: "v1",
   regulation: named,
   forms: [
@@ -30,6 +30,7 @@ const index = {
       bst: 21,
       ability_ids: ["ability"],
       move_ids: ["move"],
+      form_group: null,
     },
   ],
   moves: [named],
@@ -167,7 +168,7 @@ describe("transport validation", () => {
 
   it("validates and indexes bulk details", () => {
     const bulk = {
-      schema_version: "pokedex-details-v1",
+      schema_version: "pokedex-details-v2",
       data_version: "v1",
       regulation_id: "x",
       forms: [
@@ -182,6 +183,7 @@ describe("transport validation", () => {
           stats: detail.form.stats,
           ability_slots: [{ id: "x", slot: "0" }],
           move_ids: ["x"],
+          form_group: null,
         },
       ],
       abilities: [
@@ -194,5 +196,57 @@ describe("transport validation", () => {
     dangling.forms[0].move_ids = ["missing"];
     expect(() => parseDetails(dangling, "v1", "x")).toThrow(/dangling move/);
     expect(() => parseDetails(bulk, "v2", "x")).toThrow(/data changed/);
+  });
+
+  it("strictly validates grouped form identities and references", () => {
+    const groupedIndex: any = copy(index);
+    groupedIndex.forms[0].form_group = {
+      label: "Form",
+      options: [
+        { id: "x", label: "Base" },
+        { id: "variant", label: "Variant" },
+      ],
+    };
+    expect(parseIndex(groupedIndex).forms[0]!.form_group?.options).toHaveLength(
+      2,
+    );
+    groupedIndex.forms[0].form_group.options[1].id = "x";
+    expect(() => parseIndex(groupedIndex)).toThrow(/form option/);
+
+    const groupedDetails: any = {
+      schema_version: "pokedex-details-v2",
+      data_version: "v1",
+      regulation_id: "x",
+      forms: [
+        {
+          ...named,
+          is_list_legal: true,
+          is_mega: false,
+          form_label: "",
+          base_id: "x",
+          mega_ids: [],
+          types: [named],
+          stats: detail.form.stats,
+          ability_slots: [{ id: "x", slot: "0" }],
+          move_ids: ["x"],
+          form_group: {
+            label: "Form",
+            options: [{ id: "x", label: "Base" }],
+          },
+        },
+      ],
+      abilities: [
+        { ...named, short_description: "Short", description: "Long" },
+      ],
+      moves: detail.form.moves,
+    };
+    expect(parseDetails(groupedDetails, "v1", "x").maps.forms.size).toBe(1);
+    groupedDetails.forms[0].form_group.options.push({
+      id: "missing",
+      label: "Missing",
+    });
+    expect(() => parseDetails(groupedDetails, "v1", "x")).toThrow(
+      /dangling form option/,
+    );
   });
 });

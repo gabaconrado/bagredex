@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { BuilderData, BuilderForm, Nature } from "./contracts";
 import {
   baseStatTotal,
+  clampSpEdit,
+  memberFromPaletteChoice,
   moveMember,
   newMember,
   paletteResults,
@@ -100,6 +102,35 @@ describe("team builder model", () => {
       ),
     ).toEqual([base]);
     expect(paletteResults([base], "", [], new Set(["charizard"]))).toEqual([]);
+  });
+
+  it("clamps every SP request against per-stat and remaining total limits", () => {
+    const mechanics = { sp_min: 0, sp_max: 32, sp_total_max: 66 };
+    const sp = { hp: 32, atk: 30, def: 4, spa: 0, spd: 0, spe: 0 };
+    expect(clampSpEdit(sp, "hp", 99, mechanics)).toBe(32);
+    expect(clampSpEdit(sp, "def", 20, mechanics)).toBe(4);
+    expect(clampSpEdit(sp, "atk", 1.9, mechanics)).toBe(1);
+    expect(clampSpEdit(sp, "atk", Number.NaN, mechanics)).toBe(0);
+    expect(clampSpEdit(sp, "hp", -4, mechanics)).toBe(0);
+  });
+
+  it("turns a Mega palette choice into only base form, stone, and preview", () => {
+    const choice = {
+      ...base,
+      kind: "mega" as const,
+      id: "charizardmegax",
+      name: "Charizard-Mega-X",
+      base_form_id: "charizard",
+      item_id: "charizarditex",
+    };
+    const member = memberFromPaletteChoice(choice, "serious", 2);
+    expect(member).toMatchObject({
+      position: 2,
+      form_id: "charizard",
+      item_id: "charizarditex",
+      mega_preview: true,
+    });
+    expect(member.form_id).not.toBe(choice.id);
   });
 
   it("calculates level-50 stats with integer nature truncation", () => {

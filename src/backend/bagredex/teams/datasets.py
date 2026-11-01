@@ -36,6 +36,7 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         .order_by("form__national_dex_number", "form__canonical_id")
     )
     profile_ids = [profile.pk for profile in profiles]
+    legal_form_ids = {profile.form_id for profile in profiles}
     types: dict[Any, list[str]] = {}
     type_names: dict[str, str] = {}
     for type_row in (
@@ -114,7 +115,10 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
         )
 
     mega_rows = list(
-        MegaItemRelation.objects.filter(regulation=snapshot.regulation)
+        MegaItemRelation.objects.filter(
+            regulation=snapshot.regulation,
+            base_form_id__in=legal_form_ids,
+        )
         .select_related("item_profile__item", "base_form", "mega_form")
         .order_by("base_form__canonical_id", "item_profile__item__canonical_id")
     )
@@ -143,6 +147,67 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
             "short_description": mega_ability_row["ability_profile__short_description"],
             "description": mega_ability_row["ability_profile__description"],
         }
+    mega_types: dict[Any, list[str]] = {}
+    for mega_type_row in (
+        PokemonProfileType.objects.filter(
+            profile__regulation=snapshot.regulation, profile__form_id__in=mega_profile_ids
+        )
+        .values("profile__form_id", "position", "type__canonical_id", "type__name")
+        .order_by("profile__form_id", "position")
+    ):
+        type_id = mega_type_row["type__canonical_id"]
+        mega_types.setdefault(mega_type_row["profile__form_id"], []).append(type_id)
+        type_names[type_id] = mega_type_row["type__name"]
+    mega_moves: dict[Any, list[str]] = {}
+    for mega_move_row in LearnsetEntry.objects.filter(
+        profile__regulation=snapshot.regulation, profile__form_id__in=mega_profile_ids
+    ).values(
+        "profile__form_id",
+        "move_profile_id",
+        "move_profile__move__canonical_id",
+        "move_profile__move__name",
+        "move_profile__type__canonical_id",
+        "move_profile__type__name",
+        "move_profile__category",
+        "move_profile__base_power",
+        "move_profile__accuracy",
+        "move_profile__always_hits",
+        "move_profile__pp",
+        "move_profile__priority",
+        "move_profile__target",
+        "move_profile__short_description",
+        "move_profile__description",
+    ):
+        move_id = mega_move_row["move_profile__move__canonical_id"]
+        mega_moves.setdefault(mega_move_row["profile__form_id"], []).append(move_id)
+        move_profile_ids[mega_move_row["move_profile_id"]] = move_id
+        move_records[move_id] = {
+            "id": move_id,
+            "name": mega_move_row["move_profile__move__name"],
+            "type": {
+                "id": mega_move_row["move_profile__type__canonical_id"],
+                "name": mega_move_row["move_profile__type__name"],
+            },
+            "category": mega_move_row["move_profile__category"],
+            "base_power": mega_move_row["move_profile__base_power"],
+            "accuracy": mega_move_row["move_profile__accuracy"],
+            "always_hits": mega_move_row["move_profile__always_hits"],
+            "pp": mega_move_row["move_profile__pp"],
+            "priority": mega_move_row["move_profile__priority"],
+            "target": mega_move_row["move_profile__target"],
+            "short_description": mega_move_row["move_profile__short_description"],
+            "description": mega_move_row["move_profile__description"],
+            "flags": [],
+        }
+    for flag_row in (
+        MoveFlagRelation.objects.filter(move_profile_id__in=move_profile_ids)
+        .values("move_profile_id", "flag__canonical_id")
+        .order_by("move_profile_id", "flag__canonical_id")
+    ):
+        flags = move_records[move_profile_ids[flag_row["move_profile_id"]]]["flags"]
+        flag_id = flag_row["flag__canonical_id"]
+        if flag_id not in flags:
+            flags.append(flag_id)
 
     def named(values: dict[str, str]) -> list[dict[str, str]]:
         return [
@@ -240,6 +305,28 @@ def builder_dataset(snapshot: Snapshot) -> dict[str, Any]:
                         "special_defense": mega_profiles[row.mega_form_id].special_defense,
                         "speed": mega_profiles[row.mega_form_id].speed,
                     },
+                },
+            }
+            for row in mega_rows
+            if row.mega_form_id in mega_profiles
+        ],
+        "mega_search_entries": [
+            {
+                "id": row.mega_form.canonical_id,
+                "name": row.mega_form.name,
+                "base_form_id": row.base_form.canonical_id,
+                "item_id": row.item_profile.item.canonical_id,
+                "sprite_form": row.mega_form.canonical_id,
+                "type_ids": mega_types.get(row.mega_form_id, []),
+                "ability_ids": sorted(mega_abilities.get(row.mega_form_id, [])),
+                "move_ids": sorted(mega_moves.get(row.mega_form_id, [])),
+                "base_stats": {
+                    "hp": mega_profiles[row.mega_form_id].hp,
+                    "attack": mega_profiles[row.mega_form_id].attack,
+                    "defense": mega_profiles[row.mega_form_id].defense,
+                    "special_attack": mega_profiles[row.mega_form_id].special_attack,
+                    "special_defense": mega_profiles[row.mega_form_id].special_defense,
+                    "speed": mega_profiles[row.mega_form_id].speed,
                 },
             }
             for row in mega_rows

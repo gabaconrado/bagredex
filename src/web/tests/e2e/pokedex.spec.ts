@@ -145,6 +145,15 @@ async function login(page: Page) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+}
+
+async function expectPokedexReady(page: Page, regulation = "m-c") {
+  const app = page.locator(".pokedex-app");
+  await expect(app).toHaveAttribute("data-regulation", regulation);
+  await expect(app).toHaveAttribute("data-details-state", "ready", {
+    timeout: 15_000,
+  });
   await expect(page.getByRole("heading", { name: "Pokédex" })).toBeVisible();
 }
 
@@ -196,25 +205,34 @@ test.beforeEach(async ({ page }) => {
 test("keeps historical regulation navigation explicit and latest navigation clean", async ({
   page,
 }) => {
-  await page.getByLabel("Regulation").selectOption("m-a");
+  const regulation = page.getByLabel("Regulation");
+  await expect(page.locator("[data-regulation-selector]")).toHaveAttribute(
+    "data-enhanced",
+    "",
+  );
+  await regulation.selectOption("m-a");
   await expect(page).toHaveURL(/regulation=m-a/);
+  await expectPokedexReady(page, "m-a");
   await page.getByRole("link", { name: "Damage Calculator" }).click();
   await expect(page).toHaveURL(/\/damage-calculator\/\?regulation=m-a/);
   await expect(page.getByLabel("Regulation")).toHaveValue("m-a");
   await page.getByRole("link", { name: "Pokédex" }).click();
   await expect(page).toHaveURL(/regulation=m-a/);
+  await expectPokedexReady(page, "m-a");
   await page.locator(".site-header__brand").click();
   await expect(page).toHaveURL(/regulation=m-a/);
+  await expectPokedexReady(page, "m-a");
   await expect(page.getByLabel("Regulation")).toHaveValue("m-a");
 
   await page.getByLabel("Regulation").selectOption("m-c");
   await expect(page).toHaveURL(/\/$/);
+  await expectPokedexReady(page, "m-c");
   await expect(page.getByLabel("Regulation")).toHaveValue("m-c");
 });
 
-test("switches explicit regulations and supports keyboard selection", async ({
+test("switches explicit regulations and preserves header behavior", async ({
   page,
-}, testInfo) => {
+}) => {
   const picker = page.getByLabel("Regulation");
   await expect(picker).toHaveCount(1);
   await expect(picker.locator("option")).toHaveText([
@@ -230,14 +248,18 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await picker.focus();
   await page.keyboard.press("ArrowDown");
   await expect(page).toHaveURL(/regulation=m-b/);
+  await expectPokedexReady(page, "m-b");
   await expect(page.getByLabel("Regulation")).toHaveValue("m-b");
   await page.getByLabel("Regulation").selectOption("m-a");
   await expect(page).toHaveURL(/regulation=m-a/);
+  await expectPokedexReady(page, "m-a");
   await page.goBack();
   await expect(page).toHaveURL(/regulation=m-b/);
+  await expectPokedexReady(page, "m-b");
   await expect(page.getByLabel("Regulation")).toHaveValue("m-b");
   await page.goForward();
   await expect(page).toHaveURL(/regulation=m-a/);
+  await expectPokedexReady(page, "m-a");
   await expect(page.getByText(/of \d+ Pokémon/)).toBeVisible();
   await expect(page.locator(".site-header__brand small")).toHaveText(
     "development",
@@ -426,7 +448,7 @@ test("switches explicit regulations and supports keyboard selection", async ({
   expect(focusStyle.expanded.right).toBeLessThanOrEqual(
     page.viewportSize()!.width,
   );
-  await expect(brand).toHaveAttribute("href", "/");
+  await expect(brand).toHaveAttribute("href", "/?regulation=m-a");
   await expect(brand.locator("span, small")).toHaveCount(2);
   await expect(page.locator("a.site-header__brand")).toHaveCount(1);
   const identity = page.locator(".site-header__identity");
@@ -470,6 +492,9 @@ test("switches explicit regulations and supports keyboard selection", async ({
   await identity.evaluate((element, value) => {
     element.textContent = value;
   }, originalIdentity ?? "");
+});
+
+test("supports Pokédex keyboard selection", async ({ page }, testInfo) => {
   const reminder = page.locator(".shortcut-reminder");
   await expect(reminder).toHaveText("Press ? for keyboard shortcuts");
   await expect(reminder.locator("kbd")).toHaveCount(1);
@@ -588,7 +613,7 @@ test("switches explicit regulations and supports keyboard selection", async ({
       .filter({ has: page.locator(".suggestion-enter-hint") }),
   ).toHaveCount(1);
   const hintGeometry = await page
-    .locator(".search-input-wrap")
+    .locator(".search-field__input-wrap")
     .evaluate((wrap) => {
       const input = wrap.querySelector("input")!;
       const hint = wrap.querySelector(".search-shortcut-hint")!;
@@ -718,6 +743,7 @@ test.describe("without JavaScript", () => {
     await page.getByRole("button", { name: "Apply" }).click();
 
     await expect(page).toHaveURL(/regulation=m-b/);
+    await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
     const query = new URL(page.url()).searchParams;
     expect(query.getAll("regulation")).toEqual(["m-b"]);
     expect(query.get("view")).toBe("grid");
@@ -987,9 +1013,13 @@ test("selects an entire data row exactly once by pointer, touch, and keyboard", 
 test("navigates Mega forms in both directions and replaces detail information", async ({
   page,
 }, testInfo) => {
+  await expectPokedexReady(page);
   const search = page.getByLabel(/Search Pokémon/);
   await search.fill("charizard");
   await page.getByRole("option", { name: "Charizard", exact: true }).click();
+  await expect(
+    page.locator('.detail-pane[data-form="charizard"]'),
+  ).toBeVisible();
   const rowSprite = page
     .locator(".pokemon-table tbody tr", { hasText: "Charizard" })
     .first()
@@ -1071,10 +1101,13 @@ test("navigates Mega forms in both directions and replaces detail information", 
     await expect(cell).toHaveCSS("text-align", "center");
   const moveTable = page.getByLabel("Legal moves");
   await expect(moveTable.getByText("Name", { exact: true })).toBeVisible();
-  for (const cell of await moveTable
-    .locator('[role="columnheader"], [role="cell"]')
-    .all())
-    await expect(cell).toHaveCSS("text-align", "center");
+  expect(
+    await moveTable
+      .locator('[role="columnheader"], [role="cell"]')
+      .evaluateAll((cells) =>
+        cells.every((cell) => getComputedStyle(cell).textAlign === "center"),
+      ),
+  ).toBe(true);
   await expect(
     moveTable.getByRole("button", { name: "Sort moves by category" }),
   ).toBeVisible();
@@ -1090,6 +1123,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
   const statusCategory = moveTable.getByText("Status", { exact: true }).first();
   const statusRow = statusCategory.locator("xpath=ancestor::*[@role='row'][1]");
   const statusIcon = statusRow.locator(".move-category img.icon");
+  await statusIcon.scrollIntoViewIfNeeded();
   await expect(statusIcon).toHaveAttribute("src", /status-move-[^/]+\.svg$/);
   await expect(statusIcon).toHaveAttribute("alt", "");
   expect(
@@ -1098,7 +1132,17 @@ test("navigates Mega forms in both directions and replaces detail information", 
       value: image.getAttribute("aria-hidden"),
     })),
   ).toEqual({ present: true, value: expect.stringMatching(/^(?:true)?$/) });
-  await expect(statusIcon).toHaveJSProperty("complete", true);
+  const statusIconSource = await statusIcon.getAttribute("src");
+  expect(statusIconSource).not.toBeNull();
+  const pageUrl = new URL(page.url());
+  const statusIconUrl = new URL(statusIconSource!, pageUrl);
+  expect(statusIconUrl.origin).toBe(pageUrl.origin);
+  const statusIconResponse = await page.request.get(statusIconUrl.href);
+  expect(statusIconResponse.ok()).toBe(true);
+  expect(statusIconResponse.headers()["content-type"]).toContain(
+    "image/svg+xml",
+  );
+  expect(await statusIconResponse.text()).toContain('viewBox="0 0 48 48"');
   const [statusIconBox, statusContrast] = await Promise.all([
     statusIcon.boundingBox(),
     statusRow.evaluate((row) => {
@@ -1152,6 +1196,7 @@ test("navigates Mega forms in both directions and replaces detail information", 
   const statsInfo = page.getByRole("button", {
     name: "Show level-50 stat calculation information",
   });
+  await expect(statsInfo.locator(".icon--information")).toBeVisible();
   const [infoBox, markBox] = await Promise.all([
     statsInfo.boundingBox(),
     statsInfo.locator(".icon--information").boundingBox(),
@@ -1444,6 +1489,94 @@ test("navigates Mega forms in both directions and replaces detail information", 
   await expect(
     page.getByRole("heading", { name: "Blaze", exact: true }),
   ).toHaveCount(0);
+});
+
+test("switches grouped forms and keeps Meowstic entries separate", async ({
+  page,
+}) => {
+  await expectPokedexReady(page);
+  const bootstrap = JSON.parse(
+    (await page.locator("#pokedex-bootstrap").textContent()) ?? "null",
+  ) as { details_url: string };
+  const detailsResponse = await page.request.get(bootstrap.details_url);
+  expect(detailsResponse.ok()).toBe(true);
+  const details = (await detailsResponse.json()) as {
+    forms: { id: string; form_group: unknown }[];
+  };
+  expect(
+    details.forms.find(({ id }) => id === "castform")?.form_group,
+    "The selected runtime must expose Castform's canonical detail group.",
+  ).toMatchObject({
+    label: "Form",
+    options: expect.arrayContaining([
+      { id: "castform", label: "Castform" },
+      { id: "castformrainy", label: "Rainy" },
+    ]),
+  });
+  const search = page.getByLabel(/Search Pokémon/);
+  await search.fill("castform");
+  await page.getByRole("option", { name: "Castform", exact: true }).click();
+  const form = page.getByRole("combobox", { name: "Form", exact: true });
+  await expect(form).toBeVisible();
+  await page.getByRole("button", { name: "Show shiny Castform" }).click();
+  await form.selectOption({ label: "Rainy" });
+  await expect(
+    page.getByRole("heading", { name: /Castform-Rainy/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: /Shiny Castform-Rainy/i }),
+  ).toBeVisible();
+
+  await search.fill("Castform-Rainy");
+  await expect(
+    page.getByRole("option", { name: "Castform-Rainy", exact: true }),
+  ).toHaveCount(0);
+  await search.fill("Meowstic");
+  await expect(
+    page.getByRole("option", { name: "Meowstic-Male", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "Meowstic-Female", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("option", { name: "Meowstic-Male", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Meowstic-Male", exact: true }),
+  ).toBeVisible();
+  const maleSprite = await page
+    .getByRole("img", { name: "Meowstic-Male", exact: true })
+    .getAttribute("src");
+  const maleMegaControls = await page
+    .locator(".form-toggles button[aria-label*='Mega']")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    );
+
+  await search.fill("Meowstic");
+  await page
+    .getByRole("option", { name: "Meowstic-Female", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Meowstic-Female", exact: true }),
+  ).toBeVisible();
+  const femaleSprite = await page
+    .getByRole("img", { name: "Meowstic-Female", exact: true })
+    .getAttribute("src");
+  expect(femaleSprite).not.toBe(maleSprite);
+  const femaleMegaControls = await page
+    .locator(".form-toggles button[aria-label*='Mega']")
+    .evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    );
+  expect(maleMegaControls.every((label) => !label?.includes("Female"))).toBe(
+    true,
+  );
+  expect(femaleMegaControls.every((label) => !label?.includes("Male"))).toBe(
+    true,
+  );
+  if (maleMegaControls.length > 0 && femaleMegaControls.length > 0)
+    expect(femaleMegaControls).not.toEqual(maleMegaControls);
 });
 
 test("keeps responsive shell, sort columns, and delayed detail geometry stable", async ({

@@ -26,6 +26,7 @@ ITEM_INFO_IMPORTER_VERSION = "5"
 ITEM_INFO_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-4"
 CALCULATOR_SCHEMA_VERSION = "5"
 CALCULATOR_IMPORTER_VERSION = "6"
+FORM_SEARCH_IMPORTER_VERSION = "7"
 CALCULATOR_SOURCE_SHAPE_VERSION = "showdown-champions-multi-revision-5"
 MULTI_SCHEMA_VERSIONS = frozenset(
     {MULTI_SCHEMA_VERSION, TEAM_SCHEMA_VERSION, ITEM_INFO_SCHEMA_VERSION, CALCULATOR_SCHEMA_VERSION}
@@ -209,6 +210,15 @@ CALCULATOR_PINNED_COUNTS = {
     "type_effectiveness": 324,
     "calculator_capabilities": 1,
 }
+FORM_SEARCH_PINNED_COUNTS = {
+    **CALCULATOR_PINNED_COUNTS,
+    "forms": 351,
+    "profiles": 1053,
+    "learnsets": 65103,
+    "mega_item_relations": 217,
+    "sprite_mappings": 351,
+    "sprites": 702,
+}
 MULTI_GROUP_COUNTS = {
     "legal_forms_by_regulation": {"m-a": 272, "m-b": 314, "m-c": 349},
     "learnsets_by_regulation": {"m-a": 21506, "m-b": 21715, "m-c": 21714},
@@ -228,7 +238,52 @@ MULTI_GROUP_COUNTS = {
         "override": 51,
     },
 }
+FORM_SEARCH_GROUP_COUNTS = {
+    "legal_forms_by_regulation": {"m-a": 272, "m-b": 314, "m-c": 349},
+    "learnsets_by_regulation": {"m-a": 21562, "m-b": 21771, "m-c": 21770},
+    "learnsets_by_form_resolution": {
+        "base-to-mega": 16459,
+        "changed-form": 1331,
+        "direct": 47313,
+    },
+    "learnsets_by_source_mod": {
+        "base": 4578,
+        "champions": 60474,
+        "championsregmb": 51,
+    },
+    "learnsets_by_source_kind": {
+        "direct": 38861,
+        "inherited": 26191,
+        "override": 51,
+    },
+}
 PINNED_RELEASE_CONTRACTS = {
+    "showdown-multi-s5-i7-49850c617dd2": (
+        "49850c617dd2eddfcdc53f0bf22f4aa58c4433e26717974a5e9e0ccd113cda9f",
+        FORM_SEARCH_PINNED_COUNTS,
+        FORM_SEARCH_GROUP_COUNTS,
+        "6b38776ae3eb0cb94e582b213236abff522c378e65fda85a72724cc0a42f77eb",
+        {
+            "m-a": {
+                "pokedex": 1516,
+                "base_moves": 954,
+                "base_abilities": 318,
+                "base_item_texts": 564,
+                "base_learnsets": 1287,
+                "champions_format_entries": 1330,
+                "championsregmb_format_entries": 0,
+            },
+            "m-b,m-c": {
+                "pokedex": 1518,
+                "base_moves": 954,
+                "base_abilities": 321,
+                "base_item_texts": 583,
+                "base_learnsets": 1289,
+                "champions_format_entries": 1361,
+                "championsregmb_format_entries": 1361,
+            },
+        },
+    ),
     "showdown-multi-s5-i6-38ee90625b30": (
         "38ee90625b301639ff581409f3728f91e717373a9658ea516a4e9a336113fedd",
         CALCULATOR_PINNED_COUNTS,
@@ -362,6 +417,7 @@ SPRITE_EXCEPTIONS = {
     "lycanroc": "lycanroc-midday",
     "maushold": "maushold-family-of-four",
     "meowstic": "meowstic-male",
+    "meowsticf": "meowstic-female",
     "meowsticfmega": "meowstic-female-mega",
     "meowsticmmega": "meowstic-male-mega",
     "mimikyu": "mimikyu-disguised",
@@ -1873,7 +1929,7 @@ def read_bundle(directory: Path, *, require_pinned: bool = True) -> PokemonDataB
         raise BundleReadError("manifest.json: unsupported bundle schema version")
     importer_version = _string(manifest, "importer_version", "manifest.json")
     expected_importers = (
-        {CALCULATOR_IMPORTER_VERSION}
+        {CALCULATOR_IMPORTER_VERSION, FORM_SEARCH_IMPORTER_VERSION}
         if schema_version == CALCULATOR_SCHEMA_VERSION
         else {ITEM_INFO_IMPORTER_VERSION}
         if schema_version == ITEM_INFO_SCHEMA_VERSION

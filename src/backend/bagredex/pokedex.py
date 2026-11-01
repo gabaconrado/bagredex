@@ -8,14 +8,14 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from django.db.models import QuerySet
+from django.db.models import Exists, OuterRef, QuerySet
 from django.urls import reverse
 
 from .pokemon_data.models import (
     ActiveDataVersion,
     DataVersion,
     LearnsetEntry,
-    MegaRelation,
+    MegaItemRelation,
     MoveFlagRelation,
     MoveProfile,
     PokemonProfile,
@@ -29,10 +29,75 @@ from .pokemon_data.stats import level_50_stat
 from .regulations import REGULATION_IDS
 
 CANONICAL_ID = re.compile(r"^[a-z0-9]+$")
-INDEX_SCHEMA = "pokedex-index-v1"
+INDEX_SCHEMA = "pokedex-index-v2"
 DETAIL_SCHEMA = "pokedex-form-detail-v1"
-DETAILS_SCHEMA = "pokedex-details-v1"
+DETAILS_SCHEMA = "pokedex-details-v2"
 BOOTSTRAP_SCHEMA = "pokedex-bootstrap-v2"
+
+GROUPED_FORM_OPTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "castform": (
+        ("castform", "Castform"),
+        ("castformrainy", "Rainy"),
+        ("castformsnowy", "Snowy"),
+        ("castformsunny", "Sunny"),
+    ),
+    "aegislash": (("aegislash", "Shield"), ("aegislashblade", "Blade")),
+    "gourgeist": (
+        ("gourgeist", "Average"),
+        ("gourgeistlarge", "Large"),
+        ("gourgeistsmall", "Small"),
+        ("gourgeistsuper", "Super"),
+    ),
+    "squawkabilly": (
+        ("squawkabilly", "Green"),
+        ("squawkabillyblue", "Blue"),
+        ("squawkabillywhite", "White"),
+        ("squawkabillyyellow", "Yellow"),
+    ),
+}
+GROUPED_VARIANT_IDS = frozenset(
+    form_id
+    for base_id, options in GROUPED_FORM_OPTIONS.items()
+    for form_id, _ in options
+    if form_id != base_id
+)
+GROUPED_SEARCH_NAMES = {
+    "castform": "Castform",
+    "aegislash": "Aegislash",
+    "gourgeist": "Gourgeist",
+    "squawkabilly": "Squawkabilly",
+}
+FORM_DISPLAY_NAMES = {"meowstic": "Meowstic-Male", "meowsticf": "Meowstic-Female"}
+
+
+def _available_form_group(form_id: str, available_ids: set[str]) -> dict[str, Any] | None:
+    base_id = next(
+        (base for base, options in GROUPED_FORM_OPTIONS.items() if form_id in dict(options)), None
+    )
+    if base_id is None:
+        return None
+    options = [
+        {"id": option_id, "label": label}
+        for option_id, label in GROUPED_FORM_OPTIONS[base_id]
+        if option_id in available_ids
+    ]
+    if not options:
+        return None
+    return {"label": "Form", "options": options}
+
+
+def _group_representatives(available_ids: set[str]) -> dict[str, str]:
+    """Choose one effective canonical profile for each available grouped family."""
+    return {
+        base_id: representative
+        for base_id, options in GROUPED_FORM_OPTIONS.items()
+        if (
+            representative := next(
+                (form_id for form_id, _ in options if form_id in available_ids), None
+            )
+        )
+        is not None
+    }
 
 
 class PokedexUnavailable(RuntimeError):
@@ -120,9 +185,13 @@ def bootstrap(version: DataVersion, selected: Regulation) -> dict[str, Any]:
 
 
 def _profile_rows(snapshot: Snapshot) -> QuerySet[PokemonProfile]:
-    return PokemonProfile.objects.filter(
-        regulation=snapshot.regulation, membership__isnull=False
-    ).select_related("form")
+    return (
+        PokemonProfile.objects.filter(regulation=snapshot.regulation)
+        .select_related("form")
+        .annotate(
+            is_list_legal=Exists(RegulationMembership.objects.filter(profile_id=OuterRef("pk")))
+        )
+    )
 
 
 def regulation_index(snapshot: Snapshot) -> dict[str, Any]:
@@ -130,6 +199,16 @@ def regulation_index(snapshot: Snapshot) -> dict[str, Any]:
     profiles = list(
         _profile_rows(snapshot).order_by("form__national_dex_number", "form__canonical_id")
     )
+    available_index_ids = {profile.form.canonical_id for profile in profiles}
+    group_representatives = _group_representatives(available_index_ids)
+    representative_ids = set(group_representatives.values())
+    profiles = [
+        profile
+        for profile in profiles
+        if getattr(profile, "is_list_legal", False)
+        or profile.form.canonical_id == "meowsticf"
+        or profile.form.canonical_id in representative_ids
+    ]
     profile_ids = [profile.pk for profile in profiles]
     types_by_profile: dict[Any, list[dict[str, str]]] = {}
     referenced_types: dict[str, str] = {}
@@ -172,10 +251,24 @@ def regulation_index(snapshot: Snapshot) -> dict[str, Any]:
 
     forms = []
     for profile in profiles:
+        form_id = profile.form.canonical_id
+        group_base_id = next(
+            (
+                base_id
+                for base_id, representative_id in group_representatives.items()
+                if representative_id == form_id
+            ),
+            None,
+        )
+        if form_id in GROUPED_VARIANT_IDS and group_base_id is None:
+            continue
+        variants = _available_form_group(form_id, available_index_ids)
         forms.append(
             {
-                "id": profile.form.canonical_id,
-                "name": profile.form.name,
+                "id": form_id,
+                "name": GROUPED_SEARCH_NAMES.get(
+                    group_base_id or form_id, FORM_DISPLAY_NAMES.get(form_id, profile.form.name)
+                ),
                 "national_dex_number": profile.form.national_dex_number,
                 "is_mega": profile.form.is_mega,
                 "types": types_by_profile.get(profile.pk, []),
@@ -190,6 +283,7 @@ def regulation_index(snapshot: Snapshot) -> dict[str, Any]:
                 "bst": profile.bst,
                 "ability_ids": abilities_by_profile.get(profile.pk, []),
                 "move_ids": [move_id for move_id, _ in moves_by_profile.get(profile.pk, [])],
+                "form_group": variants,
             }
         )
 
@@ -234,6 +328,7 @@ def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
     )
     profile_ids = [profile.pk for profile in profiles]
     form_ids = {profile.form_id for profile in profiles}
+    canonical_ids_by_form = {profile.form_id: profile.form.canonical_id for profile in profiles}
     legal_profiles = set(
         RegulationMembership.objects.filter(profile_id__in=profile_ids).values_list(
             "profile_id", flat=True
@@ -335,12 +430,16 @@ def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
         )
 
     megas_by_base: dict[Any, list[tuple[str, str]]] = {}
-    for mega_row in MegaRelation.objects.filter(
-        version=snapshot.version, base_form_id__in=form_ids, mega_form_id__in=form_ids
-    ).values("base_form_id", "mega_form__canonical_id", "mega_form__form_label"):
+    base_by_mega: dict[Any, Any] = {}
+    for mega_row in MegaItemRelation.objects.filter(
+        regulation=snapshot.regulation,
+        base_form_id__in=form_ids,
+        mega_form_id__in=form_ids,
+    ).values("base_form_id", "mega_form_id", "mega_form__canonical_id", "mega_form__form_label"):
         megas_by_base.setdefault(mega_row["base_form_id"], []).append(
             (mega_row["mega_form__canonical_id"], mega_row["mega_form__form_label"])
         )
+        base_by_mega[mega_row["mega_form_id"]] = mega_row["base_form_id"]
     for relations in megas_by_base.values():
         relations.sort(key=lambda pair: (pair[1].casefold(), pair[0]))
 
@@ -352,17 +451,21 @@ def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
         ("spd", "Special Defense", "special_defense"),
         ("spe", "Speed", "speed"),
     )
+    available_form_ids = {profile.form.canonical_id for profile in profiles}
     forms = [
         {
             "id": profile.form.canonical_id,
-            "name": profile.form.name,
+            "name": FORM_DISPLAY_NAMES.get(profile.form.canonical_id, profile.form.name),
             "types": types_by_profile.get(profile.pk, []),
             "is_list_legal": profile.pk in legal_profiles,
             "is_mega": profile.form.is_mega,
             "form_label": profile.form.form_label,
-            "base_id": profile.form.base_form.canonical_id,
+            "base_id": canonical_ids_by_form[base_by_mega.get(profile.form_id, profile.form_id)],
             "mega_ids": [
-                mega_id for mega_id, _ in megas_by_base.get(profile.form.base_form_id, [])
+                mega_id
+                for mega_id, _ in megas_by_base.get(
+                    base_by_mega.get(profile.form_id, profile.form_id), []
+                )
             ],
             "stats": [
                 _stat_values(stat_id, name, getattr(profile, field))
@@ -370,6 +473,7 @@ def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
             ],
             "ability_slots": ability_slots.get(profile.pk, []),
             "move_ids": [move_id for move_id, _ in moves_by_profile.get(profile.pk, [])],
+            "form_group": _available_form_group(profile.form.canonical_id, available_form_ids),
         }
         for profile in profiles
     ]
@@ -390,13 +494,22 @@ def regulation_details(snapshot: Snapshot) -> dict[str, Any]:
 def form_detail(snapshot: Snapshot, form_id: str) -> dict[str, Any] | None:
     """Serialize one legal or toggle-supporting effective form."""
     _validate_mechanics(snapshot)
-    profile = (
-        PokemonProfile.objects.select_related("form", "form__base_form")
-        .filter(regulation=snapshot.regulation, form__canonical_id=form_id)
-        .first()
+    group_options = next(
+        (options for options in GROUPED_FORM_OPTIONS.values() if form_id in dict(options)), ()
+    )
+    requested_ids = [option_id for option_id, _ in group_options] or [form_id]
+    available_profiles = list(
+        PokemonProfile.objects.select_related("form", "form__base_form").filter(
+            regulation=snapshot.regulation, form__canonical_id__in=requested_ids
+        )
+    )
+    profile = next(
+        (candidate for candidate in available_profiles if candidate.form.canonical_id == form_id),
+        None,
     )
     if profile is None:
         return None
+    available_form_ids = {candidate.form.canonical_id for candidate in available_profiles}
     is_list_legal = RegulationMembership.objects.filter(profile=profile).exists()
     types = [
         {"id": row.type.canonical_id, "name": row.type.name}
@@ -468,9 +581,19 @@ def form_detail(snapshot: Snapshot, form_id: str) -> dict[str, Any] | None:
         )
         for sprite in Sprite.objects.filter(mapping__form=profile.form)
     }
-    base_form = profile.form.base_form
+    selected_relation = None
+    if profile.form.is_mega:
+        selected_relation = (
+            MegaItemRelation.objects.filter(
+                regulation=snapshot.regulation,
+                mega_form=profile.form,
+            )
+            .select_related("base_form")
+            .first()
+        )
+    base_form = selected_relation.base_form if selected_relation else profile.form
     mega_rows = (
-        MegaRelation.objects.filter(version=snapshot.version, base_form=base_form)
+        MegaItemRelation.objects.filter(regulation=snapshot.regulation, base_form=base_form)
         .select_related("mega_form")
         .filter(mega_form__pokemonprofile__regulation=snapshot.regulation)
         .order_by("mega_form__canonical_id")
@@ -489,13 +612,17 @@ def form_detail(snapshot: Snapshot, form_id: str) -> dict[str, Any] | None:
         "regulation_id": snapshot.regulation.canonical_id,
         "form": {
             "id": profile.form.canonical_id,
-            "name": profile.form.name,
+            "name": FORM_DISPLAY_NAMES.get(profile.form.canonical_id, profile.form.name),
             "is_list_legal": is_list_legal,
             "is_mega": profile.form.is_mega,
+            "form_group": _available_form_group(profile.form.canonical_id, available_form_ids),
             "types": types,
             "sprites": sprite_variants,
             "form_switches": {
-                "base": {"id": base_form.canonical_id, "name": base_form.name},
+                "base": {
+                    "id": base_form.canonical_id,
+                    "name": FORM_DISPLAY_NAMES.get(base_form.canonical_id, base_form.name),
+                },
                 "megas": [
                     {"id": relation.mega_form.canonical_id, "name": relation.mega_form.name}
                     for relation in mega_rows

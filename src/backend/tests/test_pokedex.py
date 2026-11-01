@@ -18,13 +18,25 @@ from django.test.utils import CaptureQueriesContext
 
 from bagredex import views
 from bagredex.accounts.models import User
-from bagredex.pokedex import PokedexUnavailable, Snapshot, form_detail, regulation_details
+from bagredex.pokedex import (
+    FORM_DISPLAY_NAMES,
+    GROUPED_FORM_OPTIONS,
+    PokedexUnavailable,
+    Snapshot,
+    _available_form_group,
+    _group_representatives,
+    form_detail,
+    regulation_details,
+)
 from bagredex.pokemon_data.models import (
     Ability,
     AbilityProfile,
     DataVersion,
+    Item,
+    ItemProfile,
     LearnsetEntry,
     MechanicsProfile,
+    MegaItemRelation,
     MegaRelation,
     Move,
     MoveFlag,
@@ -43,6 +55,48 @@ from bagredex.pokemon_data.models import (
 from bagredex.pokemon_data.services import activate_pokemon_data, load_pokemon_data
 
 VERSION_ID = "showdown-test-s1-i1-0123456789ab"
+
+
+def test_grouped_form_metadata_is_explicit_ordered_and_fail_closed() -> None:
+    expected = {
+        "castform": ["castform", "castformrainy", "castformsnowy", "castformsunny"],
+        "aegislash": ["aegislash", "aegislashblade"],
+        "gourgeist": ["gourgeist", "gourgeistlarge", "gourgeistsmall", "gourgeistsuper"],
+        "squawkabilly": [
+            "squawkabilly",
+            "squawkabillyblue",
+            "squawkabillywhite",
+            "squawkabillyyellow",
+        ],
+    }
+    assert {
+        base_id: [form_id for form_id, _ in options]
+        for base_id, options in GROUPED_FORM_OPTIONS.items()
+    } == expected
+    assert FORM_DISPLAY_NAMES == {
+        "meowstic": "Meowstic-Male",
+        "meowsticf": "Meowstic-Female",
+    }
+
+    available = set(expected["gourgeist"])
+    assert _available_form_group("gourgeistsmall", available) == {
+        "label": "Form",
+        "options": [
+            {"id": "gourgeist", "label": "Average"},
+            {"id": "gourgeistlarge", "label": "Large"},
+            {"id": "gourgeistsmall", "label": "Small"},
+            {"id": "gourgeistsuper", "label": "Super"},
+        ],
+    }
+    assert _available_form_group("gourgeistsmall", available - {"gourgeist"}) == {
+        "label": "Form",
+        "options": [
+            {"id": "gourgeistlarge", "label": "Large"},
+            {"id": "gourgeistsmall", "label": "Small"},
+            {"id": "gourgeistsuper", "label": "Super"},
+        ],
+    }
+    assert _group_representatives(available - {"gourgeist"}) == {"gourgeist": "gourgeistlarge"}
 
 
 def _version(identifier: str = VERSION_ID) -> DataVersion:
@@ -106,6 +160,12 @@ def pokedex_data(tmp_path: Path, settings: Any) -> dict[str, Any]:
     early_move = Move.objects.create(version=version, canonical_id="acrobatics", name="acrobatics")
     flag = MoveFlag.objects.create(version=version, canonical_id="protect")
     contact = MoveFlag.objects.create(version=version, canonical_id="contact")
+    mega_x_item = Item.objects.create(
+        version=version, canonical_id="charizarditex", name="Charizardite X"
+    )
+    mega_y_item = Item.objects.create(
+        version=version, canonical_id="charizarditey", name="Charizardite Y"
+    )
     base_id = uuid.uuid4()
     base = PokemonForm.objects.create(
         id=base_id,
@@ -155,6 +215,18 @@ def pokedex_data(tmp_path: Path, settings: Any) -> dict[str, Any]:
             ability=hidden_ability,
             short_description="Boosts Special Attack.",
             description="Boosts Special Attack in sunshine.",
+        )
+        mega_x_item_profile = ItemProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            item=mega_x_item,
+            source_status="standard",
+        )
+        mega_y_item_profile = ItemProfile.objects.create(
+            version=version,
+            regulation=regulation,
+            item=mega_y_item,
+            source_status="standard",
         )
         move_profile = MoveProfile.objects.create(
             version=version,
@@ -224,6 +296,20 @@ def pokedex_data(tmp_path: Path, settings: Any) -> dict[str, Any]:
                     source_kind=LearnsetEntry.SourceKind.DIRECT,
                 )
         RegulationMembership.objects.create(profile=profiles[(regulation_id, mega.canonical_id)])
+        MegaItemRelation.objects.create(
+            version=version,
+            regulation=regulation,
+            item_profile=mega_x_item_profile,
+            base_form=base,
+            mega_form=mega,
+        )
+        MegaItemRelation.objects.create(
+            version=version,
+            regulation=regulation,
+            item_profile=mega_y_item_profile,
+            base_form=base,
+            mega_form=mega_y,
+        )
     # Base is deliberately toggle-only in M-C and legal in M-B.
     RegulationMembership.objects.create(profile=profiles[("m-b", base.canonical_id)])
     large_profile = profiles[("m-c", base.canonical_id)]
@@ -418,7 +504,7 @@ def test_index_contract_scoping_order_etag_and_query_bound(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "private, no-cache"
     payload = response.json()
-    assert payload["schema_version"] == "pokedex-index-v1"
+    assert payload["schema_version"] == "pokedex-index-v2"
     assert [form["id"] for form in payload["forms"]] == ["charizard", "charizardmegax"]
     assert payload["forms"][0]["types"] == [{"id": "fire", "name": "Fire"}]
     assert payload["forms"][0]["ability_ids"] == ["blaze", "solarpower"]
@@ -456,7 +542,8 @@ def test_reviewed_release_excludes_nonstandard_magearna_forms_from_both_indexes(
     loaded = load_pokemon_data(release)
     activate_pokemon_data(loaded.version.pk)
 
-    for regulation_id, expected_count in (("m-b", 314), ("m-c", 349)):
+    # The canonical legality counts collapse approved variants into one searchable family row.
+    for regulation_id, expected_count in (("m-b", 308), ("m-c", 339)):
         response = authenticated_client.get(
             f"/pokedex/data/{regulation_id}/index/?version={loaded.version.pk}"
         )
@@ -466,6 +553,113 @@ def test_reviewed_release_excludes_nonstandard_magearna_forms_from_both_indexes(
         assert "charizard" in form_ids
         assert "magearnamega" not in form_ids
         assert "magearnaoriginalmega" not in form_ids
+
+
+@pytest.mark.django_db(transaction=True)
+def test_form_search_release_serializes_groups_and_exact_meowstic_mega_relations(
+    authenticated_client: Client, settings: Any
+) -> None:
+    release = (
+        settings.REPOSITORY_ROOT / "src" / "data" / "releases" / "showdown-multi-s5-i7-49850c617dd2"
+    )
+    if not release.is_dir():
+        pytest.skip("the reviewed form-search release is required")
+    settings.POKEMON_DATA_RELEASES_ROOT = release.parent
+    loaded = load_pokemon_data(release)
+    activate_pokemon_data(loaded.version.pk)
+
+    # The retained release above remains 308/339 for M-B/M-C. This release adds the
+    # effective, independently searchable female Meowstic profile in every regulation;
+    # M-A and M-B also retain Squawkabilly as their effective grouped representative.
+    expected_index_counts = {"m-a": 271, "m-b": 309, "m-c": 340}
+    for regulation_id in ("m-a", "m-b", "m-c"):
+        index_url = f"/pokedex/data/{regulation_id}/index/?version={loaded.version.pk}"
+        details_url = f"/pokedex/data/{regulation_id}/details/?version={loaded.version.pk}"
+        with CaptureQueriesContext(connection) as index_queries:
+            index_response = authenticated_client.get(index_url)
+        with CaptureQueriesContext(connection) as detail_queries:
+            details_response = authenticated_client.get(details_url)
+        assert index_response.status_code == details_response.status_code == 200
+        assert len(index_queries) <= 8
+        assert len(detail_queries) <= 12
+
+        index_forms = {form["id"]: form for form in index_response.json()["forms"]}
+        assert len(index_forms) == expected_index_counts[regulation_id]
+        details = details_response.json()
+        detail_forms = {form["id"]: form for form in details["forms"]}
+        ability_ids = {ability["id"] for ability in details["abilities"]}
+        move_ids = {move["id"] for move in details["moves"]}
+
+        for base_id, configured_options in GROUPED_FORM_OPTIONS.items():
+            assert base_id in index_forms
+            assert not ({form_id for form_id, _ in configured_options[1:]} & index_forms.keys())
+            expected_options = [
+                {"id": form_id, "label": label}
+                for form_id, label in configured_options
+                if form_id in detail_forms
+            ]
+            assert index_forms[base_id]["form_group"] == {
+                "label": "Form",
+                "options": expected_options,
+            }
+            assert all(option["id"] in detail_forms for option in expected_options)
+            variant_signatures = {
+                (
+                    tuple(type_["id"] for type_ in detail_forms[option["id"]]["types"]),
+                    tuple(stat["base"] for stat in detail_forms[option["id"]]["stats"]),
+                    tuple(slot["id"] for slot in detail_forms[option["id"]]["ability_slots"]),
+                    tuple(detail_forms[option["id"]]["move_ids"]),
+                )
+                for option in expected_options
+            }
+            assert len(variant_signatures) > 1
+
+        if regulation_id in {"m-a", "m-b"}:
+            # Squawkabilly is effective but has no list-legal colour in these regulations.
+            assert index_forms["squawkabilly"]["name"] == "Squawkabilly"
+            assert index_forms["squawkabilly"]["form_group"]["options"] == [
+                {"id": form_id, "label": label}
+                for form_id, label in GROUPED_FORM_OPTIONS["squawkabilly"]
+            ]
+
+        male = index_forms["meowstic"]
+        female = index_forms["meowsticf"]
+        assert male["name"] == "Meowstic-Male"
+        assert female["name"] == "Meowstic-Female"
+        assert male["stats"] != female["stats"] or male["ability_ids"] != female["ability_ids"]
+        assert detail_forms["meowstic"]["mega_ids"] == ["meowsticmmega"]
+        assert detail_forms["meowsticf"]["mega_ids"] == ["meowsticfmega"]
+        for target_id in ("meowsticmmega", "meowsticfmega"):
+            target = detail_forms[target_id]
+            assert target["types"]
+            assert set(slot["id"] for slot in target["ability_slots"]) <= ability_ids
+            assert target["move_ids"]
+            assert set(target["move_ids"]) <= move_ids
+
+        for form_id, expected_target in (
+            ("meowstic", "meowsticmmega"),
+            ("meowsticf", "meowsticfmega"),
+        ):
+            response = authenticated_client.get(
+                f"/pokedex/data/{regulation_id}/pokemon/{form_id}/details/"
+                f"?version={loaded.version.pk}"
+            )
+            assert response.status_code == 200
+            switches = response.json()["form"]["form_switches"]
+            assert switches["base"]["id"] == form_id
+            assert [mega["id"] for mega in switches["megas"]] == [expected_target]
+
+        castform_response = authenticated_client.get(
+            f"/pokedex/data/{regulation_id}/pokemon/castform/details/?version={loaded.version.pk}"
+        )
+        assert castform_response.status_code == 200
+        assert castform_response.json()["form"]["form_group"] == {
+            "label": "Form",
+            "options": [
+                {"id": form_id, "label": label}
+                for form_id, label in GROUPED_FORM_OPTIONS["castform"]
+            ],
+        }
 
 
 @pytest.mark.django_db
@@ -479,6 +673,7 @@ def test_detail_contract_toggle_only_stats_moves_and_query_bound(
     assert len(queries) <= 12
     form = response.json()["form"]
     assert form["is_list_legal"] is False
+    assert form["form_group"] is None
     assert form["form_switches"] == {
         "base": {"id": "charizard", "name": "Charizard"},
         "megas": [
@@ -530,7 +725,7 @@ def test_bulk_details_contract_is_normalized_complete_and_bounded(
     assert len(queries) <= 12
     assert response.headers["Cache-Control"] == "private, no-cache"
     payload = response.json()
-    assert payload["schema_version"] == "pokedex-details-v1"
+    assert payload["schema_version"] == "pokedex-details-v2"
     assert payload["data_version"] == VERSION_ID
     assert payload["regulation_id"] == "m-c"
     assert [form["id"] for form in payload["forms"]] == [

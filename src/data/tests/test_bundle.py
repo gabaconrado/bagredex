@@ -301,9 +301,10 @@ class SpriteSelectionTests(unittest.TestCase):
             self.skipTest("local source snapshots are unavailable")
         forms = _extract(showdown)["forms"]
         mapping = _load_sprite_mapping(forms, pokeapi)
-        self.assertEqual(len(mapping), 350)
-        self.assertEqual(len({value["pokemon_id"] for value in mapping.values()}), 350)
+        self.assertEqual(len(mapping), 351)
+        self.assertEqual(len({value["pokemon_id"] for value in mapping.values()}), 351)
         self.assertEqual(mapping["aegislash"]["pokemon_identifier"], "aegislash-shield")
+        self.assertEqual(mapping["meowsticf"]["pokemon_identifier"], "meowstic-female")
         self.assertEqual(
             mapping["meowsticfmega"]["pokemon_identifier"], "meowstic-female-mega"
         )
@@ -746,6 +747,27 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
             {"memberships": ["base"], "profiles": ["base", "basemega"]},
         )
 
+    def test_fixed_opposite_sex_form_is_related_without_cosmetic_expansion(
+        self,
+    ) -> None:
+        legality = (Path(__file__).parents[1] / "importer" / "legality.mjs").as_uri()
+        script = (
+            f"import {{selectRelatedFormIDs}} from {json.dumps(legality)};"
+            "const pokedex={"
+            "base:{name:'Base',gender:'M',otherFormes:['Base-F','Base-Style']},"
+            "basef:{name:'Base-F',baseSpecies:'Base',forme:'F',gender:'F'},"
+            "basestyle:{name:'Base-Style',baseSpecies:'Base',forme:'Style',gender:'M'}"
+            "};"
+            "process.stdout.write(JSON.stringify(selectRelatedFormIDs(['base'],pokedex)));"
+        )
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", script],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(json.loads(result.stdout), ["base", "basef"])
+
     def test_current_future_membership_candidates_are_exactly_magearna_megas(
         self,
     ) -> None:
@@ -835,11 +857,35 @@ class LocalSnapshotIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(forms["indeedeef"]["form_label"], "F")
         self.assertEqual(forms["indeedeef"]["base_form_id"], "indeedee")
+        self.assertEqual(
+            forms["meowsticf"],
+            {
+                "id": "meowsticf",
+                "name": "Meowstic-F",
+                "national_dex_number": 678,
+                "base_form_id": "meowstic",
+                "form_label": "F",
+                "is_mega": False,
+                "is_nfe": False,
+                "gender": "F",
+                "gender_options": ["F"],
+                "default_gender": "F",
+                "sprite_id": "meowstic-f",
+            },
+        )
         profiles = {
             value["form_id"]: value for value in first["regulations"]["m-c"]["profiles"]
         }
         self.assertEqual(profiles["charizardmegax"]["types"], ["Fire", "Dragon"])
         self.assertEqual(profiles["charizardmegax"]["bst"], 634)
+        self.assertEqual(
+            profiles["meowsticf"]["abilities"],
+            [
+                {"slot": "0", "ability_id": "keeneye"},
+                {"slot": "1", "ability_id": "infiltrator"},
+                {"slot": "H", "ability_id": "competitive"},
+            ],
+        )
         self.assertEqual(profiles["arcaninehisui"]["types"], ["Fire", "Rock"])
         self.assertEqual(
             profiles["arcaninehisui"]["stats"],
@@ -1054,6 +1100,216 @@ class PublishedBundleMutationTests(unittest.TestCase):
                 path.write_bytes(_canonical_bytes(values))
                 with self.assertRaises(BundleError):
                     validate_bundle(bundle, verify_manifest=False)
+
+    def test_meowstic_female_release_has_exact_semantic_delta(self) -> None:
+        releases = Path(__file__).parents[1] / "releases"
+        before = releases / "showdown-multi-s5-i6-38ee90625b30"
+        after = releases / "showdown-multi-s5-i7-49850c617dd2"
+
+        def records(filename: str) -> list[dict]:
+            return json.loads((after / filename).read_text(encoding="utf-8"))
+
+        difference = compare_bundles(before, after)
+        expected_additions = {
+            "forms.json": ["meowsticf"],
+            "profiles.json": [
+                "m-a:meowsticf",
+                "m-b:meowsticf",
+                "m-c:meowsticf",
+            ],
+            "learnsets.json": [
+                f"{regulation_id}:meowsticf:{move_id}"
+                for regulation_id in ("m-a", "m-b", "m-c")
+                for move_id in sorted(
+                    value["move_id"]
+                    for value in records("learnsets.json")
+                    if value["regulation_id"] == regulation_id
+                    and value["form_id"] == "meowsticf"
+                )
+            ],
+            "mega_item_relations.json": [
+                "m-a:meowsticite:meowsticf",
+                "m-b:meowsticite:meowsticf",
+                "m-c:meowsticite:meowsticf",
+            ],
+            "sprite_mappings.json": ["meowsticf"],
+            "sprites.json": ["meowsticf:normal", "meowsticf:shiny"],
+        }
+        self.assertEqual(
+            {
+                filename: changes["added_keys"]
+                for filename, changes in difference["files"].items()
+                if changes["added"]
+            },
+            expected_additions,
+        )
+        self.assertEqual(
+            {filename: len(keys) for filename, keys in expected_additions.items()},
+            {
+                "forms.json": 1,
+                "profiles.json": 3,
+                "learnsets.json": 168,
+                "mega_item_relations.json": 3,
+                "sprite_mappings.json": 1,
+                "sprites.json": 2,
+            },
+        )
+        self.assertTrue(
+            all(
+                changes["removed"] == changes["changed"] == 0
+                for changes in difference["files"].values()
+            )
+        )
+        self.assertEqual(
+            difference["overlays"], {"added": [], "removed": [], "changed": []}
+        )
+
+        form = next(
+            value for value in records("forms.json") if value["id"] == "meowsticf"
+        )
+        self.assertEqual(
+            form,
+            {
+                "base_form_id": "meowstic",
+                "default_gender": "F",
+                "form_label": "F",
+                "gender": "F",
+                "gender_options": ["F"],
+                "id": "meowsticf",
+                "is_mega": False,
+                "is_nfe": False,
+                "name": "Meowstic-F",
+                "national_dex_number": 678,
+                "sprite_id": "meowstic-f",
+            },
+        )
+        female_profiles = [
+            value
+            for value in records("profiles.json")
+            if value["form_id"] == "meowsticf"
+        ]
+        profile = {
+            "abilities": [
+                {"ability_id": "keeneye", "slot": "0"},
+                {"ability_id": "infiltrator", "slot": "1"},
+                {"ability_id": "competitive", "slot": "H"},
+            ],
+            "bst": 466,
+            "form_id": "meowsticf",
+            "stats": {"atk": 48, "def": 76, "hp": 74, "spa": 83, "spd": 81, "spe": 104},
+            "types": ["Psychic"],
+            "weight_tenths_kg": 85,
+        }
+        self.assertEqual(
+            female_profiles,
+            [
+                {**profile, "regulation_id": regulation_id}
+                for regulation_id in ("m-a", "m-b", "m-c")
+            ],
+        )
+
+        female_learnsets = [
+            value
+            for value in records("learnsets.json")
+            if value["form_id"] == "meowsticf"
+        ]
+        self.assertEqual(len(female_learnsets), 168)
+        self.assertEqual(
+            {
+                (
+                    value["regulation_id"],
+                    value["form_resolution"],
+                    value["source_form_id"],
+                    value["source_mod"],
+                    value["source_kind"],
+                )
+                for value in female_learnsets
+            },
+            {
+                ("m-a", "direct", "meowsticf", "champions", "direct"),
+                ("m-b", "direct", "meowsticf", "champions", "inherited"),
+                ("m-c", "direct", "meowsticf", "champions", "direct"),
+            },
+        )
+        self.assertEqual(
+            {
+                regulation_id: sum(
+                    value["regulation_id"] == regulation_id
+                    for value in female_learnsets
+                )
+                for regulation_id in ("m-a", "m-b", "m-c")
+            },
+            {"m-a": 56, "m-b": 56, "m-c": 56},
+        )
+        self.assertFalse(
+            any(
+                value["form_id"] == "meowsticf"
+                for value in records("regulation_memberships.json")
+            )
+        )
+
+        self.assertEqual(
+            [
+                value
+                for value in records("sprite_mappings.json")
+                if value["form_id"] == "meowsticf"
+            ],
+            [
+                {
+                    "form_id": "meowsticf",
+                    "mapping_rule": "exception",
+                    "pokeapi_identifier": "meowstic-female",
+                    "pokeapi_pokemon_id": 10025,
+                }
+            ],
+        )
+        female_sprites = [
+            value
+            for value in records("sprites.json")
+            if value["form_id"] == "meowsticf"
+        ]
+        self.assertEqual(
+            [
+                (value["variant"], value["path"], value["sha256"])
+                for value in female_sprites
+            ],
+            [
+                (
+                    "normal",
+                    "sprites/normal/meowsticf.webp",
+                    "c070e7064ff52acb871530ae841f462c763feb09d638881ef189b442c9e18e0f",
+                ),
+                (
+                    "shiny",
+                    "sprites/shiny/meowsticf.webp",
+                    "f6bd879b3989b4d3d90169014aa59acc830a78a57536adc52b071d24063cbb97",
+                ),
+            ],
+        )
+        self.assertTrue(
+            all(
+                value["pokeapi_identifier"] == "meowstic-female"
+                and value["pokeapi_pokemon_id"] == 10025
+                and value["mapping_rule"] == "exception"
+                for value in female_sprites
+            )
+        )
+        self.assertEqual(
+            [
+                value
+                for value in records("mega_item_relations.json")
+                if value["base_form_id"] == "meowsticf"
+            ],
+            [
+                {
+                    "base_form_id": "meowsticf",
+                    "item_id": "meowsticite",
+                    "mega_form_id": "meowsticfmega",
+                    "regulation_id": regulation_id,
+                }
+                for regulation_id in ("m-a", "m-b", "m-c")
+            ],
+        )
 
     def test_item_information_release_rejects_overlay_inventory_mutations(self) -> None:
         with tempfile.TemporaryDirectory() as name:

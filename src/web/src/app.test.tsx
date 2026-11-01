@@ -25,7 +25,7 @@ const bootstrap: Bootstrap = {
   sprite_url_template: "/sprites/__FORM__/__VARIANT__.webp",
 };
 const index: PokedexIndex = {
-  schema_version: "pokedex-index-v1",
+  schema_version: "pokedex-index-v2",
   data_version: "v1",
   regulation: bootstrap.regulation,
   forms: [
@@ -39,6 +39,7 @@ const index: PokedexIndex = {
       bst: 534,
       ability_ids: ["blaze"],
       move_ids: ["flamethrower"],
+      form_group: null,
     },
   ],
   moves: [{ id: "flamethrower", name: "Flamethrower" }],
@@ -46,7 +47,7 @@ const index: PokedexIndex = {
   types: [{ id: "fire", name: "Fire" }],
 };
 const detail: BulkDetails = {
-  schema_version: "pokedex-details-v1",
+  schema_version: "pokedex-details-v2",
   data_version: "v1",
   regulation_id: "m-c",
   forms: [
@@ -71,6 +72,7 @@ const detail: BulkDetails = {
       ],
       ability_slots: [{ id: "blaze", slot: "0" }],
       move_ids: ["flamethrower"],
+      form_group: null,
     },
   ],
   abilities: [
@@ -190,6 +192,76 @@ describe("Pokédex shortcut eligibility", () => {
   });
 });
 describe("Pokédex app", () => {
+  it("switches grouped canonical details, preserves shiny, and does not search variants", async () => {
+    const options = [
+      { id: "charizard", label: "Base" },
+      { id: "charizardvariant", label: "Variant" },
+    ];
+    const groupedIndex: PokedexIndex = {
+      ...index,
+      forms: [{ ...index.forms[0]!, form_group: { label: "Form", options } }],
+    };
+    const groupedDetails: BulkDetails = {
+      ...detail,
+      forms: [
+        {
+          ...detail.forms[0]!,
+          form_group: { label: "Form", options },
+        },
+        {
+          ...detail.forms[0]!,
+          id: "charizardvariant",
+          name: "Charizard-Variant",
+          types: [{ id: "dragon", name: "Dragon" }],
+          stats: [{ ...detail.forms[0]!.stats[0]!, base: 99 }],
+          form_group: { label: "Form", options },
+        },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/index" ? response(groupedIndex) : response(groupedDetails),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App bootstrap={bootstrap} />);
+    await user.click(await screen.findByRole("button", { name: "Charizard" }));
+    await user.click(
+      screen.getByRole("button", { name: "Sort moves by type" }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /Sort moves by type/ })
+        .closest("[role=columnheader]")
+        ?.getAttribute("aria-sort"),
+    ).toBe("ascending");
+    await user.click(
+      screen.getByRole("button", { name: "Show shiny Charizard" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Form"), "charizardvariant");
+    expect(
+      screen.getByRole("heading", { name: "Charizard-Variant" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Dragon")).toBeTruthy();
+    expect(screen.getByRole("row", { name: /HP 99/ })).toBeTruthy();
+    expect(
+      screen.getByAltText("Shiny Charizard-Variant").getAttribute("src"),
+    ).toBe("/sprites/charizardvariant/shiny.webp");
+    expect(
+      screen
+        .getByRole("button", { name: "Sort moves by type" })
+        .closest("[role=columnheader]")
+        ?.getAttribute("aria-sort"),
+    ).toBe("none");
+
+    const search = screen.getByLabelText(/Search Pokémon/);
+    await user.type(search, "variant");
+    expect(
+      screen.queryByRole("option", { name: "Charizard-Variant" }),
+    ).toBeNull();
+  });
+
   it("shows the shared page loader while the index is pending", () => {
     vi.stubGlobal(
       "fetch",

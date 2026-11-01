@@ -110,7 +110,7 @@ const shortcutBootstrap: Bootstrap = {
 };
 
 const shortcutData: BuilderData = {
-  schema_version: "team-builder-data-v3",
+  schema_version: "team-builder-data-v4",
   data_version: "version-3",
   regulation: shortcutBootstrap.regulation,
   forms: [
@@ -145,6 +145,7 @@ const shortcutData: BuilderData = {
     },
   ],
   mega_relations: [],
+  mega_search_entries: [],
   mechanics: {
     level: 50,
     iv: 31,
@@ -240,6 +241,273 @@ describe("Team Builder initial loading", () => {
     expect(loading.getAttribute("aria-busy")).toBe("true");
     expect(loading.textContent).toBe("Loading Team Builder…");
     expect(document.querySelector(".team-builder-app")).toBeNull();
+  });
+});
+
+describe("Team Builder team loading", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("ignores an older request that rejects after the newest team loads", async () => {
+    let rejectOlder!: (reason: Error) => void;
+    let resolveNewer!: (response: Response) => void;
+    const olderResponse = new Promise<Response>((_resolve, reject) => {
+      rejectOlder = reject;
+    });
+    const newerResponse = new Promise<Response>((resolve) => {
+      resolveNewer = resolve;
+    });
+    const newerDataVersion = "version-newer";
+    const newerData = {
+      schema_version: "team-builder-data-v4",
+      data_version: "version-newer",
+      regulation: shortcutBootstrap.regulation,
+      forms: [
+        {
+          id: "charizard",
+          name: "Newest Charizard",
+          base_species: "charizard",
+          national_dex_number: 6,
+          type_ids: ["fire"],
+          ability_ids: ["blaze"],
+          move_ids: [],
+          base_stats: {
+            hp: 78,
+            attack: 84,
+            defense: 78,
+            special_attack: 109,
+            special_defense: 85,
+            speed: 100,
+          },
+          sprite_form: "charizard",
+        },
+      ],
+      types: shortcutData.types,
+      abilities: shortcutData.abilities,
+      moves: [],
+      items: [],
+      natures: shortcutData.natures,
+      mega_relations: [],
+      mega_search_entries: [],
+      mechanics: {
+        level: 50,
+        sp_minimum: 0,
+        sp_maximum: 32,
+        sp_total_max: 66,
+        hp_formula: "base + sp + 75",
+        other_formula: "truncate((base + sp + 20) * nature_percent / 100)",
+        nature_percentages: { hindering: 90, neutral: 100, increasing: 110 },
+      },
+      sprite_url_template:
+        "/pokedex/sprites/version-newer/__FORM__/__VARIANT__.webp",
+    };
+    const teamResponse = {
+      schema_version: "team-api-v1",
+      data: {
+        id: "newer",
+        name: "Newest team",
+        updated_at: "2026-11-01T12:00:00Z",
+        pinned: {
+          version: newerDataVersion,
+          regulation: shortcutBootstrap.regulation,
+        },
+        members: [
+          {
+            position: 0,
+            pokemon: "charizard",
+            nickname: "Latest",
+            ability: null,
+            item: null,
+            moves: [null, null, null, null],
+            nature: "serious",
+            sp: {
+              hp: 0,
+              attack: 0,
+              defense: 0,
+              special_attack: 0,
+              special_defense: 0,
+              speed: 0,
+            },
+            shiny: false,
+            mega_preview: false,
+          },
+        ],
+      },
+    };
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/teams/older/") return olderResponse;
+      if (url === "/teams/newer/") return newerResponse;
+      if (url === "/teams/data/version-newer/m-c/")
+        return Promise.resolve(
+          new Response(JSON.stringify(newerData), { status: 200 }),
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bootstrap: Bootstrap = {
+      ...shortcutBootstrap,
+      teams: [
+        {
+          id: "older",
+          name: "Older team",
+          data_version: "version-older",
+          regulation: shortcutBootstrap.regulation,
+          members: [],
+          updated_at: "2026-10-31T12:00:00Z",
+        },
+        {
+          id: "newer",
+          name: "Newest team",
+          data_version: newerDataVersion,
+          regulation: shortcutBootstrap.regulation,
+          members: [],
+          updated_at: "2026-11-01T12:00:00Z",
+        },
+      ],
+    };
+    render(<TeamBuilder bootstrap={bootstrap} initialData={shortcutData} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Older team/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Newest team/ }));
+    resolveNewer(new Response(JSON.stringify(teamResponse), { status: 200 }));
+
+    await screen.findByDisplayValue("Newest team");
+    expect(screen.getByText("Newest Charizard")).toBeTruthy();
+    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    rejectOlder(new Error("Stale request failed."));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(screen.getByDisplayValue("Newest team")).toBeTruthy();
+    expect(screen.getByText("Newest Charizard")).toBeTruthy();
+    expect(screen.getByText("Saved")).toBeTruthy();
+    expect(screen.queryByText("Stale request failed.")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("Team Builder SP and Mega palette behavior", () => {
+  afterEach(cleanup);
+
+  it("routes SP number, range, zero, and max edits through the shared clamp", () => {
+    function Harness() {
+      const [member, setMember] = useState<Member>({
+        position: 0,
+        form_id: "charizard",
+        nickname: "",
+        ability_id: null,
+        item_id: null,
+        move_ids: [null, null, null, null],
+        nature_id: "serious",
+        sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        shiny: false,
+        mega_preview: false,
+      });
+      return (
+        <MemberEditor
+          member={member}
+          index={0}
+          slot={0}
+          data={shortcutData}
+          allMembers={[member]}
+          onChange={setMember}
+          onRemove={() => undefined}
+          onMove={() => null}
+          serverErrors={{}}
+          onAnnounce={() => undefined}
+        />
+      );
+    }
+    render(<Harness />);
+    const max = screen.getAllByRole("button", { name: "Max" });
+    fireEvent.click(max[0]!);
+    fireEvent.click(max[1]!);
+    fireEvent.click(max[2]!);
+    expect(screen.getByText("66 / 66")).toBeTruthy();
+    expect(
+      (screen.getByRole("spinbutton", { name: "Defense" }) as HTMLInputElement)
+        .value,
+    ).toBe("2");
+
+    fireEvent.input(screen.getByRole("spinbutton", { name: "HP" }), {
+      target: { value: "" },
+    });
+    expect(
+      (screen.getByRole("spinbutton", { name: "HP" }) as HTMLInputElement)
+        .value,
+    ).toBe("0");
+    fireEvent.input(screen.getByRole("slider", { name: "Defense SP slider" }), {
+      target: { value: "99" },
+    });
+    expect(
+      (screen.getByRole("spinbutton", { name: "Defense" }) as HTMLInputElement)
+        .value,
+    ).toBe("32");
+    fireEvent.click(screen.getAllByRole("button", { name: "0" })[1]!);
+    expect(
+      (screen.getByRole("spinbutton", { name: "Attack" }) as HTMLInputElement)
+        .value,
+    ).toBe("0");
+  });
+
+  it("returns a discriminated Mega choice with target presentation data", () => {
+    const onChoose = vi.fn();
+    const megaData: BuilderData = {
+      ...shortcutData,
+      items: [
+        {
+          id: "charizarditex",
+          name: "Charizardite X",
+          short_description: "Mega Stone.",
+          description: "Enables Mega Evolution.",
+        },
+      ],
+      mega_search_entries: [
+        {
+          ...shortcutData.forms[0]!,
+          id: "charizardmegax",
+          name: "Charizard-Mega-X",
+          base_form_id: "charizard",
+          item_id: "charizarditex",
+          base_stats: {
+            hp: 78,
+            atk: 130,
+            def: 111,
+            spa: 130,
+            spd: 85,
+            spe: 100,
+          },
+        },
+      ],
+    };
+    render(
+      <PokemonPalette
+        data={megaData}
+        members={[]}
+        onClose={() => undefined}
+        onChoose={onChoose}
+      />,
+    );
+    fireEvent.input(
+      screen.getByRole("combobox", {
+        name: "Search names, moves, abilities, or types",
+      }),
+      { target: { value: "Mega-X" } },
+    );
+    fireEvent.click(screen.getByRole("row", { name: /Charizard-Mega-X/ }));
+    expect(onChoose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "mega",
+        id: "charizardmegax",
+        base_form_id: "charizard",
+        item_id: "charizarditex",
+        base_stats: expect.objectContaining({ atk: 130 }),
+      }),
+    );
   });
 });
 
@@ -386,7 +654,7 @@ describe("team builder autocomplete", () => {
       mega_preview: false,
     };
     const data = {
-      schema_version: "team-builder-data-v3",
+      schema_version: "team-builder-data-v4",
       data_version: "version-3",
       regulation: { id: "m-c", name: "Regulation M-C" },
       forms: [
@@ -466,6 +734,7 @@ describe("team builder autocomplete", () => {
           },
         },
       ],
+      mega_search_entries: [],
       mechanics: {
         level: 50,
         iv: 31,

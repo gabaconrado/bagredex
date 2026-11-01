@@ -60,8 +60,12 @@ export type MegaRelation = {
   item_id: string;
   target: BuilderForm & { ability: Named };
 };
+export type MegaSearchEntry = BuilderForm & {
+  base_form_id: string;
+  item_id: string;
+};
 export type BuilderData = {
-  schema_version: "team-builder-data-v3";
+  schema_version: "team-builder-data-v4";
   data_version: string;
   regulation: Named;
   forms: BuilderForm[];
@@ -71,6 +75,7 @@ export type BuilderData = {
   items: ItemDetail[];
   natures: Nature[];
   mega_relations: MegaRelation[];
+  mega_search_entries: MegaSearchEntry[];
   mechanics: {
     level: 50;
     iv: 31;
@@ -217,14 +222,15 @@ export function parseBuilderData(value: unknown): BuilderData {
   const item = record(value);
   if (
     !item ||
-    item.schema_version !== "team-builder-data-v3" ||
+    item.schema_version !== "team-builder-data-v4" ||
     !text(item.data_version) ||
     !Array.isArray(item.forms) ||
     !Array.isArray(item.abilities) ||
     !Array.isArray(item.moves) ||
     !Array.isArray(item.items) ||
     !Array.isArray(item.natures) ||
-    !Array.isArray(item.mega_relations)
+    !Array.isArray(item.mega_relations) ||
+    !Array.isArray(item.mega_search_entries)
   )
     throw new Error("The team builder data uses an unsupported format.");
   assertNamed(item.regulation);
@@ -332,6 +338,25 @@ export function parseBuilderData(value: unknown): BuilderData {
     )
       throw new Error("Invalid Mega mapping.");
   });
+  item.mega_search_entries.forEach((value) => {
+    const entry = record(value);
+    if (
+      !entry ||
+      !text(entry.id) ||
+      !text(entry.name) ||
+      !text(entry.base_form_id) ||
+      !text(entry.item_id) ||
+      !text(entry.sprite_form) ||
+      !Array.isArray(entry.type_ids) ||
+      !Array.isArray(entry.ability_ids) ||
+      !Array.isArray(entry.move_ids) ||
+      !record(entry.base_stats) ||
+      [...entry.type_ids, ...entry.ability_ids, ...entry.move_ids].some(
+        (id) => !text(id),
+      )
+    )
+      throw new Error("Invalid Mega search entry.");
+  });
   const mechanics = record(item.mechanics);
   const naturePercentages = record(mechanics?.nature_percentages);
   if (
@@ -378,6 +403,58 @@ export function parseBuilderData(value: unknown): BuilderData {
       };
     },
   );
+  const megaSearchEntries = (
+    item.mega_search_entries as Record<string, unknown>[]
+  ).map((entry) => {
+    const base = forms.find((form) => form.id === entry.base_form_id);
+    const relation = (item.mega_relations as Record<string, unknown>[]).find(
+      (candidate) =>
+        record(candidate.target)?.id === entry.id &&
+        candidate.base_form === entry.base_form_id &&
+        candidate.item === entry.item_id,
+    );
+    if (
+      !base ||
+      !relation ||
+      !(item.items as Named[]).some(({ id }) => id === entry.item_id)
+    )
+      throw new Error("Invalid Mega search reference.");
+    const typeIds = entry.type_ids as string[];
+    const abilityIds = entry.ability_ids as string[];
+    const moveIds = entry.move_ids as string[];
+    if (
+      typeIds.some((id) => !types.some((type) => type.id === id)) ||
+      abilityIds.some(
+        (id) =>
+          !(item.abilities as Named[]).some((ability) => ability.id === id),
+      ) ||
+      moveIds.some(
+        (id) => !(item.moves as Named[]).some((move) => move.id === id),
+      )
+    )
+      throw new Error("Invalid Mega search choices.");
+    return {
+      id: String(entry.id),
+      name: String(entry.name),
+      base_form_id: String(entry.base_form_id),
+      item_id: String(entry.item_id),
+      base_species_id: base.base_species_id,
+      types: types.filter((type) => typeIds.includes(type.id)),
+      ability_ids: abilityIds,
+      move_ids: moveIds,
+      base_stats: convertStats(entry.base_stats),
+      sprites: {
+        normal: sprite(String(entry.sprite_form), "normal"),
+        shiny: sprite(String(entry.sprite_form), "shiny"),
+      },
+    };
+  });
+  megaSearchEntries.forEach(assertForm);
+  if (
+    new Set(megaSearchEntries.map(({ id }) => id)).size !==
+    megaSearchEntries.length
+  )
+    throw new Error("Invalid duplicate Mega search entry.");
   const natureLabels: Record<Exclude<StatId, "hp">, string> = {
     atk: "Atk",
     def: "Def",
@@ -393,7 +470,7 @@ export function parseBuilderData(value: unknown): BuilderData {
         : nature.name,
   }));
   return {
-    schema_version: "team-builder-data-v3",
+    schema_version: "team-builder-data-v4",
     data_version: String(item.data_version),
     regulation: item.regulation as Named,
     forms,
@@ -403,6 +480,7 @@ export function parseBuilderData(value: unknown): BuilderData {
     items: item.items as ItemDetail[],
     natures,
     mega_relations: mega,
+    mega_search_entries: megaSearchEntries,
     mechanics: {
       level: 50,
       iv: 31,

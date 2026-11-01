@@ -8,7 +8,6 @@ import {
 import type {
   AbilityDetail,
   BuilderData,
-  BuilderForm,
   Bootstrap,
   ItemDetail,
   Member,
@@ -27,8 +26,11 @@ import {
 import {
   matches,
   baseStatTotal,
+  clampSpEdit,
+  memberFromPaletteChoice,
   moveMember,
   newMember,
+  paletteChoices,
   paletteResults,
   sortPaletteForms,
   realStats,
@@ -36,6 +38,7 @@ import {
   statIds,
   statLabels,
   type PaletteFilter,
+  type PaletteChoice,
   validateLocal,
 } from "./model";
 import {
@@ -340,7 +343,7 @@ export function PokemonPalette({
   data: BuilderData;
   members: Member[];
   onClose: () => void;
-  onChoose: (form: BuilderForm) => void;
+  onChoose: (form: PaletteChoice) => void;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -361,7 +364,7 @@ export function PokemonPalette({
       .filter(Boolean) as string[],
   );
   const results = sortPaletteForms(
-    paletteResults(data.forms, query, filters, used),
+    paletteResults(paletteChoices(data), query, filters, used),
     sort,
   );
   const matchingFilters: PaletteFilter[] = query
@@ -635,6 +638,11 @@ export function PokemonPalette({
                           <img src={form.sprites.normal} alt="" />
                           <span class="pokemon-picker-table__identity-copy">
                             <strong title={form.name}>{form.name}</strong>
+                            {form.kind === "mega" && (
+                              <small class="pokemon-picker-table__mega">
+                                Mega choice
+                              </small>
+                            )}
                             <small
                               title={form.types
                                 .map((type) => type.name)
@@ -940,6 +948,11 @@ export function MemberEditor({
   const transientKey = (path: string) => `${member.form_id}:${path}`;
   const update = <K extends keyof Member>(key: K, value: Member[K]) =>
     onChange({ ...member, [key]: value });
+  const updateSp = (id: (typeof statIds)[number], requested: number) =>
+    update("sp", {
+      ...member.sp,
+      [id]: clampSpEdit(member.sp, id, requested, data.mechanics),
+    });
   const availableItems = data.items.filter(
     (item) =>
       item.id === member.item_id ||
@@ -1342,8 +1355,12 @@ export function MemberEditor({
           <fieldset class="sp-editor">
             <legend>
               Stat Points{" "}
-              <span class={spTotal(member.sp) > 66 ? "over" : ""}>
-                {spTotal(member.sp)} / 66
+              <span
+                class={
+                  spTotal(member.sp) > data.mechanics.sp_total_max ? "over" : ""
+                }
+              >
+                {spTotal(member.sp)} / {data.mechanics.sp_total_max}
               </span>
             </legend>
             {(errors.sp ?? serverError("sp")) && (
@@ -1354,22 +1371,19 @@ export function MemberEditor({
                 <label for={`${prefix}-sp-${id}`}>{statLabels[id]}</label>
                 <input
                   type="range"
-                  min="0"
-                  max="32"
+                  min={data.mechanics.sp_min}
+                  max={data.mechanics.sp_max}
                   value={member.sp[id]}
                   aria-label={`${statLabels[id]} SP slider`}
                   onInput={(event) =>
-                    update("sp", {
-                      ...member.sp,
-                      [id]: Number(event.currentTarget.value),
-                    })
+                    updateSp(id, event.currentTarget.valueAsNumber)
                   }
                 />
                 <input
                   id={`${prefix}-sp-${id}`}
                   type="number"
-                  min="0"
-                  max="32"
+                  min={data.mechanics.sp_min}
+                  max={data.mechanics.sp_max}
                   inputMode="numeric"
                   value={member.sp[id]}
                   aria-invalid={Boolean(
@@ -1382,10 +1396,7 @@ export function MemberEditor({
                       : undefined
                   }
                   onInput={(event) =>
-                    update("sp", {
-                      ...member.sp,
-                      [id]: event.currentTarget.valueAsNumber,
-                    })
+                    updateSp(id, event.currentTarget.valueAsNumber)
                   }
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -1399,6 +1410,17 @@ export function MemberEditor({
                     }
                   }}
                 />
+                <div class="sp-control__shortcuts">
+                  <button type="button" onClick={() => updateSp(id, 0)}>
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateSp(id, data.mechanics.sp_max)}
+                  >
+                    Max
+                  </button>
+                </div>
                 {(errors[`sp.${id}`] ??
                   serverError(`sp.${spServerPath[id]}`)) && (
                   <span
@@ -1881,6 +1903,7 @@ export function TeamBuilder({
       setFieldErrors({});
       setStatus({ kind: "idle" });
     } catch (error) {
+      if (generation !== loadGeneration.current) return;
       if ((error as Error).name === "AbortError") return;
       setStatus({ kind: "error", message: (error as Error).message });
     }
@@ -2302,17 +2325,23 @@ export function TeamBuilder({
             setPalette(null);
             requestAnimationFrame(() => slotTrigger.current?.focus());
           }}
-          onChoose={(form) => {
+          onChoose={(choice) => {
             if (!draft) return;
             const targetSlot = palette;
+            const member = memberFromPaletteChoice(
+              choice,
+              serious!.id,
+              palette,
+            );
             setDraft({
               ...draft,
-              members: [
-                ...draft.members,
-                newMember(form.id, serious!.id, palette),
-              ].sort((left, right) => left.position - right.position),
+              members: [...draft.members, member].sort(
+                (left, right) => left.position - right.position,
+              ),
             });
-            setExpandedMembers((current) => new Set(current).add(form.id));
+            setExpandedMembers((current) =>
+              new Set(current).add(member.form_id),
+            );
             setPalette(null);
             requestAnimationFrame(() =>
               document.getElementById(`member-${targetSlot}-nickname`)?.click(),

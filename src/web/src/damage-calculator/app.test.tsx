@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { damageCalculatorDataV2 as fixture } from "../test-fixtures/damage-calculator-data-v2";
 import { DamageCalculator, ratioScaledCurrentHp } from "./app";
-import type { Bootstrap } from "./contracts";
+import type { Bootstrap, CalculatorData } from "./contracts";
 
 const bootstrap: Bootstrap = {
   schema_version: "damage-calculator-bootstrap-v1",
@@ -22,6 +22,42 @@ const response = () =>
     ok: true,
     json: () => Promise.resolve(fixture),
   } as Response);
+const contextualResponse = () => {
+  const data = structuredClone(fixture) as CalculatorData;
+  const earthquake = data.moves.find(({ id }) => id === "earthquake")!;
+  earthquake.contextual_inputs = [
+    {
+      key: "priorDamage",
+      label: "Prior damage taken",
+      kind: "integer",
+      default: 0,
+      minimum: 0,
+      maximum: 999,
+    },
+  ];
+  data.moves.push({
+    ...earthquake,
+    id: "context-strike",
+    name: "Context Strike",
+    contextual_inputs: [
+      {
+        key: "allyAttack",
+        label: "Ally 1 base Attack",
+        kind: "integer",
+        default: 1,
+        minimum: 1,
+        maximum: 999,
+      },
+    ],
+  });
+  data.forms
+    .find(({ id }) => id === "charizard")!
+    .move_ids.push("context-strike");
+  return Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve(data),
+  } as Response);
+};
 const choose = (input: HTMLElement, name: string) => {
   fireEvent.input(input, { target: { value: name } });
   fireEvent.keyDown(input, { key: "Enter" });
@@ -29,10 +65,194 @@ const choose = (input: HTMLElement, name: string) => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("DamageCalculator", () => {
+  it("keeps one move modifier open and restores trigger focus on dismissal", async () => {
+    vi.stubGlobal("fetch", vi.fn(contextualResponse));
+    render(<DamageCalculator bootstrap={bootstrap} />);
+    const pokemon = (await screen.findAllByLabelText("Pokémon"))[0]!;
+    choose(pokemon, "Charizard");
+    const moves = screen.getAllByLabelText(/^Move [1-6]$/);
+    choose(moves[0]!, "Earthquake");
+    choose(moves[1]!, "Context Strike");
+
+    const triggers = [
+      screen.getByRole("button", { name: "Earthquake modifiers" }),
+      screen.getByRole("button", { name: "Context Strike modifiers" }),
+    ];
+    fireEvent.click(triggers[0]!);
+    const priorDamage = screen.getByLabelText("Prior damage taken");
+    fireEvent.input(priorDamage, { target: { value: "40" } });
+    expect((priorDamage as HTMLInputElement).value).toBe("40");
+
+    fireEvent.pointerDown(triggers[1]!);
+    fireEvent.click(triggers[1]!);
+    expect(screen.queryByLabelText("Prior damage taken")).toBeNull();
+    expect(screen.getByLabelText("Ally 1 base Attack")).toBeTruthy();
+    expect(triggers[0]!.getAttribute("aria-expanded")).toBe("false");
+    expect(triggers[1]!.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Context Strike modifiers" }),
+    );
+
+    fireEvent.input(screen.getByLabelText("Ally 1 base Attack"), {
+      target: { value: "120" },
+    });
+
+    fireEvent.pointerDown(triggers[1]!);
+    fireEvent.click(triggers[1]!);
+    expect(screen.queryByLabelText("Ally 1 base Attack")).toBeNull();
+    expect(document.activeElement).toBe(triggers[1]);
+
+    fireEvent.pointerDown(triggers[1]!);
+    fireEvent.click(triggers[1]!);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByLabelText("Ally 1 base Attack")).toBeNull();
+    expect(document.activeElement).toBe(triggers[1]);
+
+    fireEvent.click(triggers[0]!);
+    expect(
+      (screen.getByLabelText("Prior damage taken") as HTMLInputElement).value,
+    ).toBe("40");
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByLabelText("Prior damage taken")).toBeNull();
+    expect(document.activeElement).toBe(triggers[0]);
+  });
+
+  it("uses a focus-contained dialog for move modifiers at the phone breakpoint", async () => {
+    const listeners = new Set<() => void>();
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      media: "(max-width: 720px)",
+      onchange: null,
+      addEventListener: (_event: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_event: string, listener: () => void) =>
+        listeners.delete(listener),
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true,
+    }));
+    vi.stubGlobal("fetch", vi.fn(contextualResponse));
+    render(<DamageCalculator bootstrap={bootstrap} />);
+    choose((await screen.findAllByLabelText("Pokémon"))[0]!, "Charizard");
+    const moves = screen.getAllByLabelText(/^Move [1-6]$/);
+    choose(moves[0]!, "Earthquake");
+    choose(moves[1]!, "Context Strike");
+    const triggers = [
+      screen.getByRole("button", { name: "Earthquake modifiers" }),
+      screen.getByRole("button", { name: "Context Strike modifiers" }),
+    ];
+    fireEvent.click(triggers[0]!);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Earthquake modifiers",
+    });
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: "Close modifiers" }),
+    );
+    const close = within(dialog).getByRole("button", {
+      name: "Close modifiers",
+    });
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(
+      within(dialog).getByLabelText("Prior damage taken"),
+    );
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+
+    vi.useFakeTimers();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss modifier dialog" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    expect(document.activeElement).toBe(triggers[0]);
+
+    fireEvent.click(triggers[1]!);
+    expect(
+      await screen.findByRole("dialog", { name: "Context Strike modifiers" }),
+    ).toBeTruthy();
+  });
+
+  it("lets the phone backdrop click close before deferred focus restoration", async () => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: true,
+      media: "(max-width: 720px)",
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => true,
+    }));
+    vi.stubGlobal("fetch", vi.fn(contextualResponse));
+    const rendered = render(<DamageCalculator bootstrap={bootstrap} />);
+    choose((await screen.findAllByLabelText("Pokémon"))[0]!, "Charizard");
+    choose(screen.getAllByLabelText(/^Move [1-6]$/)[0]!, "Earthquake");
+    const trigger = screen.getByRole("button", {
+      name: "Earthquake modifiers",
+    });
+    fireEvent.click(trigger);
+    const backdrop = await screen.findByRole("button", {
+      name: "Dismiss modifier dialog",
+    });
+    const defaultFocusTarget = document.createElement("button");
+    document.body.append(defaultFocusTarget);
+    vi.useFakeTimers();
+
+    const initialFocus = document.activeElement;
+    fireEvent.pointerDown(backdrop);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(document.activeElement).toBe(initialFocus);
+    expect(vi.getTimerCount()).toBe(0);
+
+    fireEvent.click(backdrop);
+    defaultFocusTarget.focus();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(defaultFocusTarget);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.runAllTimers();
+    expect(document.activeElement).toBe(trigger);
+    expect(vi.getTimerCount()).toBe(0);
+
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Dismiss modifier dialog" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss modifier dialog" }),
+    );
+    expect(vi.getTimerCount()).toBe(1);
+    fireEvent.click(trigger);
+    const reopenedClose = screen.getByRole("button", {
+      name: "Close modifiers",
+    });
+    expect(document.activeElement).toBe(reopenedClose);
+    vi.runAllTimers();
+    expect(document.activeElement).toBe(reopenedClose);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const focus = vi.spyOn(trigger, "focus");
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Dismiss modifier dialog" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss modifier dialog" }),
+    );
+    expect(vi.getTimerCount()).toBe(1);
+    rendered.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.runAllTimers();
+    expect(focus).not.toHaveBeenCalled();
+    defaultFocusTarget.remove();
+  });
+
   it("shows loading before data resolves", () => {
     vi.stubGlobal(
       "fetch",

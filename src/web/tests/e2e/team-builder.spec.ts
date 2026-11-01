@@ -79,8 +79,12 @@ test.afterEach(async ({ page }) => {
 });
 
 test("renders a centralized initial loading state", async ({ page }) => {
+  let releaseData!: () => void;
+  const dataGate = new Promise<void>((resolve) => {
+    releaseData = resolve;
+  });
   await page.route("**/teams/data/**", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await dataGate;
     await route.continue();
   });
   const reload = page.reload({ waitUntil: "domcontentloaded" });
@@ -89,8 +93,94 @@ test("renders a centralized initial loading state", async ({ page }) => {
   await expect(loading).toContainText("Loading Team Builder…");
   await expect(loading).toHaveAttribute("aria-busy", "true");
   await expect(page.locator(".team-builder-app")).toHaveCount(0);
+  releaseData();
   await reload;
+  await page.unroute("**/teams/data/**");
   await expect(page.getByRole("heading", { name: "My Teams" })).toBeVisible();
+});
+
+test("clamps SP shortcuts and selects Mega search entries atomically", async ({
+  page,
+}) => {
+  let submittedMember: Record<string, unknown> | undefined;
+  let responseVersion = "";
+  let responseRegulation: { id: string; name: string } | undefined;
+  await page.route("**/teams/", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    const submitted = route.request().postDataJSON();
+    submittedMember = submitted.members[0];
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "isolated-mega-e2e",
+        name: submitted.name,
+        updated_at: "2026-11-01T00:00:00Z",
+        pinned: {
+          version: responseVersion,
+          regulation: responseRegulation,
+        },
+        members: submitted.members,
+      }),
+    });
+  });
+  const bootstrap = JSON.parse(
+    (await page.locator("#team-builder-bootstrap").textContent()) ?? "null",
+  ) as { dataset_url: string };
+  const dataset = await (await page.request.get(bootstrap.dataset_url)).json();
+  responseVersion = dataset.data_version;
+  responseRegulation = dataset.regulation;
+  const mega = dataset.mega_search_entries[0];
+  const base = dataset.forms.find(
+    ({ id }: { id: string }) => id === mega.base_form_id,
+  );
+  const stone = dataset.items.find(
+    ({ id }: { id: string }) => id === mega.item_id,
+  );
+  expect(base, "Mega fixture base form").toBeTruthy();
+  expect(stone, "Mega fixture stone").toBeTruthy();
+  await page
+    .getByRole("complementary", { name: "My Teams" })
+    .getByRole("button", { name: "New Team" })
+    .click();
+  await page.getByRole("button", { name: "Add Pokémon" }).first().click();
+  const picker = page.getByRole("dialog", { name: "Choose a Pokémon" });
+  await picker.getByRole("combobox").fill(mega.name);
+  const megaRow = picker.getByRole("row").filter({ hasText: mega.name });
+  await expect(megaRow).toBeVisible();
+  await megaRow.click();
+
+  const member = page.locator(".member-card").first();
+  await expect(member.getByRole("heading")).toHaveText(base.name);
+  await expect(member.getByRole("heading")).not.toHaveText(mega.name);
+  await expect(member.getByRole("combobox", { name: "Item" })).toHaveValue(
+    stone.name,
+  );
+  await expect(
+    member.getByRole("button", { name: "Hide Mega preview" }),
+  ).toBeVisible();
+
+  const max = member.getByRole("button", { name: "Max" });
+  await max.nth(0).click();
+  await max.nth(1).click();
+  await max.nth(2).click();
+  await expect(member.getByText("66 / 66")).toBeVisible();
+  await expect(member.getByRole("spinbutton", { name: "Defense" })).toHaveValue(
+    "2",
+  );
+  await member.getByRole("button", { name: "0" }).nth(0).click();
+  await expect(member.getByRole("spinbutton", { name: "HP" })).toHaveValue("0");
+
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => submittedMember).toBeTruthy();
+  expect(submittedMember?.pokemon).toBe(mega.base_form_id);
+  expect(submittedMember?.pokemon).not.toBe(mega.id);
+  expect(submittedMember?.item).toBe(mega.item_id);
+  expect(submittedMember?.mega_preview).toBe(true);
+  await expect(page.getByText("Team saved.")).toBeVisible();
 });
 
 test("creates a keyboard-first local draft and protects it from navigation", async ({
@@ -561,6 +651,10 @@ test("keeps library geometry stable and aligns builder content", async ({
   await expect(cards.first().locator(".team-card__roster > *")).toHaveCount(6);
   const before = await library.boundingBox();
   await cards.first().click();
+  await expect(page.locator(".team-workspace")).not.toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
   await expect(page.getByLabel("Team name")).toBeVisible();
   const after = await library.boundingBox();
   expect(after?.x).toBe(before?.x);

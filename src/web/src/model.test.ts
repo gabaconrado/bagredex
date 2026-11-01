@@ -28,6 +28,7 @@ const form = (
   bst: hp + 5,
   move_ids: moves,
   ability_ids: abilities,
+  form_group: null,
 });
 const forms = [
   form(
@@ -42,7 +43,7 @@ const forms = [
   form("firsta", 1, 100),
 ];
 const index: PokedexIndex = {
-  schema_version: "pokedex-index-v1",
+  schema_version: "pokedex-index-v2",
   data_version: "v",
   regulation: { id: "m-c", name: "M-C" },
   forms,

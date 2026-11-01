@@ -157,6 +157,29 @@ def test_damage_calculator_bundle_exposes_frozen_consumer_contract() -> None:
     assert all("weight_tenths_kg" in record for record in bundle.records["profiles.json"])
 
 
+def test_form_search_release_is_exact_and_prior_release_remains_retained() -> None:
+    releases = Path(settings.POKEMON_DATA_RELEASES_ROOT)
+    current = read_bundle(releases / "showdown-multi-s5-i7-49850c617dd2")
+    prior = read_bundle(releases / "showdown-multi-s5-i6-38ee90625b30")
+
+    assert current.manifest["bundle_hash"] == (
+        "49850c617dd2eddfcdc53f0bf22f4aa58c4433e26717974a5e9e0ccd113cda9f"
+    )
+    assert current.manifest["importer_version"] == "7"
+    assert current.manifest["counts"] == current.validation["counts"]
+    assert current.manifest["counts"]["forms"] == 351
+    assert current.manifest["counts"]["profiles"] == 1053
+    assert current.manifest["counts"]["learnsets"] == 65103
+    assert current.manifest["counts"]["mega_item_relations"] == 217
+    assert current.manifest["counts"]["sprite_mappings"] == 351
+    assert current.manifest["counts"]["sprites"] == 702
+    assert {record["id"] for record in current.records["forms.json"]} >= {
+        "meowstic",
+        "meowsticf",
+    }
+    assert prior.manifest["importer_version"] == "6"
+
+
 def test_item_profile_admin_exposes_description_provenance_read_only() -> None:
     model_admin = admin.site._registry[ItemProfile]
 

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from django.conf import settings
 from django.db import connection
 from django.test import Client
 from django.test.utils import CaptureQueriesContext
@@ -41,7 +43,7 @@ from bagredex.pokemon_data.models import (
     Type,
     TypeEffectiveness,
 )
-from bagredex.pokemon_data.services import activate_pokemon_data
+from bagredex.pokemon_data.services import activate_pokemon_data, load_pokemon_data
 
 VERSION_ID = "showdown-calculator-test-s5-i6-0123456789ab"
 STATE_INPUT_POLICY = {
@@ -438,6 +440,38 @@ def test_dataset_is_closed_normalized_and_deterministic(
     ]
     assert payload["moves"][0]["description"] == "May burn adjacent foes."
     assert payload["moves"][0]["flags"] == ["protect"]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_current_release_relations_are_closed_across_all_regulations(
+    authenticated_client: Client,
+) -> None:
+    release = Path(settings.POKEMON_DATA_RELEASES_ROOT) / "showdown-multi-s5-i7-49850c617dd2"
+    if not release.is_dir():
+        pytest.skip("the reviewed form-search release is required")
+    version = load_pokemon_data(release).version
+    activate_pokemon_data(version.pk)
+
+    for regulation_id in ("m-a", "m-b", "m-c"):
+        response = authenticated_client.get(
+            f"/damage-calculator/data/{version.pk}/{regulation_id}/"
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        form_ids = {form["id"] for form in payload["forms"]}
+        item_ids = {item["id"] for item in payload["items"]}
+        ability_ids = {ability["id"] for ability in payload["abilities"]}
+        relations = payload["mega_item_relations"]
+
+        assert relations
+        assert all(
+            relation["base_form_id"] in form_ids
+            and relation["mega_form_id"] in form_ids
+            and relation["item_id"] in item_ids
+            and relation["locked_ability_id"] in ability_ids
+            for relation in relations
+        )
+        assert not any(relation["base_form_id"] == "meowsticf" for relation in relations)
 
 
 def test_dataset_fails_closed_when_full_move_description_is_empty() -> None:

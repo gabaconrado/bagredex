@@ -1,6 +1,7 @@
 import type {
   BuilderData,
   BuilderForm,
+  MegaSearchEntry,
   Member,
   Named,
   Nature,
@@ -10,6 +11,9 @@ import type {
 import type { Sort } from "../model";
 
 export type PaletteFilter = Named & { kind: "type" | "ability" | "move" };
+export type PaletteChoice =
+  | (BuilderForm & { kind: "ordinary" })
+  | (MegaSearchEntry & { kind: "mega" });
 export const statIds: StatId[] = ["hp", "atk", "def", "spa", "spd", "spe"];
 export const statLabels: Record<StatId, string> = {
   hp: "HP",
@@ -21,7 +25,10 @@ export const statLabels: Record<StatId, string> = {
 };
 export const baseStatTotal = (stats: Stats) =>
   statIds.reduce((total, id) => total + stats[id], 0);
-export function sortPaletteForms(forms: BuilderForm[], sort: Sort) {
+export function sortPaletteForms<T extends BuilderForm>(
+  forms: T[],
+  sort: Sort,
+): T[] {
   return [...forms].sort((left, right) => {
     if (sort) {
       const leftValue =
@@ -51,12 +58,12 @@ export const normalizeSearch = (value: string) =>
 export const matches = (name: string, query: string) =>
   normalizeSearch(name).includes(normalizeSearch(query));
 
-export function paletteResults(
-  forms: BuilderForm[],
+export function paletteResults<T extends BuilderForm>(
+  forms: T[],
   query: string,
   filters: PaletteFilter[],
   usedSpecies: Set<string>,
-) {
+): T[] {
   return forms
     .filter(
       (form) =>
@@ -71,6 +78,16 @@ export function paletteResults(
         ),
     )
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function paletteChoices(data: BuilderData): PaletteChoice[] {
+  return [
+    ...data.forms.map((form) => ({ ...form, kind: "ordinary" as const })),
+    ...data.mega_search_entries.map((entry) => ({
+      ...entry,
+      kind: "mega" as const,
+    })),
+  ];
 }
 
 export function newMember(
@@ -91,8 +108,41 @@ export function newMember(
     mega_preview: false,
   };
 }
+export function memberFromPaletteChoice(
+  choice: PaletteChoice,
+  seriousId: string,
+  position: number,
+): Member {
+  const member = newMember(
+    choice.kind === "mega" ? choice.base_form_id : choice.id,
+    seriousId,
+    position,
+  );
+  return choice.kind === "mega"
+    ? { ...member, item_id: choice.item_id, mega_preview: true }
+    : member;
+}
 export const spTotal = (sp: Stats) =>
   statIds.reduce((total, id) => total + sp[id], 0);
+export function clampSpEdit(
+  sp: Stats,
+  stat: StatId,
+  requested: number,
+  mechanics: { sp_min: number; sp_max: number; sp_total_max: number },
+): number {
+  const integer = Number.isFinite(requested)
+    ? Math.trunc(requested)
+    : mechanics.sp_min;
+  const otherTotal = statIds.reduce(
+    (total, id) => total + (id === stat ? 0 : sp[id]),
+    0,
+  );
+  return Math.min(
+    mechanics.sp_max,
+    Math.max(mechanics.sp_min, integer),
+    Math.max(mechanics.sp_min, mechanics.sp_total_max - otherTotal),
+  );
+}
 export function realStats(base: Stats, sp: Stats, nature: Nature): Stats {
   const result = {} as Stats;
   for (const id of statIds) {
@@ -150,9 +200,10 @@ export function validateLocal(
     if (
       !Number.isInteger(member.sp[id]) ||
       member.sp[id] < 0 ||
-      member.sp[id] > 32
+      member.sp[id] > data.mechanics.sp_max
     )
-      errors[`sp.${id}`] = "Enter a whole number from 0 to 32.";
+      errors[`sp.${id}`] =
+        `Enter a whole number from ${data.mechanics.sp_min} to ${data.mechanics.sp_max}.`;
   return errors;
 }
 

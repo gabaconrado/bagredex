@@ -13,6 +13,10 @@ export const isStandardFormatsEntry = (entry, context = 'FormatsData entry') => 
 const toID = value => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 const isMega = species => Boolean(species.forme?.includes('Mega'));
 const baseID = species => toID(species.baseSpecies || species.name);
+const isOppositeSexForm = (base, candidate) =>
+  !isMega(candidate) && ['M', 'F'].includes(base?.gender) &&
+  ['M', 'F'].includes(candidate?.gender) && base.gender !== candidate.gender &&
+  baseID(candidate) === toID(base.name);
 
 export const selectRelatedFormIDs = (rootIDs, pokedex) => {
   const selected = new Set(rootIDs);
@@ -27,7 +31,9 @@ export const selectRelatedFormIDs = (rootIDs, pokedex) => {
     }
     for (const otherName of base?.otherFormes || species.otherFormes || []) {
       const otherID = toID(otherName);
-      if (pokedex[otherID] && isMega(pokedex[otherID]) && !selected.has(otherID)) {
+      const other = pokedex[otherID];
+      if (other && (isMega(other) || isOppositeSexForm(base, other)) &&
+          !selected.has(otherID)) {
         selected.add(otherID);
         pending.push(otherID);
       }

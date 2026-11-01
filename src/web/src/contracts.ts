@@ -7,6 +7,10 @@ export type Stats = {
   spd: number;
   spe: number;
 };
+export type FormGroup = {
+  label: string;
+  options: { id: string; label: string }[];
+};
 export type FormSummary = NamedValue & {
   national_dex_number: number;
   is_mega: boolean;
@@ -15,9 +19,10 @@ export type FormSummary = NamedValue & {
   bst: number;
   ability_ids: string[];
   move_ids: string[];
+  form_group: FormGroup | null;
 };
 export type PokedexIndex = {
-  schema_version: "pokedex-index-v1";
+  schema_version: "pokedex-index-v2";
   data_version: string;
   regulation: NamedValue;
   forms: FormSummary[];
@@ -90,13 +95,14 @@ export type BulkForm = NamedValue & {
   stats: StatDetail[];
   ability_slots: { id: string; slot: string }[];
   move_ids: string[];
+  form_group: FormGroup | null;
 };
 export type BulkAbility = NamedValue & {
   short_description: string;
   description: string;
 };
 export type BulkDetails = {
-  schema_version: "pokedex-details-v1";
+  schema_version: "pokedex-details-v2";
   data_version: string;
   regulation_id: string;
   forms: BulkForm[];
@@ -163,7 +169,7 @@ function assertNumber(value: unknown, label: string): asserts value is number {
 export function parseIndex(value: unknown): PokedexIndex {
   const record = object(value);
   if (
-    record?.schema_version !== "pokedex-index-v1" ||
+    record?.schema_version !== "pokedex-index-v2" ||
     !string(record.data_version) ||
     !object(record.regulation) ||
     !Array.isArray(record.forms) ||
@@ -186,6 +192,7 @@ export function parseIndex(value: unknown): PokedexIndex {
       form.types.length === 0 ||
       !Array.isArray(form.ability_ids) ||
       !Array.isArray(form.move_ids) ||
+      !(form.form_group === null || object(form.form_group)) ||
       !object(form.stats)
     ) {
       throw new Error("The Pokédex index contains an invalid form.");
@@ -193,6 +200,7 @@ export function parseIndex(value: unknown): PokedexIndex {
     form.types.forEach(assertNamed);
     assertStringArray(form.ability_ids, "ability identifiers");
     assertStringArray(form.move_ids, "move identifiers");
+    validateFormGroup(form.form_group, String(form.id));
     for (const key of ["hp", "atk", "def", "spa", "spd", "spe"])
       assertNumber((form.stats as Record<string, unknown>)[key], `${key} stat`);
     assertNumber(form.bst, "BST");
@@ -295,7 +303,7 @@ export function parseDetails(
 ): { details: BulkDetails; maps: DetailsMaps } {
   const record = object(value);
   if (
-    record?.schema_version !== "pokedex-details-v1" ||
+    record?.schema_version !== "pokedex-details-v2" ||
     !string(record.data_version) ||
     !string(record.regulation_id) ||
     !Array.isArray(record.forms) ||
@@ -330,12 +338,14 @@ export function parseDetails(
       !Array.isArray(form.types) ||
       form.types.length === 0 ||
       !Array.isArray(form.stats) ||
-      !Array.isArray(form.ability_slots)
+      !Array.isArray(form.ability_slots) ||
+      !(form.form_group === null || object(form.form_group))
     )
       throw new Error("The Pokédex details contain an invalid form.");
     form.types.forEach(assertNamed);
     assertStringArray(form.mega_ids, "Mega identifiers");
     assertStringArray(form.move_ids, "move identifiers");
+    validateFormGroup(form.form_group, String(form.id));
     form.stats.forEach(validateStat);
     for (const slotValue of form.ability_slots) {
       const slot = object(slotValue);
@@ -360,8 +370,34 @@ export function parseDetails(
     for (const id of form.move_ids)
       if (!moves.has(id))
         throw new Error("The Pokédex details contain a dangling move.");
+    for (const option of form.form_group?.options ?? [])
+      if (!forms.has(option.id))
+        throw new Error("The Pokédex details contain a dangling form option.");
   }
   return { details, maps: { forms, abilities, moves } };
+}
+
+function validateFormGroup(value: unknown, formId: string): void {
+  if (value === null) return;
+  const group = object(value);
+  if (!group || !string(group.label) || !Array.isArray(group.options))
+    throw new Error("The Pokédex response contains an invalid form group.");
+  const ids = new Set<string>();
+  let selectedCount = 0;
+  for (const value of group.options) {
+    const option = object(value);
+    if (
+      !option ||
+      !string(option.id) ||
+      !string(option.label) ||
+      ids.has(option.id)
+    )
+      throw new Error("The Pokédex response contains an invalid form option.");
+    ids.add(option.id);
+    if (option.id === formId) selectedCount += 1;
+  }
+  if (group.options.length === 0 || selectedCount !== 1)
+    throw new Error("The Pokédex response contains an invalid form group.");
 }
 
 function validateStat(value: unknown): void {

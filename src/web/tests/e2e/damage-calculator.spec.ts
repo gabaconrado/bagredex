@@ -11,6 +11,17 @@ const commitChoice = async (page: Page, input: Locator, name: string) => {
   await expect(input).toHaveValue(name);
 };
 
+async function expectCalculatorReady(page: Page) {
+  const pokemon = page.getByRole("combobox", {
+    name: "Pokémon",
+    exact: true,
+  });
+  const failure = page.getByRole("alert");
+  await expect(pokemon.first().or(failure)).toBeVisible({ timeout: 15_000 });
+  await expect(failure).toHaveCount(0);
+  await expect(pokemon).toHaveCount(2);
+}
+
 test.beforeEach(async ({ page }) => {
   const username = process.env.BAGREDEX_E2E_USERNAME;
   const password = process.env.BAGREDEX_E2E_PASSWORD;
@@ -21,6 +32,7 @@ test.beforeEach(async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page).toHaveURL(/\/damage-calculator\//);
+  await expectCalculatorReady(page);
 });
 
 test("calculates in both directions and resets field effects", async ({
@@ -222,10 +234,38 @@ test("keeps move slot selections and contextual controls independent", async ({
     .first();
   await beatUp.fill("Beat Up");
   await beatUp.press("Enter");
+  const counterModifiers = page.getByRole("button", {
+    name: "Counter modifiers",
+    exact: true,
+  });
+  const beatUpModifiers = page.getByRole("button", {
+    name: "Beat Up modifiers",
+    exact: true,
+  });
+  await counterModifiers.click();
   await page.getByLabel("Prior damage taken").fill("40");
-  await page.getByLabel("Ally 1 base Attack").fill("120");
+  if ((page.viewportSize()?.width ?? 1000) <= 720) {
+    await page.getByRole("button", { name: "Dismiss modifier dialog" }).click({
+      position: { x: 1, y: 1 },
+    });
+    await expect(page.getByLabel("Prior damage taken")).toHaveCount(0);
+    await expect(counterModifiers).toBeFocused();
+  }
+  await beatUpModifiers.click();
+  await expect(page.getByLabel("Prior damage taken")).toHaveCount(0);
+  if ((page.viewportSize()?.width ?? 1000) <= 720)
+    await expect(
+      page.getByRole("dialog", { name: "Beat Up modifiers" }),
+    ).toContainText("Beat Up modifiers");
+  else await expect(beatUpModifiers).toBeFocused();
+  const allyAttack = page.getByLabel("Ally 1 base Attack");
+  await allyAttack.fill("120");
+  await expect(allyAttack).toHaveValue("120");
+  await expect(allyAttack).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(beatUpModifiers).toBeFocused();
+  await counterModifiers.click();
   await expect(page.getByLabel("Prior damage taken")).toHaveValue("40");
-  await expect(page.getByLabel("Ally 1 base Attack")).toHaveValue("120");
   await expect(page.locator(".damage-result").nth(0)).toContainText("80");
   await expect(page.locator(".damage-result").nth(1)).toContainText(/%/);
   await expect(

@@ -97,7 +97,6 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
         .select_related("item_profile__item", "base_form", "mega_form")
         .order_by("base_form__canonical_id", "item_profile__item__canonical_id")
     )
-    mega_form_ids = {mega_relation.mega_form.pk for mega_relation in mega_rows}
     profiles = list(
         PokemonProfile.objects.filter(
             regulation=snapshot.regulation,
@@ -108,6 +107,11 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
     )
     searchable_profile_ids = {profile.pk for profile in profiles}
     existing_form_ids = {profile.form.pk for profile in profiles}
+    # Relations can describe exact canonical forms that are not calculator-selectable in a
+    # regulation. Only expose relations whose base is in the serialized form collection; never
+    # remap them to a different representative.
+    mega_rows = [relation for relation in mega_rows if relation.base_form_id in existing_form_ids]
+    mega_form_ids = {mega_relation.mega_form.pk for mega_relation in mega_rows}
     if mega_form_ids - existing_form_ids:
         profiles.extend(
             PokemonProfile.objects.filter(
@@ -186,6 +190,8 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
         .select_related("item")
         .order_by("item__name", "item__canonical_id")
     )
+    serialized_item_ids = {profile.item.canonical_id for profile in item_profiles}
+    serialized_ability_ids = {profile.ability.canonical_id for profile in ability_profiles}
     move_profiles = list(
         MoveProfile.objects.filter(regulation=snapshot.regulation)
         .select_related("move", "type")
@@ -211,12 +217,16 @@ def damage_calculator_dataset(snapshot: Snapshot) -> dict[str, Any]:
         target_abilities = abilities_by_profile.get(target.pk, [])
         if len(target_abilities) != 1:
             raise DamageCalculatorUnavailable("A Mega target must have one locked ability.")
+        item_id = relation.item_profile.item.canonical_id
+        locked_ability_id = target_abilities[0]["id"]
+        if item_id not in serialized_item_ids or locked_ability_id not in serialized_ability_ids:
+            raise DamageCalculatorUnavailable("A Mega relation reference is unavailable.")
         mega_item_relations.append(
             {
-                "item_id": relation.item_profile.item.canonical_id,
+                "item_id": item_id,
                 "base_form_id": relation.base_form.canonical_id,
                 "mega_form_id": relation.mega_form.canonical_id,
-                "locked_ability_id": target_abilities[0]["id"],
+                "locked_ability_id": locked_ability_id,
             }
         )
 

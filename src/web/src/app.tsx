@@ -596,6 +596,7 @@ function RefinedDetailPane({
   onModal,
   onCloseModal,
   onSelect,
+  onGroupSelect,
   onRetry,
   detailRef,
 }: {
@@ -611,6 +612,7 @@ function RefinedDetailPane({
   onModal: (info: Exclude<ModalInfo, null>, invoker: HTMLElement) => void;
   onCloseModal: () => void;
   onSelect: (id: string) => void;
+  onGroupSelect: (id: string) => void;
   onRetry: () => void;
   detailRef: RefObject<HTMLElement>;
 }) {
@@ -691,12 +693,30 @@ function RefinedDetailPane({
     ? [form]
     : form.mega_ids.map((id) => maps.forms.get(id)!);
   return (
-    <aside ref={detailRef} class="detail-pane" aria-labelledby="detail-title">
+    <aside
+      ref={detailRef}
+      class="detail-pane"
+      aria-labelledby="detail-title"
+      data-form={form.id}
+    >
       <header class="detail-header">
         <div>
           <p class="eyebrow">Selected Pokémon</p>
           <h2 id="detail-title">{form.name}</h2>
           <Types values={form.types} />
+          {form.form_group && (
+            <label class="detail-form-selector">
+              {form.form_group.label}
+              <select
+                value={form.id}
+                onChange={(event) => onGroupSelect(event.currentTarget.value)}
+              >
+                {form.form_group.options.map((option) => (
+                  <option value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </header>
       <div class="sprite-stage">
@@ -1298,6 +1318,17 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
     },
     [selected],
   );
+  const selectGroupedForm = useCallback(
+    (id: string) => {
+      if (id === selected) return;
+      if (detailRef.current) detailRef.current.scrollTop = 0;
+      setSelected(id);
+      setSelectionRevision((value) => value + 1);
+      setModal(null);
+      setModalInvoker(null);
+    },
+    [selected],
+  );
   const visible = useMemo(
     () => (index ? sortedForms(filteredForms(index.forms, filters), sort) : []),
     [index, filters, sort],
@@ -1350,6 +1381,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
     <div
       class="pokedex-app"
       data-details-state={detailsState}
+      data-regulation={bootstrap.regulation.id}
       data-selection-revision={selectionRevision}
     >
       <section class="pokedex-list" aria-labelledby="pokedex-title">
@@ -1431,6 +1463,7 @@ export function App({ bootstrap }: { bootstrap: Bootstrap }) {
           setModalInvoker(null);
         }}
         onSelect={select}
+        onGroupSelect={selectGroupedForm}
         onRetry={() => {
           setDetails(null);
           setDetailsState("idle");
