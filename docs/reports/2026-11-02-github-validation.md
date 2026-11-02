@@ -27,6 +27,8 @@ versions and Podman Compose.
 
 ## Verification
 
+- `./bagredex.sh check` passed: 283 Web tests passed with 21 skipped, 332 backend tests passed,
+  and all 82 Bats tests passed.
 - `.codex/lint.sh` passed.
 - `git diff --check` passed.
 - Structural checks confirmed the exact approved events, read-only contents permission, complete
@@ -40,4 +42,4 @@ None.
 
 ## Commits
 
-This report is included in the pending cycle commit.
+- `4b2397c3af58997253b7302efac37cde13239278` — `ci: add GitHub validation workflow`
