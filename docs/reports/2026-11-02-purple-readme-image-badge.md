@@ -31,4 +31,5 @@ None.
 
 ## Commits
 
-The feature commit is pending and includes this report.
+Feature commit: `f5b3b6b1ec10b880216d897e60262a609f9faeb9` (`docs: make image badge
+purple`).
