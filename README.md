@@ -1,5 +1,8 @@
 # Bagredex
 
+[![Validation](https://github.com/gabaconrado/bagredex/actions/workflows/ci.yml/badge.svg)](https://github.com/gabaconrado/bagredex/actions/workflows/ci.yml)
+[![Latest Docker image](https://img.shields.io/docker/v/gabaconrado/bagredex?sort=semver&label=latest%20image)](https://hub.docker.com/r/gabaconrado/bagredex/tags)
+
 A personal Pokémon Champions VGC hub for learning, team development, fast battle reference, damage
 calculation, and journey logging.
 
