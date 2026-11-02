@@ -27,11 +27,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    networks: [application]
+    networks: [application, egress]
 
 networks:
   application:
     internal: true
+  egress:
 
 volumes:
   database-data:

@@ -287,14 +287,29 @@ setup_review_mocks() {
   [[ "${output}" == *"BAGREDEX_DOMAIN: localhost"* ]]
 }
 
-@test "PostgreSQL is private healthy and stored in an explicitly named volume" {
+@test "PostgreSQL is private while only the server joins the egress network" {
+  local compose="${REPOSITORY_ROOT}/deploy/compose.yaml"
   grep -Fq 'image: docker.io/library/postgres:17.6-alpine' \
-    "${REPOSITORY_ROOT}/deploy/compose.yaml"
+    "${compose}"
   grep -Fq 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB' \
-    "${REPOSITORY_ROOT}/deploy/compose.yaml"
-  grep -Fq 'name: bagredex-database' "${REPOSITORY_ROOT}/deploy/compose.yaml"
-  grep -Fq 'internal: true' "${REPOSITORY_ROOT}/deploy/compose.yaml"
-  ! grep -Eq '^[[:space:]]+ports:' "${REPOSITORY_ROOT}/deploy/compose.yaml"
+    "${compose}"
+  grep -Fq 'name: bagredex-database' "${compose}"
+
+  run awk '
+    /^  database:/ { service = "database"; next }
+    /^  server:/ { service = "server"; next }
+    /^networks:/ { service = "" }
+    service == "database" && /networks: \[application\]/ { database = 1 }
+    service == "server" && /networks: \[application, egress\]/ { server = 1 }
+    /^  application:/ { network = "application"; next }
+    /^  egress:/ { network = "egress"; egress = 1; next }
+    network == "application" && /internal: true/ { internal = 1 }
+    network == "egress" && /internal: true/ { egress_internal = 1 }
+    END { exit !(database && server && internal && egress && !egress_internal) }
+  ' "${compose}"
+  [ "${status}" -eq 0 ]
+
+  ! grep -Eq '^[[:space:]]+(ports:|network_mode:|privileged:|cap_add:)' "${compose}"
 }
 
 @test "local server uses development dependencies and migrates before serving" {
