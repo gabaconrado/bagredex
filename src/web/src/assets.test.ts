@@ -107,3 +107,38 @@ describe("supplied Pokédex icons", () => {
     expect(specialIcon.classList.contains("icon--shiny")).toBe(false);
   });
 });
+
+describe("supplied Bagredex identity assets", () => {
+  it.each([
+    [
+      "bagredex-classic-purple.svg",
+      "39eb5b72c3658fac3c02633add5ce949b7e73ba3817d22a4a73177f9d89990ea",
+    ],
+    [
+      "bagredex-classic-white.svg",
+      "d7791a259a361f2b9e757e16a17fe832698717982969abc15df3e12625d6c2cd",
+    ],
+  ])(
+    "%s keeps its reviewed reference bytes and safe SVG content",
+    (filename, fingerprint) => {
+      const packaged = readFileSync(`static/web/icons/${filename}`, "utf8");
+      const reference = readFileSync(
+        `../../references/icons/${filename}`,
+        "utf8",
+      );
+
+      expect(packaged).toBe(reference);
+      expect(createHash("sha256").update(packaged).digest("hex")).toBe(
+        fingerprint,
+      );
+      expect(packaged).toContain('viewBox="0 0 48 48"');
+      expect(packaged).not.toMatch(/<script\b|<foreignObject\b|\son\w+\s*=/i);
+      expect(
+        packaged.replace('xmlns="http://www.w3.org/2000/svg"', ""),
+      ).not.toMatch(/(?:https?:|data:)/i);
+      expect(packaged).not.toMatch(/(?:href|xlink:href)\s*=\s*["'](?!#)/i);
+      for (const match of packaged.matchAll(/url\(([^)]+)\)/gi))
+        expect(match[1]!.trim().replace(/^["']|["']$/g, "")).toMatch(/^#/);
+    },
+  );
+});

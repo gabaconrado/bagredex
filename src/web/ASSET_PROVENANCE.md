@@ -25,3 +25,15 @@ The Bagredex user supplied `references/icons/information-circle.svg` on 2026-10-
 asset. It is copied byte-for-byte to `src/assets/icons/information-circle.svg` with SHA-256
 `f88a110cdbd4e4eb5797e111a9272d74d41ec3d5dc5b9d2c0e656539ae61cadd`. Its `currentColor`
 presentation lets the shared Web icon follow the active theme.
+
+## Bagredex identity icons
+
+The Bagredex user supplied both identity icons on 2026-11-02 as first-party artwork. They are
+copied byte-for-byte from `references/icons` to `static/web/icons` for the shared page shell.
+
+| File                          | Use              | SHA-256                                                            |
+| ----------------------------- | ---------------- | ------------------------------------------------------------------ |
+| `bagredex-classic-purple.svg` | Site-header logo | `39eb5b72c3658fac3c02633add5ce949b7e73ba3817d22a4a73177f9d89990ea` |
+| `bagredex-classic-white.svg`  | Browser favicon  | `d7791a259a361f2b9e757e16a17fe832698717982969abc15df3e12625d6c2cd` |
+
+Bagredex does not optimize, rewrite, or add third-party content to these SVG files.

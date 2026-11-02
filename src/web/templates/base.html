@@ -6,13 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>{% block title %}Bagredex{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'web/icons/bagredex-classic-white.svg' %}">
     <link rel="stylesheet" href="{% static 'web/css/site.css' %}">
     {% block head %}{% endblock %}
   </head>
   <body>
     {% if request.user.is_authenticated %}
       <header class="site-header">
-        <a class="site-header__brand" href="{% url 'home' %}{{ regulation_selector.navigation_suffix }}"><span class="site-header__brand-name">Bagredex</span><small class="site-header__version">{{ bagredex_version_label }}</small></a>
+        <a class="site-header__brand" href="{% url 'home' %}{{ regulation_selector.navigation_suffix }}">
+          <img class="site-header__brand-logo" src="{% static 'web/icons/bagredex-classic-purple.svg' %}" alt="" aria-hidden="true">
+          <span class="site-header__brand-text">
+            <span class="site-header__brand-name">Bagredex</span>
+            <small class="site-header__version">{{ bagredex_version_label }}</small>
+          </span>
+        </a>
         <nav class="site-header__nav" aria-label="Primary">
           {% with url_name=request.resolver_match.url_name %}
             <a href="{% url 'home' %}{{ regulation_selector.navigation_suffix }}"{% if url_name == "home" or url_name == "pokedex-index" or url_name == "pokedex-details" or url_name == "pokedex-form-detail" %} aria-current="page"{% endif %}>Pokédex</a>

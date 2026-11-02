@@ -202,6 +202,32 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
+test("publishes the white Bagredex icon from the shared page shell", async ({
+  page,
+}) => {
+  const icon = page.locator('link[rel="icon"]');
+  await expect(icon).toHaveAttribute("type", "image/svg+xml");
+  await expect(icon).toHaveAttribute(
+    "href",
+    /\/static\/web\/icons\/bagredex-classic-white\.svg$/,
+  );
+  const authenticatedIconUrl = await icon.getAttribute("href");
+  const authenticatedIconResponse = await page.request.get(
+    new URL(authenticatedIconUrl!, page.url()).toString(),
+  );
+  expect(authenticatedIconResponse.ok()).toBe(true);
+  expect(authenticatedIconResponse.headers()["content-type"]).toContain(
+    "image/svg+xml",
+  );
+
+  await page.context().clearCookies();
+  await page.goto("/login/");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+    "href",
+    authenticatedIconUrl!,
+  );
+});
+
 test("keeps historical regulation navigation explicit and latest navigation clean", async ({
   page,
 }) => {
@@ -266,6 +292,10 @@ test("switches explicit regulations and preserves header behavior", async ({
   );
   const brand = page.locator(".site-header__brand");
   const brandGeometry = await brand.evaluate((link) => {
+    const logo = link.querySelector<HTMLImageElement>(
+      ".site-header__brand-logo",
+    )!;
+    const text = link.querySelector<HTMLElement>(".site-header__brand-text")!;
     const name = link.querySelector<HTMLElement>(".site-header__brand-name")!;
     const version = link.querySelector<HTMLElement>(".site-header__version")!;
     const header = link.closest<HTMLElement>(".site-header")!;
@@ -300,6 +330,12 @@ test("switches explicit regulations and preserves header behavior", async ({
       direction: linkStyle.flexDirection,
       alignment: linkStyle.alignItems,
       link: box(link),
+      logo: box(logo),
+      logoComplete: logo.complete,
+      logoNaturalWidth: logo.naturalWidth,
+      logoAlt: logo.getAttribute("alt"),
+      logoAriaHidden: logo.getAttribute("aria-hidden"),
+      text: box(text),
       name: box(name),
       version: box(version),
       header: box(header),
@@ -314,8 +350,14 @@ test("switches explicit regulations and preserves header behavior", async ({
   });
   expect(brandGeometry.authoredDisplay).toBe("inline-flex");
   expect(brandGeometry.display).toBe("flex");
-  expect(brandGeometry.direction).toBe("column");
-  expect(brandGeometry.alignment).toBe("flex-start");
+  expect(brandGeometry.direction).toBe("row");
+  expect(brandGeometry.alignment).toBe("center");
+  expect(brandGeometry.logoComplete).toBe(true);
+  expect(brandGeometry.logoNaturalWidth).toBeGreaterThan(0);
+  expect(brandGeometry.logoAlt).toBe("");
+  expect(brandGeometry.logoAriaHidden).toBe("true");
+  expect(brandGeometry.logo.right).toBeLessThanOrEqual(brandGeometry.text.left);
+  expect(brandGeometry.logo.width).toBe(brandGeometry.logo.height);
   expect(
     brandGeometry.version.top - brandGeometry.name.bottom,
   ).toBeGreaterThanOrEqual(1);
@@ -389,7 +431,12 @@ test("switches explicit regulations and preserves header behavior", async ({
     luminance(sampledColors.background),
   ].sort((left, right) => right - left);
   expect((bright! + 0.05) / (dark! + 0.05)).toBeGreaterThanOrEqual(4.5);
-  for (const child of [brandGeometry.name, brandGeometry.version]) {
+  for (const child of [
+    brandGeometry.logo,
+    brandGeometry.text,
+    brandGeometry.name,
+    brandGeometry.version,
+  ]) {
     expect(child.left).toBeGreaterThanOrEqual(brandGeometry.link.left - 1);
     expect(child.right).toBeLessThanOrEqual(brandGeometry.link.right + 1);
     expect(child.top).toBeGreaterThanOrEqual(brandGeometry.link.top - 1);
@@ -449,7 +496,12 @@ test("switches explicit regulations and preserves header behavior", async ({
     page.viewportSize()!.width,
   );
   await expect(brand).toHaveAttribute("href", "/?regulation=m-a");
-  await expect(brand.locator("span, small")).toHaveCount(2);
+  await expect(
+    brand.locator(
+      ".site-header__brand-text > span, .site-header__brand-text > small",
+    ),
+  ).toHaveCount(2);
+  await expect(brand.locator("img.site-header__brand-logo")).toHaveCount(1);
   await expect(page.locator("a.site-header__brand")).toHaveCount(1);
   const identity = page.locator(".site-header__identity");
   const originalIdentity = await identity.textContent();

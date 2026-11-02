@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Bagredex Classic White">
+<defs>
+<linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".6" stop-color="#F7F6FF"/><stop offset="1" stop-color="#DCDDF8"/></linearGradient>
+<linearGradient id="bottom" x1="0" y1="0" x2=".8" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".58" stop-color="#F6F5FF"/><stop offset="1" stop-color="#BDBBEE"/></linearGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E4C7FF"/><stop offset="1" stop-color="#C5BFFF"/></linearGradient>
+<linearGradient id="button" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FAF9FF"/><stop offset="1" stop-color="#C8C6FA"/></linearGradient>
+<clipPath id="disc"><circle cx="24" cy="24" r="20.5"/></clipPath>
+</defs>
+<!-- Outer lavender ring and dark inner outline -->
+<circle cx="24" cy="24" r="23" fill="url(#rim)"/>
+<circle cx="24" cy="24" r="21.35" fill="#111020"/>
+<g clip-path="url(#disc)">
+<path d="M3 24V3h42v21Z" fill="url(#top)"/>
+<path d="M3 24h42v21H3Z" fill="url(#bottom)"/>
+<!-- restrained diagonal sheen in the lower shell -->
+<path d="M7 39C18 43 32 36 45 23v22H3v-4Z" fill="#938CF0" opacity=".11"/>
+<!-- central horizontal black band -->
+<rect x="3" y="22.1" width="42" height="3.8" fill="#111020"/>
+</g>
+<!-- button housing and inset -->
+<circle cx="24" cy="24" r="8.65" fill="#111020"/>
+<circle cx="24" cy="24" r="6.55" fill="#FAFAFF"/>
+<circle cx="24" cy="24" r="4.12" fill="url(#button)" stroke="#9B91E8" stroke-width=".35"/>
+</svg>
