@@ -59,9 +59,6 @@ describe("supplied Pokédex icons", () => {
   });
 
   it("keeps the supplied information icon bytes and shared mask primitive", () => {
-    expect(information).toBe(
-      readFileSync("../../references/icons/information-circle.svg", "utf8"),
-    );
     expect(createHash("sha256").update(information).digest("hex")).toBe(
       "f88a110cdbd4e4eb5797e111a9272d74d41ec3d5dc5b9d2c0e656539ae61cadd",
     );
@@ -119,15 +116,10 @@ describe("supplied Bagredex identity assets", () => {
       "d7791a259a361f2b9e757e16a17fe832698717982969abc15df3e12625d6c2cd",
     ],
   ])(
-    "%s keeps its reviewed reference bytes and safe SVG content",
+    "%s keeps its reviewed bytes and safe SVG content",
     (filename, fingerprint) => {
       const packaged = readFileSync(`static/web/icons/${filename}`, "utf8");
-      const reference = readFileSync(
-        `../../references/icons/${filename}`,
-        "utf8",
-      );
 
-      expect(packaged).toBe(reference);
       expect(createHash("sha256").update(packaged).digest("hex")).toBe(
         fingerprint,
       );
