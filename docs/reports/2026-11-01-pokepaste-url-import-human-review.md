@@ -62,6 +62,5 @@ None.
 
 ## Commits
 
-This report is included in the pending reviewed-result commit for the changed human-review
-session. The later completion-record correction will replace this statement with the exact full
-result hash and subject without amending the reviewed result.
+Reviewed-result commit: `f24f11a67711f617fbaf04462ac54d5854f4ca0a`
+(`fix(deploy): allow server-only egress`).
