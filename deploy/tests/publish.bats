@@ -21,7 +21,8 @@ setup() {
     'exec /usr/bin/git "$@"' >"${MOCK_BIN}/git"
   printf '%s\n' '#!/usr/bin/env bash' 'printf "podman %s\\n" "$*" >>"${COMMAND_LOG}"' \
     >"${MOCK_BIN}/podman"
-  chmod +x "${MOCK_BIN}/git" "${MOCK_BIN}/podman"
+  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${MOCK_BIN}/uv"
+  chmod +x "${MOCK_BIN}/git" "${MOCK_BIN}/podman" "${MOCK_BIN}/uv"
   export PATH="${MOCK_BIN}:${PATH}"
 }
 
